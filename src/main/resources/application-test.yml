@@ -1,0 +1,15 @@
+logging:
+  level:
+    root: INFO
+    #    org:
+    #      springframework: DEBUG
+    #      hibernate: DEBUG
+    #        SQL: DEBUG
+    net:
+      djvk: INFO
+#    org:
+#      springframework:
+#        boot:
+#          rsocket: DEBUG
+#        messaging:
+#          rsocket: DEBUG

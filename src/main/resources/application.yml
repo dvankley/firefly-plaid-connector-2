@@ -1,0 +1,31 @@
+fireflyPlaidConnector2:
+  # "batch" or "polled"
+  #   - "batch" runs once, attempting to sync all data up to maxSyncDays, and then exits
+  #   - "polled" runs forever, syncing all new data every "syncFrequencyMinutes"
+  #     On first run it will attempt to sync all data up to maxSyncDays, if that hasn't already
+  #     been done previously and stored in the database.
+  syncMode: batch
+  syncFrequencyMinutes: 10
+  maxSyncDays: 5
+  firefly:
+#    url: https://firefly.yourdomain.com
+#    personalAccessToken: TOKAAAAAN
+  plaid:
+#    clientId: HI I'M A CLIENT ID
+#    secret: SECRETZ
+  # An array of accounts to sync from Plaid to Firefly
+  accounts:
+      # The account id in Firefly to sync this data to.
+      # For instance, an account you view at https://localhost/accounts/show/1 will be id 1
+#    - fireflyAccountId: 1
+      # The access token for the Plaid item that contains the account
+      # You can set up Plaid Items using Plaid Quickstart https://github.com/plaid/quickstart
+      # Note that Items can contain multiple Accounts, so you may re-use this access token in
+      #   other entries in this YAML array
+#      plaidItemAccessToken: access-development-insert-uuid-here
+      # The Plaid id for the account you want to sync.
+      # You can retrieve this id from https://plaid.com/docs/api/accounts/#accountsget using an
+      #   Item's access token after you've set it up.
+#      plaidAccountId: omgwtfbbq
+  product:
+    name: Firefly Plaid Connector 2

@@ -1,0 +1,11 @@
+logging:
+  level:
+    root: INFO
+    #    org:
+    #      springframework: DEBUG
+    #      hibernate: DEBUG
+    #        SQL: DEBUG
+    net:
+      djvk:
+    org:
+      springframework: INFO
