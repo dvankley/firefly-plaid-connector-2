@@ -27,8 +27,12 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.infrastructure.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.User
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.UserArray
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.UserSingle
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
 
+@Component
 open class UsersApi(
+    @Value("\${fireflyPlaidConnector2.firefly.url}")
     baseUrl: String = ApiClient.BASE_URL,
     httpClientEngine: HttpClientEngine? = null,
     httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,

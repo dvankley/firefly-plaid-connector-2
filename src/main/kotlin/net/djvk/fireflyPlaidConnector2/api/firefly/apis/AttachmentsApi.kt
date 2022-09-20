@@ -28,8 +28,12 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.AttachmentArray
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.AttachmentSingle
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.AttachmentStore
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.AttachmentUpdate
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
 
+@Component
 open class AttachmentsApi(
+    @Value("\${fireflyPlaidConnector2.firefly.url}")
     baseUrl: String = ApiClient.BASE_URL,
     httpClientEngine: HttpClientEngine? = null,
     httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,

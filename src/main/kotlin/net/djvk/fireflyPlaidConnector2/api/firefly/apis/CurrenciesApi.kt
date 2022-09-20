@@ -25,8 +25,12 @@ import io.ktor.client.*
 import io.ktor.client.engine.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.infrastructure.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.*
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
 
+@Component
 open class CurrenciesApi(
+    @Value("\${fireflyPlaidConnector2.firefly.url}")
     baseUrl: String = ApiClient.BASE_URL,
     httpClientEngine: HttpClientEngine? = null,
     httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,

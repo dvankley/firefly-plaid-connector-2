@@ -28,8 +28,12 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.Preference
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.PreferenceArray
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.PreferenceSingle
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.PreferenceUpdate
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
 
+@Component
 open class PreferencesApi(
+    @Value("\${fireflyPlaidConnector2.firefly.url}")
     baseUrl: String = ApiClient.BASE_URL,
     httpClientEngine: HttpClientEngine? = null,
     httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,

@@ -6,6 +6,6 @@ logging:
     #      hibernate: DEBUG
     #        SQL: DEBUG
     net:
-      djvk:
+      djvk: DEBUG
     org:
       springframework: INFO

@@ -28,8 +28,12 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.AccountArray
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.AccountSearchFieldFilter
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.AccountTypeFilter
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionArray
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
 
+@Component
 open class SearchApi(
+    @Value("\${fireflyPlaidConnector2.firefly.url}")
     baseUrl: String = ApiClient.BASE_URL,
     httpClientEngine: HttpClientEngine? = null,
     httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,

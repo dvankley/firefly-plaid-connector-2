@@ -19,9 +19,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.auth.*
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 
-@Component
-open class ApiClient(
-    @Value("\${fireflyPlaidConnector2.firefly.url}")
+abstract class ApiClient(
     private val baseUrl: String,
     httpClientEngine: HttpClientEngine?,
     httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,
