@@ -1,13 +1,14 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
-val kotlinVersion = "1.7.10"
-val kotlinCoroutinesVersion = "1.6.3"
-val exposedVersion = "0.39.2"
+val kotlinVersion: String by project
+val kotlinCoroutinesVersion: String by project
+val exposedVersion: String by project
+val ktorVersion: String by project
 
 plugins {
 	id("org.springframework.boot") version "2.7.3"
 	id("io.spring.dependency-management") version "1.0.13.RELEASE"
-	kotlin("jvm") version "1.6.21"
+	kotlin("jvm") version "1.7.10"
 	kotlin("plugin.spring") version "1.6.21"
 }
 
@@ -26,10 +27,15 @@ dependencies {
 	implementation("org.jetbrains.kotlin:kotlin-test:$kotlinVersion")
 	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinCoroutinesVersion")
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+	implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 	implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
 	implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
 	implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
 	implementation("org.xerial:sqlite-jdbc:3.39.3.0")
+	implementation("io.ktor:ktor-client-core:$ktorVersion")
+	implementation("io.ktor:ktor-client-cio:$ktorVersion")
+	implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+	implementation("io.ktor:ktor-serialization-jackson:$ktorVersion")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 
