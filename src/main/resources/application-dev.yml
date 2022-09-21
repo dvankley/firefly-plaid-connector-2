@@ -1,11 +1,8 @@
 logging:
   level:
     root: INFO
-    #    org:
-    #      springframework: DEBUG
-    #      hibernate: DEBUG
-    #        SQL: DEBUG
     net:
       djvk: DEBUG
-    org:
-      springframework: INFO
+#    org:
+#      springframework:
+#        beans: DEBUG

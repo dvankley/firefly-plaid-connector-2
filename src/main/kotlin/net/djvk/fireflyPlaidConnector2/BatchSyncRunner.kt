@@ -14,11 +14,10 @@ class BatchSyncRunner(
     private val fireflyAccessToken: String,
 
     private val fireflyApi: AboutApi,
-) {
+) : Runner {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
-    @PostConstruct
-    fun run() {
+    override fun run() {
         runBlocking {
             fireflyApi.setAccessToken(fireflyAccessToken)
             val about = fireflyApi.getAbout().body()
