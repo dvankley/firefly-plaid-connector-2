@@ -25,9 +25,13 @@ import io.ktor.client.*
 import io.ktor.client.engine.*
 import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.*
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
 import java.io.File
 
+@Component
 open class PlaidApi(
+    @Value("\${fireflyPlaidConnector2.plaid.url}")
     baseUrl: String = ApiClient.BASE_URL,
     httpClientEngine: HttpClientEngine? = null,
     httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,

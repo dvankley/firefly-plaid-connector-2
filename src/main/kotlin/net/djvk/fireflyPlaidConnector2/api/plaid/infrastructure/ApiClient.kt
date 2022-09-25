@@ -17,6 +17,9 @@ import io.ktor.http.content.*
 import io.ktor.serialization.jackson.*
 import net.djvk.fireflyPlaidConnector2.api.plaid.auth.*
 
+const val clientIdHeader = "PLAID-CLIENT-ID"
+const val secretHeader = "PLAID-SECRET"
+
 open class ApiClient(
     private val baseUrl: String,
     httpClientEngine: HttpClientEngine?,
@@ -39,9 +42,9 @@ open class ApiClient(
 
     private val authentications: Map<String, Authentication> by lazy {
         mapOf(
-            "clientId" to ApiKeyAuth("header", "PLAID-CLIENT-ID"),
+            "clientId" to ApiKeyAuth("header", clientIdHeader),
             "plaidVersion" to ApiKeyAuth("header", "Plaid-Version"),
-            "secret" to ApiKeyAuth("header", "PLAID-SECRET")
+            "secret" to ApiKeyAuth("header", secretHeader)
         )
     }
 
@@ -55,7 +58,7 @@ open class ApiClient(
             })
             registerModule(JavaTimeModule())
         }
-        protected val UNSAFE_HEADERS = listOf(HttpHeaders.ContentType)
+        protected val UNSAFE_HEADERS = listOf<String>()
     }
 
     /**
@@ -148,7 +151,10 @@ open class ApiClient(
         requestConfig: RequestConfig<T>,
         body: Any? = null,
         authNames: List<String>
-    ): HttpResponse = request(requestConfig, body, authNames)
+    ): HttpResponse {
+        requestConfig.headers[HttpHeaders.ContentType] = ContentType.Application.Json.toString()
+        return request(requestConfig, body, authNames)
+    }
 
     protected suspend fun <T : Any?> request(
         requestConfig: RequestConfig<T>,

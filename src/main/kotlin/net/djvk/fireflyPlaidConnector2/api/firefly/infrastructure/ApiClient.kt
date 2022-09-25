@@ -16,8 +16,6 @@ import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.serialization.jackson.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.auth.*
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.stereotype.Component
 
 abstract class ApiClient(
     private val baseUrl: String,
@@ -56,7 +54,7 @@ abstract class ApiClient(
             })
             registerModule(JavaTimeModule())
         }
-        protected val UNSAFE_HEADERS = listOf(HttpHeaders.ContentType)
+        protected val UNSAFE_HEADERS = listOf<String>()
     }
 
     /**
@@ -149,7 +147,10 @@ abstract class ApiClient(
         requestConfig: RequestConfig<T>,
         body: Any? = null,
         authNames: List<String>
-    ): HttpResponse = request(requestConfig, body, authNames)
+    ): HttpResponse {
+        requestConfig.headers[HttpHeaders.ContentType] = ContentType.Application.Json.toString()
+        return request(requestConfig, body, authNames)
+    }
 
     protected suspend fun <T : Any?> request(
         requestConfig: RequestConfig<T>,
