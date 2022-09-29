@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.client.*
 import io.ktor.client.engine.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.logging.*
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
@@ -19,11 +20,15 @@ class ApiConfiguration {
 
     @Bean
     fun getClientConfig(): ((HttpClientConfig<*>) -> Unit) {
-        return {}
+        return {
+//            it.install(Logging) {
+//                level = LogLevel.ALL
+//            }
+        }
     }
 
-    @Bean
-    fun getJsonBlock(): ObjectMapper.() -> Unit {
-        return {}
-    }
+//    @Bean
+//    fun getJsonBlock(): ObjectMapper.() -> Unit {
+//        return {}
+//    }
 }

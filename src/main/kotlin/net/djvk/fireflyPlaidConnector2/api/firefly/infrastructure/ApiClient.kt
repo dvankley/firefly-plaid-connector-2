@@ -53,6 +53,7 @@ abstract class ApiClient(
                 indentObjectsWith(DefaultIndenter("  ", "\n"))
             })
             registerModule(JavaTimeModule())
+            configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
         }
         protected val UNSAFE_HEADERS = listOf<String>()
     }
