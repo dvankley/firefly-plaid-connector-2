@@ -13,6 +13,25 @@ fireflyPlaidConnector2:
   plaid:
 #    clientId: HI I'M A CLIENT ID
 #    secret: SECRETZ
+    # Transaction categorization configuration (optional, defaults to disable categorization)
+    # Plaid currently supplies two types of categorization information https://plaid.com/blog/transactions-categorization-taxonomy/
+    # For either categorization type, all provided categories for a given transaction (there can be more than one)
+    #   will be added as tags to the Firefly transaction using the prefixes below.
+    # This is intended to allow you to use Firefly's rule engine to add the transaction to a budget or category or whatever,
+    #   rather than trying to squeeze all that logic in here.
+    categorization:
+      # Add old Plaid categorization information (transaction.category) as tags to Firefly transactions
+      # Optional, disabled if omitted.
+      old:
+        enable: true
+        # This value will prefix all Firefly transaction tags. An empty string is a valid value and is the same as
+        #   omitting this key.
+        prefix: "plaid-old-"
+      # Use new Plaid categorization information (transaction.personalFinanceCategory)
+      # Optional, disabled if omitted.
+      new:
+        enable: true
+        prefix: "plaid-new-"
   # An array of accounts to sync from Plaid to Firefly
   accounts:
       # The account id in Firefly to sync this data to.
