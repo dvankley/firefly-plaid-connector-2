@@ -16,23 +16,38 @@ fireflyPlaidConnector2:
 #    secret: SECRETZ
     # Transaction categorization configuration (optional, defaults to disable categorization)
     # Plaid currently supplies two types of categorization information https://plaid.com/blog/transactions-categorization-taxonomy/
-    # For either categorization type, all provided categories for a given transaction (there can be more than one)
+    # For either categorization type, the provided category strings for a given transaction
     #   will be added as tags to the Firefly transaction using the prefixes below.
-    # This is intended to allow you to use Firefly's rule engine to add the transaction to a budget or category or whatever,
-    #   rather than trying to squeeze all that logic in here.
+    # This is intended to allow you to use Firefly's rule engine to use the tags as triggers to add the transaction to
+    #   a budget or category or whatever, rather than trying to squeeze all that logic in here.
     categorization:
       # Add old Plaid categorization information (transaction.category) as tags to Firefly transactions
-      # Optional, disabled if omitted.
+      # Optional, defaults to disabled.
       old:
         enable: true
-        # This value will prefix all Firefly transaction tags. An empty string is a valid value and is the same as
-        #   omitting this key.
+        # This value will prefix all Firefly transaction tags populated from old categories.
+        # An empty string is a valid value and is the same as omitting this key.
         prefix: "plaid-old-"
+        # 'Old' categories are returned in a hierarchical array, with increasing detail farther into the array as per
+        #   https://plaid.com/docs/api/products/transactions/#categoriesget
+        # This value limits how far into the array we will go when building Firefly transaction tags.
+        # For instance, consider a transaction with old categories:
+        #   "TRANSFER", "THIRD_PARTY", "PAYPAL"
+        # With depthLimit set to 1, the Firefly transaction tag would be ${prefix}TRANSFER
+        # With depthLimit set to 2, the Firefly transaction tag would be ${prefix}TRANSFER-THIRD_PARTY
+        # With depthLimit set to 3 or greater, the Firefly transaction tag would be ${prefix}TRANSFER-THIRD_PARTY-PAYPAL
+        #   (I don't think a depth higher than 3 is possible, for what it's worth)
+        # Optional, defaults to 3
+        depthLimit: 3
       # Use new Plaid categorization information (transaction.personalFinanceCategory)
-      # Optional, disabled if omitted.
+      # Optional, defaults to disabled.
       new:
-        enable: true
-        prefix: "plaid-new-"
+        primary:
+          enable: true
+          prefix: "plaid-new-primary-"
+        detailed:
+          enable: true
+          prefix: "plaid-new-detailed-"
   # An array of accounts to sync from Plaid to Firefly
   accounts:
       # The account id in Firefly to sync this data to.
