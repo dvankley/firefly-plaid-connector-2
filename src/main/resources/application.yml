@@ -11,6 +11,7 @@ fireflyPlaidConnector2:
 #    url: https://firefly.yourdomain.com
 #    personalAccessToken: TOKAAAAAN
   plaid:
+#    url: https://development.plaid.com
 #    clientId: HI I'M A CLIENT ID
 #    secret: SECRETZ
     # Transaction categorization configuration (optional, defaults to disable categorization)
