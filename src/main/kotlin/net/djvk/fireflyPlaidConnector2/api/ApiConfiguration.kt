@@ -21,6 +21,7 @@ class ApiConfiguration {
     @Bean
     fun getClientConfig(): ((HttpClientConfig<*>) -> Unit) {
         return {
+            it.expectSuccess = true
 //            it.install(Logging) {
 //                level = LogLevel.ALL
 //            }
