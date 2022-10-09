@@ -31,7 +31,6 @@ import com.fasterxml.jackson.annotation.JsonProperty
  */
 
 data class PersonalFinanceCategory(
-
     /* A high level category that communicates the broad category of the transaction. */
     @field:JsonProperty("primary")
     val primary: kotlin.String,
@@ -39,6 +38,7 @@ data class PersonalFinanceCategory(
     /* A granular category conveying the transaction's intent. This field can also be used as a unique identifier for the category. */
     @field:JsonProperty("detailed")
     val detailed: kotlin.String
-
-) : kotlin.collections.HashMap<String, kotlin.Any>()
+) : kotlin.collections.HashMap<String, kotlin.Any>() {
+    constructor(enum: PersonalFinanceCategoryEnum) : this(enum.primary.toString(), enum.detailed.toString())
+}
 
