@@ -95,7 +95,36 @@ class TransactionConverter(
         tx: PlaidTransaction,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): FireflyTransaction {
+        return convert(
+            tx,
+            null,
+            tx.merchantName,
+            accountMap[tx.accountId]?.toString()
+                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${tx.accountId}"),
+        )
+    }
 
+    protected suspend fun convertDouble(
+        a: PlaidTransaction,
+        b: PlaidTransaction,
+        accountMap: Map<PlaidAccountId, FireflyAccountId>,
+    ): FireflyTransaction {
+        return convert(
+            a,
+            sourceId = accountMap[b.accountId]?.toString()
+                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${b.accountId}"),
+            destinationId = accountMap[a.accountId]?.toString()
+                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${a.accountId}"),
+        )
+    }
+
+    protected suspend fun convert(
+        tx: PlaidTransaction,
+        sourceId: String? = null,
+        sourceName: String? = null,
+        destinationId: String? = null,
+        destinationName: String? = null,
+    ): FireflyTransaction {
         // TODO: categories
         val timestamp = tx.datetime
             ?: tx.authorizedDatetime
@@ -116,45 +145,14 @@ class TransactionConverter(
                     } else {
                         ": ${tx.originalDescription}"
                     },
-            sourceId = null,
-            sourceName = tx.merchantName,
-            destinationId = accountMap[tx.accountId]?.toString()
-                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${tx.accountId}"),
-        )
-        return FireflyTransaction(
-            listOf(split),
-            timestamp,
-        )
-    }
-
-    protected suspend fun convertDouble(
-        a: PlaidTransaction,
-        b: PlaidTransaction,
-        accountMap: Map<PlaidAccountId, FireflyAccountId>,
-    ): FireflyTransaction {
-        val timestamp = a.datetime
-            ?: a.authorizedDatetime
-            ?: a.datetime
-            // We're using a UTC zone here because the value we're given is only a date
-            ?: a.date.atTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC))
-        val split = TransactionSplit(
-            getFireflyTransactionType(a),
-            timestamp,
-            /**
-             * Always positive per https://github.com/firefly-iii/firefly-iii/issues/2476
-             * "Direction" of transactions handled in [getFireflyTransactionType]
-             */
-            abs(a.amount).toString(),
-            a.name +
-                    if (a.originalDescription == null) {
-                        ""
-                    } else {
-                        ": ${a.originalDescription}"
-                    },
-            sourceId = accountMap[b.accountId]?.toString()
-                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${b.accountId}"),
-            destinationId = accountMap[a.accountId]?.toString()
-                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${a.accountId}"),
+            sourceId = sourceId,
+            sourceName = sourceName,
+            destinationId = destinationId,
+            destinationName = destinationName,
+            order = 0,
+            // Why the eff does the Firefly API require this
+            foreignAmount = "0",
+            reconciled = false,
         )
         return FireflyTransaction(
             listOf(split),
