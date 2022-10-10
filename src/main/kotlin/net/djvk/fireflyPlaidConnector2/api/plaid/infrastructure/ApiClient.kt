@@ -7,15 +7,14 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import io.ktor.client.*
-import io.ktor.client.call.body
 import io.ktor.client.engine.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.*
-import io.ktor.server.http.content.*
-import io.ktor.serialization.kotlinx.json.jackson.*
+import io.ktor.http.content.*
+import io.ktor.serialization.jackson.*
 import net.djvk.fireflyPlaidConnector2.api.plaid.auth.*
 
 const val clientIdHeader = "PLAID-CLIENT-ID"
