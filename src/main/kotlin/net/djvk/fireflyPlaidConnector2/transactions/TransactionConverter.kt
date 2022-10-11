@@ -2,7 +2,10 @@ package net.djvk.fireflyPlaidConnector2.transactions
 
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum.Primary.*
 import net.djvk.fireflyPlaidConnector2.categories.PlaidOldCategoryCache
+import net.djvk.fireflyPlaidConnector2.constants.Direction
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.time.OffsetTime
@@ -19,6 +22,31 @@ class TransactionConverter(
     private val categoryCache: PlaidOldCategoryCache,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
+
+    companion object {
+        /**
+         * Gets the name to use for an external account
+         * @param isSource True if source, false if destination
+         */
+        fun getUnknownSourceOrDestionationName(
+            pfc: PersonalFinanceCategoryEnum,
+            isSource: Boolean,
+        ): String {
+            val typeString = when (pfc.primary) {
+                INCOME -> "Income"
+                TRANSFER_IN, TRANSFER_OUT -> "Transfer"
+                LOAN_PAYMENTS, BANK_FEES, ENTERTAINMENT, FOOD_AND_DRINK, GENERAL_MERCHANDISE, HOME_IMPROVEMENT,
+                MEDICAL, PERSONAL_CARE, GENERAL_SERVICES, GOVERNMENT_AND_NON_PROFIT, TRANSPORTATION, TRAVEL,
+                RENT_AND_UTILITIES -> "Payment"
+            }
+            val sourceString = if (isSource) {
+                "Source"
+            } else {
+                "Recipient"
+            }
+            return "Unknown $typeString $sourceString"
+        }
+    }
 
     /**
      * Convert a batch of Plaid transactions to Firefly transactions
@@ -59,7 +87,6 @@ class TransactionConverter(
         val sourceIndexedTxs = transfers
             .associateBy { getSourceKey(it.amount, it.paymentMeta.payer) }
             .toMutableMap()
-//        val destIndexedTxs = transfers.associateBy { getDestinationKey(it) }.toMutableMap()
 
         for (tx in remainingTxs) {
             val sourceKey = getSourceKey(tx.amount, tx.paymentMeta.payer)
@@ -87,20 +114,37 @@ class TransactionConverter(
         return "${amount}|${source}"
     }
 
-//    protected fun getDestinationKey(tx: PlaidTransaction): String {
-//        return "${tx.amount}|${tx.paymentMeta.payee}"
-//    }
-
     protected suspend fun convertSingle(
         tx: PlaidTransaction,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): FireflyTransaction {
+        val fireflyAccountId = accountMap[tx.accountId]?.toString()
+            ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${tx.accountId}")
+
+        val sourceId: String?
+        val sourceName: String?
+        val destinationId: String?
+        val destinationName: String?
+        if (tx.getDirection() == Direction.IN) {
+            destinationId = fireflyAccountId
+            destinationName = null
+
+            sourceId = null
+            sourceName = getUnknownSourceOrDestionationName(tx.personalFinanceCategory.toEnum(), true)
+        } else {
+            sourceId = fireflyAccountId
+            sourceName = null
+
+            destinationId = null
+            destinationName = getUnknownSourceOrDestionationName(tx.personalFinanceCategory.toEnum(), false)
+        }
         return convert(
-            tx,
-            null,
-            tx.merchantName,
-            accountMap[tx.accountId]?.toString()
-                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${tx.accountId}"),
+            tx = tx,
+            isPair = false,
+            sourceId = sourceId,
+            sourceName = sourceName,
+            destinationId = destinationId,
+            destinationName = destinationName,
         )
     }
 
@@ -110,7 +154,8 @@ class TransactionConverter(
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): FireflyTransaction {
         return convert(
-            a,
+            tx = a,
+            isPair = true,
             sourceId = accountMap[b.accountId]?.toString()
                 ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${b.accountId}"),
             destinationId = accountMap[a.accountId]?.toString()
@@ -120,6 +165,7 @@ class TransactionConverter(
 
     protected suspend fun convert(
         tx: PlaidTransaction,
+        isPair: Boolean,
         sourceId: String? = null,
         sourceName: String? = null,
         destinationId: String? = null,
@@ -132,7 +178,7 @@ class TransactionConverter(
             // We're using a UTC zone here because the value we're given is only a date
             ?: tx.date.atTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC))
         val split = TransactionSplit(
-            getFireflyTransactionType(tx),
+            getFireflyTransactionType(tx, isPair),
             timestamp,
             /**
              * Always positive per https://github.com/firefly-iii/firefly-iii/issues/2476
@@ -162,16 +208,19 @@ class TransactionConverter(
 
     /**
      * [Firefly transaction types](https://docs.firefly-iii.org/firefly-iii/support/transaction_types/)
+     *
+     * @param isPair True if [t] is part of a pair of offsetting Plaid transactions, false otherwise.
      */
-    suspend fun getFireflyTransactionType(t: PlaidTransaction): TransactionTypeProperty {
+    suspend fun getFireflyTransactionType(t: PlaidTransaction, isPair: Boolean): TransactionTypeProperty {
+
         /**
          * Per Firefly docs:
          * Transfers are internal transactions that don't influence your bottom line.
-         *
-         * Per Plaid docs:
-         * "If the transaction was not an inter-bank transfer, all fields will be `null`"
+         * A transfer is created only between existing asset accounts.
+         * Select an asset account for both the source and destination from the free-form fields.
+         * Transfers can be linked to piggy banks, to automatically add or remove money from the piggy bank you select.
          */
-        if (t.paymentMeta.payee != null) {
+        if (isPair) {
             return TransactionTypeProperty.transfer
         }
 

@@ -57,9 +57,13 @@ data class TransactionsGetRequestOptions(
     @Deprecated(message = "This property is deprecated.")
     val includePersonalFinanceCategoryBeta: kotlin.Boolean? = false,
 
-    /* Include the [`personal_finance_category`](https://plaid.com/docs/api/products/transactions/#transactions-get-response-transactions-personal-finance-category) object in the response.  See the [`taxonomy csv file`](https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv) for a full list of personal finance categories.  We’re introducing Category Rules - a new beta endpoint that will enable you to change the `personal_finance_category` for a transaction based on your users’ needs. When rules are set, the selected category will override the Plaid provided category. To learn more, send a note to transactions-feedback@plaid.com. */
+    /**
+     * Include the [`personal_finance_category`](https://plaid.com/docs/api/products/transactions/#transactions-get-response-transactions-personal-finance-category) object in the response.  See the [`taxonomy csv file`](https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv) for a full list of personal finance categories.  We’re introducing Category Rules - a new beta endpoint that will enable you to change the `personal_finance_category` for a transaction based on your users’ needs. When rules are set, the selected category will override the Plaid provided category. To learn more, send a note to transactions-feedback@plaid.com.
+     *
+     * This can be set to false, but do not do so as this particular API client is configured to always expect it.
+     */
     @field:JsonProperty("include_personal_finance_category")
-    val includePersonalFinanceCategory: kotlin.Boolean? = false
+    val includePersonalFinanceCategory: kotlin.Boolean? = true
 
 )
 

@@ -1,5 +1,7 @@
 package net.djvk.fireflyPlaidConnector2.api.plaid.models
 
+import net.djvk.fireflyPlaidConnector2.constants.Direction
+
 /**
  * Possible values of [PersonalFinanceCategory]
  * Pulled from https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv
@@ -151,27 +153,26 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
 
     interface Detailed {
         val description: String
+        val name: String
     }
 
-
-    enum class Primary {
-        PRIMARY,
-        INCOME,
-        TRANSFER_IN,
-        TRANSFER_OUT,
-        LOAN_PAYMENTS,
-        BANK_FEES,
-        ENTERTAINMENT,
-        FOOD_AND_DRINK,
-        GENERAL_MERCHANDISE,
-        HOME_IMPROVEMENT,
-        MEDICAL,
-        PERSONAL_CARE,
-        GENERAL_SERVICES,
-        GOVERNMENT_AND_NON_PROFIT,
-        TRANSPORTATION,
-        TRAVEL,
-        RENT_AND_UTILITIES,
+    enum class Primary(val defaultDirection: Direction) {
+        INCOME(Direction.IN),
+        TRANSFER_IN(Direction.IN),
+        TRANSFER_OUT(Direction.OUT),
+        LOAN_PAYMENTS(Direction.OUT),
+        BANK_FEES(Direction.OUT),
+        ENTERTAINMENT(Direction.OUT),
+        FOOD_AND_DRINK(Direction.OUT),
+        GENERAL_MERCHANDISE(Direction.OUT),
+        HOME_IMPROVEMENT(Direction.OUT),
+        MEDICAL(Direction.OUT),
+        PERSONAL_CARE(Direction.OUT),
+        GENERAL_SERVICES(Direction.OUT),
+        GOVERNMENT_AND_NON_PROFIT(Direction.OUT),
+        TRANSPORTATION(Direction.OUT),
+        TRAVEL(Direction.OUT),
+        RENT_AND_UTILITIES(Direction.OUT),
     }
 
     enum class IncomeDetailed(override val description: String) : Detailed {

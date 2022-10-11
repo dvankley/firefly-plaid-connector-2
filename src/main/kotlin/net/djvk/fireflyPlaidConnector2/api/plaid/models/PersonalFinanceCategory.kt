@@ -39,6 +39,13 @@ data class PersonalFinanceCategory(
     @field:JsonProperty("detailed")
     val detailed: kotlin.String
 ) : kotlin.collections.HashMap<String, kotlin.Any>() {
-    constructor(enum: PersonalFinanceCategoryEnum) : this(enum.primary.toString(), enum.detailed.toString())
+    constructor(enum: PersonalFinanceCategoryEnum) : this(enum.primary.name, enum.name)
+
+    fun toEnum(): PersonalFinanceCategoryEnum {
+        return PersonalFinanceCategoryEnum.values().find {
+            it.primary.name == primary && it.name == detailed
+        }
+            ?: throw IllegalArgumentException("Failed to convert personal finance category $this to enum")
+    }
 }
 

@@ -21,6 +21,7 @@
 package net.djvk.fireflyPlaidConnector2.api.plaid.models
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import net.djvk.fireflyPlaidConnector2.constants.Direction
 
 /**
  * A representation of a transaction
@@ -143,25 +144,13 @@ data class Transaction(
     @field:JsonProperty("check_number")
     val checkNumber: kotlin.String? = null,
 
-    @field:JsonProperty("personal_finance_category")
-    val personalFinanceCategory: PersonalFinanceCategory? = null
-
-) {
-
     /**
-     * The channel used to make a payment. `online:` transactions that took place online.  `in store:` transactions that were made at a physical location.  `other:` transactions that relate to banks, e.g. fees or deposits.  This field replaces the `transaction_type` field.
-     *
-     * Values: online,inStore,other
+     * This is nullable in the OpenAPI spec, but [TransactionGetRequestOptions.includePersonalFinanceCategory] should
+     *  always be true for this application, so I'm setting this as not null for simplicity
      */
-    enum class PaymentChannel(val value: kotlin.String) {
-        @JsonProperty(value = "online")
-        online("online"),
-        @JsonProperty(value = "in store")
-        inStore("in store"),
-        @JsonProperty(value = "other")
-        other("other");
-    }
-
+    @field:JsonProperty("personal_finance_category")
+    val personalFinanceCategory: PersonalFinanceCategory
+) {
     /**
      * Please use the `payment_channel` field, `transaction_type` will be deprecated in the future.  `digital:` transactions that took place online.  `place:` transactions that were made at a physical location.  `special:` transactions that relate to banks, e.g. fees or deposits.  `unresolved:` transactions that do not fit into the other three types.
      *
@@ -176,6 +165,14 @@ data class Transaction(
         special("special"),
         @JsonProperty(value = "unresolved")
         unresolved("unresolved");
+    }
+
+    fun getDirection(): Direction {
+        return if (amount > 0) {
+            Direction.OUT
+        } else {
+            Direction.IN
+        }
     }
 }
 
