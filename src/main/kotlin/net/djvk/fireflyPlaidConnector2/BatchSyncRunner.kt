@@ -1,8 +1,12 @@
 package net.djvk.fireflyPlaidConnector2
 
+import io.ktor.client.call.*
+import io.ktor.client.plugins.*
 import io.ktor.client.statement.*
+import io.ktor.http.*
 import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.FireflyApiError
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionStore
 import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
 import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.clientIdHeader
@@ -105,18 +109,26 @@ class BatchSyncRunner(
             // Insert into Firefly
 //            logger.info("Inserting transactions: ${fireflyTxs} ${fireflyTxs.hashCode()}")
             fireflyTxApi.setAccessToken(fireflyAccessToken)
-            val fireflyTx = fireflyTxs.first()
-//            for (fireflyTx in fireflyTxs) {
-            fireflyTxApi.storeTransaction(
-                TransactionStore(
-                    fireflyTx.transactions,
-                    true,
-                    true,
-                    true,
-                    null,
-                )
-            )
-//            }
+            for (fireflyTx in fireflyTxs) {
+                try {
+                    fireflyTxApi.storeTransaction(
+                        TransactionStore(
+                            fireflyTx.transactions,
+                            true,
+                            true,
+                            true,
+                            null,
+                        )
+                    )
+                } catch (cre: ClientRequestException) {
+                    if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
+                        val error = cre.response.body<FireflyApiError>()
+                        logger.error("Firefly API error $error")
+                    } else {
+                        throw cre
+                    }
+                }
+            }
         }
     }
 }
