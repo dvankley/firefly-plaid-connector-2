@@ -1,27 +1,122 @@
 package net.djvk.fireflyPlaidConnector2
 
+import io.ktor.client.statement.*
 import kotlinx.coroutines.runBlocking
-import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AboutApi
-import net.djvk.fireflyPlaidConnector2.api.firefly.infrastructure.ApiClient
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionStore
+import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
+import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.clientIdHeader
+import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.secretHeader
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsGetRequest
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsGetRequestOptions
+import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
+import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
-import javax.annotation.PostConstruct
+import java.time.LocalDate
 
 @Component
 class BatchSyncRunner(
+    @Value("\${fireflyPlaidConnector2.maxSyncDays}")
+    private val syncDays: Int,
+
     @Value("\${fireflyPlaidConnector2.firefly.personalAccessToken}")
     private val fireflyAccessToken: String,
+    private val fireflyTxApi: TransactionsApi,
 
-    private val fireflyApi: AboutApi,
-) : Runner {
+    private val plaidApi: PlaidApi,
+    @Value("\${fireflyPlaidConnector2.plaid.clientId}")
+    private val plaidClientId: String,
+    @Value("\${fireflyPlaidConnector2.plaid.secret}")
+    private val plaidSecret: String,
+    private val plaidAccountsConfig: AccountConfigs,
+
+    private val converter: TransactionConverter,
+
+    ) : Runner {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     override fun run() {
+        // Spring components are singletons by default, so this should set these credentials for any other
+        //  component that also uses the plaidApi component
+        plaidApi.setApiKey(plaidClientId, clientIdHeader)
+        plaidApi.setApiKey(plaidSecret, secretHeader)
+        fireflyTxApi.setAccessToken(fireflyAccessToken)
+
+        val accountMap = plaidAccountsConfig.accounts.associate { Pair(it.plaidAccountId, it.fireflyAccountId) }
+        val accountsByAccessToken = plaidAccountsConfig.accounts.groupBy { it.plaidItemAccessToken }
+        val allPlaidTxs = mutableListOf<Transaction>()
+        val plaidBatchSize = 100
+
+        val startDate = LocalDate.now().minusDays(syncDays.toLong())
+        val endDate = LocalDate.now()
+
         runBlocking {
-            fireflyApi.setAccessToken(fireflyAccessToken)
-            val about = fireflyApi.getAbout().body()
-            logger.debug("About: " + about)
+            for ((accessToken, accountConfigs) in accountsByAccessToken) {
+                val accountIds = accountConfigs.map { it.plaidAccountId }
+                var offset = 0
+                do {
+                    /**
+                     * Iterate through batches of Plaid transactions
+                     *
+                     * We're storing all this data in memory so we can try to match up offsetting transfers before inserting
+                     *  into Firefly.
+                     * Note that the heap size may need to be increased if you're handling a ton of transactions.
+                     */
+                    val plaidTxs = plaidApi.transactionsGet(
+                        TransactionsGetRequest(
+                            accessToken,
+                            startDate,
+                            endDate,
+                            null,
+                            TransactionsGetRequestOptions(
+                                accountIds,
+                                plaidBatchSize,
+                                offset,
+//                            false,
+//                            false,
+//                            false,
+                                true,
+                                false,
+                                true,
+                            ),
+                        )
+                    ).body().transactions
+                    allPlaidTxs.addAll(plaidTxs)
+
+                    /**
+                     * This would be where we query transactions from Firefly and look for dupes, but the Firefly
+                     *  API doesn't have a way to query by external id and I don't think it's worth the effort to
+                     *  do date range queries and sift through all transactions, so for now we'll rely on Firefly's
+                     *  "duplicate hash" dupe checking mechanism.
+                     */
+
+                    offset += plaidTxs.size
+
+                    // Keep going until we get all the transactions
+                } while (plaidTxs.size == plaidBatchSize)
+            }
+
+            // Map Plaid transactions to Firefly transactions
+            val fireflyTxs = converter.convertBatch(allPlaidTxs, accountMap)
+
+            // Insert into Firefly
+//            logger.info("Inserting transactions: ${fireflyTxs} ${fireflyTxs.hashCode()}")
+            fireflyTxApi.setAccessToken(fireflyAccessToken)
+            val fireflyTx = fireflyTxs.first()
+//            for (fireflyTx in fireflyTxs) {
+            fireflyTxApi.storeTransaction(
+                TransactionStore(
+                    fireflyTx.transactions,
+                    true,
+                    true,
+                    true,
+                    null,
+                )
+            )
+//            }
         }
     }
 }

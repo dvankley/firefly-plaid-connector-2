@@ -46,6 +46,10 @@ class TransactionConverter(
             }
             return "Unknown $typeString $sourceString"
         }
+
+        fun getExternalId(tx: PlaidTransaction): String {
+            return "plaid-${tx.transactionId}"
+        }
     }
 
     /**
@@ -195,6 +199,7 @@ class TransactionConverter(
             sourceName = sourceName,
             destinationId = destinationId,
             destinationName = destinationName,
+            externalId = getExternalId(tx),
             order = 0,
             // Why the eff does the Firefly API require this
             foreignAmount = "0",
