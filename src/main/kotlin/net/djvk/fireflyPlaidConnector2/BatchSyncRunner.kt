@@ -123,7 +123,12 @@ class BatchSyncRunner(
                 } catch (cre: ClientRequestException) {
                     if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
                         val error = cre.response.body<FireflyApiError>()
-                        logger.error("Firefly API error $error")
+                        if (error.message.lowercase().contains("duplicate of transaction")) {
+                            logger.info("Skipped transaction ${fireflyTx.transactions.first().externalId} that Firefly identified as a duplicate")
+                        } else {
+                            logger.error("Firefly API error $error")
+                            throw cre
+                        }
                     } else {
                         throw cre
                     }
