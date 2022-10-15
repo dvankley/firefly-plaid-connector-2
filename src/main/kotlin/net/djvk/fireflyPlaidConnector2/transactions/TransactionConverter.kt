@@ -24,11 +24,18 @@ class TransactionConverter(
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     companion object {
+        fun getSourceOrDestinationName(
+            tx: PlaidTransaction,
+        ): String {
+            return tx.merchantName
+                ?: tx.name.take(255)
+        }
+
         /**
-         * Gets the name to use for an external account
+         * Gets the name to use for an external account in cases where we don't have any better info
          * @param isSource True if source, false if destination
          */
-        fun getUnknownSourceOrDestionationName(
+        fun getUnknownSourceOrDestinationName(
             pfc: PersonalFinanceCategoryEnum,
             isSource: Boolean,
         ): String {
@@ -134,13 +141,15 @@ class TransactionConverter(
             destinationName = null
 
             sourceId = null
-            sourceName = getUnknownSourceOrDestionationName(tx.personalFinanceCategory.toEnum(), true)
+            sourceName = getSourceOrDestinationName(tx)
+                ?: getUnknownSourceOrDestinationName(tx.personalFinanceCategory.toEnum(), true)
         } else {
             sourceId = fireflyAccountId
             sourceName = null
 
             destinationId = null
-            destinationName = getUnknownSourceOrDestionationName(tx.personalFinanceCategory.toEnum(), false)
+            destinationName = getSourceOrDestinationName(tx)
+                ?: getUnknownSourceOrDestinationName(tx.personalFinanceCategory.toEnum(), false)
         }
         return convert(
             tx = tx,
