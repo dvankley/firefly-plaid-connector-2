@@ -4,9 +4,9 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum.Primary.*
-import net.djvk.fireflyPlaidConnector2.categories.PlaidOldCategoryCache
 import net.djvk.fireflyPlaidConnector2.constants.Direction
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.time.OffsetTime
 import java.time.ZoneOffset
@@ -19,44 +19,48 @@ typealias FireflyAccountId = Int
 
 @Component
 class TransactionConverter(
-    private val categoryCache: PlaidOldCategoryCache,
+    @Value("\${fireflyPlaidConnector2.useNameForDestination:true}")
+    private val useNameForDestination: Boolean,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
-    companion object {
-        fun getSourceOrDestinationName(
-            tx: PlaidTransaction,
-        ): String {
-            return tx.merchantName
-                ?: tx.name.take(255)
-        }
-
-        /**
-         * Gets the name to use for an external account in cases where we don't have any better info
-         * @param isSource True if source, false if destination
-         */
-        fun getUnknownSourceOrDestinationName(
-            pfc: PersonalFinanceCategoryEnum,
-            isSource: Boolean,
-        ): String {
-            val typeString = when (pfc.primary) {
-                INCOME -> "Income"
-                TRANSFER_IN, TRANSFER_OUT -> "Transfer"
-                LOAN_PAYMENTS, BANK_FEES, ENTERTAINMENT, FOOD_AND_DRINK, GENERAL_MERCHANDISE, HOME_IMPROVEMENT,
-                MEDICAL, PERSONAL_CARE, GENERAL_SERVICES, GOVERNMENT_AND_NON_PROFIT, TRANSPORTATION, TRAVEL,
-                RENT_AND_UTILITIES -> "Payment"
-            }
-            val sourceString = if (isSource) {
-                "Source"
+    fun getSourceOrDestinationName(
+        tx: PlaidTransaction,
+        isSource: Boolean,
+    ): String {
+        return tx.merchantName
+            ?: if (useNameForDestination) {
+                tx.name.take(255)
             } else {
-                "Recipient"
+                getUnknownSourceOrDestinationName(tx.personalFinanceCategory.toEnum(), isSource)
             }
-            return "Unknown $typeString $sourceString"
-        }
+    }
 
-        fun getExternalId(tx: PlaidTransaction): String {
-            return "plaid-${tx.transactionId}"
+    /**
+     * Gets the name to use for an external account in cases where we don't have any better info
+     * @param isSource True if source, false if destination
+     */
+    fun getUnknownSourceOrDestinationName(
+        pfc: PersonalFinanceCategoryEnum,
+        isSource: Boolean,
+    ): String {
+        val typeString = when (pfc.primary) {
+            INCOME -> "Income"
+            TRANSFER_IN, TRANSFER_OUT -> "Transfer"
+            LOAN_PAYMENTS, BANK_FEES, ENTERTAINMENT, FOOD_AND_DRINK, GENERAL_MERCHANDISE, HOME_IMPROVEMENT,
+            MEDICAL, PERSONAL_CARE, GENERAL_SERVICES, GOVERNMENT_AND_NON_PROFIT, TRANSPORTATION, TRAVEL,
+            RENT_AND_UTILITIES -> "Payment"
         }
+        val sourceString = if (isSource) {
+            "Source"
+        } else {
+            "Recipient"
+        }
+        return "Unknown $typeString $sourceString"
+    }
+
+    fun getExternalId(tx: PlaidTransaction): String {
+        return "plaid-${tx.transactionId}"
     }
 
     /**
@@ -141,15 +145,13 @@ class TransactionConverter(
             destinationName = null
 
             sourceId = null
-            sourceName = getSourceOrDestinationName(tx)
-                ?: getUnknownSourceOrDestinationName(tx.personalFinanceCategory.toEnum(), true)
+            sourceName = getSourceOrDestinationName(tx, true)
         } else {
             sourceId = fireflyAccountId
             sourceName = null
 
             destinationId = null
-            destinationName = getSourceOrDestinationName(tx)
-                ?: getUnknownSourceOrDestinationName(tx.personalFinanceCategory.toEnum(), false)
+            destinationName = getSourceOrDestinationName(tx, false)
         }
         return convert(
             tx = tx,

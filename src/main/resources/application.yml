@@ -7,6 +7,14 @@ fireflyPlaidConnector2:
   syncMode: batch
   syncFrequencyMinutes: 10
   maxSyncDays: 5
+  # PlaidTransaction.merchantName will always be used, if available, as the name of a transaction's
+  #   destination (or source, for some transfers) account in Firefly.
+  # If this is set to true and PlaidTransaction.merchantName is null, then PlaidTransaction.name will
+  #   be used instead.
+  # If this is set to false and PlaidTransaction.merchantName is null, then the account will be given
+  #   a generic "Unknown" name.
+  # Defaults to true.
+  useNameForDestination: true
   firefly:
 #    url: https://firefly.yourdomain.com
 #    personalAccessToken: TOKAAAAAN

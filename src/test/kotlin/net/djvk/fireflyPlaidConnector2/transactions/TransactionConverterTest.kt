@@ -3,7 +3,6 @@ package net.djvk.fireflyPlaidConnector2.transactions
 import io.ktor.client.engine.mock.*
 import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
-import net.djvk.fireflyPlaidConnector2.categories.PlaidOldCategoryCache
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Assertions.*
@@ -66,8 +65,7 @@ internal class TransactionConverterTest {
         expectedDestinationName: String?,
     ) {
         runBlocking {
-            val categoryCache = mock<PlaidOldCategoryCache>()
-            val converter = TransactionConverter(categoryCache)
+            val converter = TransactionConverter(false)
             val actual = converter.convertBatch(listOf(input), accountMap)
 
             assertThat(actual.size).isEqualTo(1)
