@@ -69,25 +69,27 @@ class BatchSyncRunner(
                      *  into Firefly.
                      * Note that the heap size may need to be increased if you're handling a ton of transactions.
                      */
-                    val plaidTxs = plaidApi.transactionsGet(
-                        TransactionsGetRequest(
-                            accessToken,
-                            startDate,
-                            endDate,
-                            null,
-                            TransactionsGetRequestOptions(
-                                accountIds,
-                                plaidBatchSize,
-                                offset,
-//                            false,
-//                            false,
-//                            false,
-                                true,
-                                false,
-                                true,
-                            ),
+                    val request = TransactionsGetRequest(
+                        accessToken,
+                        startDate,
+                        endDate,
+                        null,
+                        TransactionsGetRequestOptions(
+                            accountIds,
+                            plaidBatchSize,
+                            offset,
+                            includeOriginalDescription = true,
+                            includePersonalFinanceCategoryBeta = false,
+                            includePersonalFinanceCategory = true,
                         )
-                    ).body().transactions
+                    )
+                    val plaidTxs: List<Transaction>
+                    try {
+                        plaidTxs = plaidApi.transactionsGet(request).body().transactions
+                    } catch (cre: ClientRequestException) {
+                        logger.error("Error requesting Plaid transactions. Request: $request; ")
+                        throw cre
+                    }
                     allPlaidTxs.addAll(plaidTxs)
 
                     /**
