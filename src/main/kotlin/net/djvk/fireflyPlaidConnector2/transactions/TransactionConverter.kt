@@ -4,10 +4,12 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum.Primary.*
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.constants.Direction
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import java.time.OffsetDateTime
 import java.time.OffsetTime
 import java.time.ZoneOffset
 import kotlin.math.abs
@@ -21,8 +23,27 @@ typealias FireflyAccountId = Int
 class TransactionConverter(
     @Value("\${fireflyPlaidConnector2.useNameForDestination:true}")
     private val useNameForDestination: Boolean,
+
+    @Value("\${fireflyPlaidConnector2.categorization.primary.enable:false}")
+    private val enablePrimaryCategorization: Boolean,
+    @Value("\${fireflyPlaidConnector2.categorization.primary.prefix:plaid-primary-cat-}")
+    private val primaryCategoryPrefix: String,
+
+    @Value("\${fireflyPlaidConnector2.categorization.detailed.enable:false}")
+    private val enableDetailedCategorization: Boolean,
+    @Value("\${fireflyPlaidConnector2.categorization.primary.prefix:plaid-detailed-cat-}")
+    private val detailedCategoryPrefix: String,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
+
+    companion object {
+        fun getTxTimestamp(tx: PlaidTransaction): OffsetDateTime {
+            return tx.datetime
+                ?: tx.authorizedDatetime
+                // We're using a UTC zone here because the value we're given is only a date
+                ?: tx.date.atTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC))
+        }
+    }
 
     fun getSourceOrDestinationName(
         tx: PlaidTransaction,
@@ -87,42 +108,100 @@ class TransactionConverter(
         return out
     }
 
+    data class CandidatePair(
+        val secondsDiff: Long,
+        val aTx: PlaidTransaction,
+        val bTx: PlaidTransaction,
+    )
+
+    val transferTypes =
+        setOf(PersonalFinanceCategoryEnum.Primary.TRANSFER_IN, PersonalFinanceCategoryEnum.Primary.TRANSFER_OUT)
+
     /**
      * Attempt to find pairs of Plaid transactions that make up one actual transfer transaction
+     *
+     * Only visible for testing
      */
-    protected suspend fun sortByPairs(txs: List<PlaidTransaction>):
+    suspend fun sortByPairs(txs: List<PlaidTransaction>):
             Pair<List<PlaidTransaction>, List<Pair<PlaidTransaction, PlaidTransaction>>> {
         // Split Plaid transactions based on whether they are transfers or not
-        val (nonTransfers, transfers) = txs.partition { it.paymentMeta.payee == null }
-
+        val (transfers, nonTransfers) = txs.partition {
+            transferTypes.contains(it.personalFinanceCategory.toEnum().primary)
+        }
         val pairsOut = mutableListOf<Pair<PlaidTransaction, PlaidTransaction>>()
         val singlesOut = nonTransfers.toMutableList()
-        val remainingTxs = transfers.toMutableSet()
 
-        val sourceIndexedTxs = transfers
-            .associateBy { getSourceKey(it.amount, it.paymentMeta.payer) }
-            .toMutableMap()
+        val amountIndexedTxs = transfers
+            .groupBy { it.amount }
+        // The loop below will process an amount value and its inverse, so we use this to mark the inverse
+        //  as processed so we don't double process amount sets
+        val processedAmounts = mutableSetOf<Double>()
 
-        for (tx in remainingTxs) {
-            val sourceKey = getSourceKey(tx.amount, tx.paymentMeta.payer)
-            if (!sourceIndexedTxs.contains(sourceKey)) {
-                // If this transaction isn't in the map of indexed transactions, it was already removed
-                //  earlier as part of a pair with another transaction, so we should move on
+        for ((amount, groupTxs) in amountIndexedTxs) {
+            if (processedAmounts.contains(amount)) {
                 continue
             }
-            // Negate amount and switch payer and payee to search for matching transaction
-            val pairSourceKey = getSourceKey(-tx.amount, tx.paymentMeta.payee)
-            val pairMatch = sourceIndexedTxs[pairSourceKey]
-            if (pairMatch != null) {
-                // Add this pair to output
-                pairsOut.add(Pair(tx, pairMatch))
-                // Remove both Plaid transactions
-                sourceIndexedTxs.remove(sourceKey)
-                sourceIndexedTxs.remove(pairSourceKey)
+            // Get all transfer txs that all have a currency amount inverse to groupTxs, which should theoretically be matching txs
+            val matchingGroupTxs = amountIndexedTxs[-amount]
+            processedAmounts.add(-amount)
+
+            // If there are no matching txs, then this group has no soulmates and we should move on
+            if (matchingGroupTxs == null) {
+                singlesOut.addAll(groupTxs)
+                continue
+            }
+            val aTxs = groupTxs
+            val bTxs = matchingGroupTxs
+            val aTxIds = aTxs.map { it.transactionId }.toHashSet()
+            val bTxIds = bTxs.map { it.transactionId }.toHashSet()
+            val txsSecondsDiff = mutableListOf<CandidatePair>()
+
+            // Index txs by their temporal difference from each other so we can match up the closest pairs
+            for (aTx in aTxs) {
+                for (bTx in bTxs) {
+                    txsSecondsDiff.add(
+                        CandidatePair(
+                            abs(getTxTimestamp(aTx).toEpochSecond() - getTxTimestamp(bTx).toEpochSecond()),
+                            aTx,
+                            bTx
+                        )
+                    )
+                }
+            }
+
+            val sortedPairs = txsSecondsDiff.sortedBy { it.secondsDiff }
+
+            /**
+             * Ids of transactions we've already used from either group so we don't use them again.
+             * This is an issue because the [CandidatePair] array we make matches every A transaction to every B
+             *  transaction, so each transaction appears more than once in the array.
+             */
+            val usedATxIds = mutableSetOf<PlaidTransactionId>()
+            val usedBTxIds = mutableSetOf<PlaidTransactionId>()
+
+            for ((diff, aTx, bTx) in sortedPairs) {
+                // If we don't have any remaining possible transactions in the input sets, then we're done here
+                if ((aTxIds.size - usedATxIds.size) < 1 ||
+                    (bTxIds.size - usedBTxIds.size) < 1
+                ) {
+                    // Output all leftover transactions as singles
+                    singlesOut.addAll(aTxs.filter { !usedATxIds.contains(it.transactionId) })
+                    singlesOut.addAll(bTxs.filter { !usedBTxIds.contains(it.transactionId) })
+                    break
+                }
+                // If we already used either transaction A or B, then move on to the next candidate
+                if (usedATxIds.contains(aTx.transactionId) || usedBTxIds.contains(bTx.transactionId)) {
+                    continue
+                }
+
+                // Otherwise let's peel off the next pair of transactions
+                pairsOut.add(Pair(aTx, bTx))
+                usedATxIds.add(aTx.transactionId)
+                usedBTxIds.add(bTx.transactionId)
             }
         }
 
-        return Pair(singlesOut + sourceIndexedTxs.values, pairsOut)
+        return Pair(singlesOut, pairsOut)
     }
 
     protected fun getSourceKey(amount: Double, source: String?): String {
@@ -187,11 +266,7 @@ class TransactionConverter(
         destinationName: String? = null,
     ): FireflyTransaction {
         // TODO: categories
-        val timestamp = tx.datetime
-            ?: tx.authorizedDatetime
-            ?: tx.datetime
-            // We're using a UTC zone here because the value we're given is only a date
-            ?: tx.date.atTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC))
+        val timestamp = getTxTimestamp(tx)
         val split = TransactionSplit(
             getFireflyTransactionType(tx, isPair),
             timestamp,

@@ -23,6 +23,8 @@ package net.djvk.fireflyPlaidConnector2.api.plaid.models
 import com.fasterxml.jackson.annotation.JsonProperty
 import net.djvk.fireflyPlaidConnector2.constants.Direction
 
+typealias PlaidTransactionId = String
+
 /**
  * A representation of a transaction
  *
@@ -106,7 +108,7 @@ data class Transaction(
 
     /* The unique ID of the transaction. Like all Plaid identifiers, the `transaction_id` is case sensitive. */
     @field:JsonProperty("transaction_id")
-    val transactionId: kotlin.String,
+    val transactionId: PlaidTransactionId,
 
     /* The channel used to make a payment. `online:` transactions that took place online.  `in store:` transactions that were made at a physical location.  `other:` transactions that relate to banks, e.g. fees or deposits.  This field replaces the `transaction_type` field.  */
     @field:JsonProperty("payment_channel")
