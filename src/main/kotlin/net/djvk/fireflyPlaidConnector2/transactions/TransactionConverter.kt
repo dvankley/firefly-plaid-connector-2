@@ -184,7 +184,7 @@ class TransactionConverter(
             val usedATxIds = mutableSetOf<PlaidTransactionId>()
             val usedBTxIds = mutableSetOf<PlaidTransactionId>()
 
-            for ((diff, aTx, bTx) in sortedPairs) {
+            for ((_, aTx, bTx) in sortedPairs) {
                 // If we don't have any remaining possible transactions in the input sets, then we're done here
                 if ((aTxIds.size - usedATxIds.size) < 1 ||
                     (bTxIds.size - usedBTxIds.size) < 1
@@ -207,10 +207,6 @@ class TransactionConverter(
         }
 
         return Pair(singlesOut, pairsOut)
-    }
-
-    protected fun getSourceKey(amount: Double, source: String?): String {
-        return "${amount}|${source}"
     }
 
     protected suspend fun convertSingle(
@@ -252,13 +248,14 @@ class TransactionConverter(
         b: PlaidTransaction,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): FireflyTransaction {
+        val (sourceTx, destinationTx) = if (a.amount < 0.0) Pair(b, a) else Pair(a, b)
         return convert(
             tx = a,
             isPair = true,
-            sourceId = accountMap[b.accountId]?.toString()
-                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${b.accountId}"),
-            destinationId = accountMap[a.accountId]?.toString()
-                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${a.accountId}"),
+            sourceId = accountMap[sourceTx.accountId]?.toString()
+                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${sourceTx.accountId}"),
+            destinationId = accountMap[destinationTx.accountId]?.toString()
+                ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${destinationTx.accountId}"),
         )
     }
 
