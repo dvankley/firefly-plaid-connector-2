@@ -115,7 +115,12 @@ class TransactionConverter(
     )
 
     val transferTypes =
-        setOf(PersonalFinanceCategoryEnum.Primary.TRANSFER_IN, PersonalFinanceCategoryEnum.Primary.TRANSFER_OUT)
+        setOf(
+            PersonalFinanceCategoryEnum.Primary.TRANSFER_IN,
+            PersonalFinanceCategoryEnum.Primary.TRANSFER_OUT,
+            PersonalFinanceCategoryEnum.Primary.LOAN_PAYMENTS,
+            PersonalFinanceCategoryEnum.Primary.BANK_FEES,
+        )
 
     /**
      * Attempt to find pairs of Plaid transactions that make up one actual transfer transaction
