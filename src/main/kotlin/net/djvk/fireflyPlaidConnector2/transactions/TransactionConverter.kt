@@ -10,9 +10,8 @@ import net.djvk.fireflyPlaidConnector2.constants.Direction
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
-import java.time.OffsetDateTime
-import java.time.OffsetTime
-import java.time.ZoneOffset
+import java.time.*
+import java.util.*
 import kotlin.math.abs
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.Transaction as FireflyTransaction
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
@@ -24,6 +23,8 @@ typealias FireflyAccountId = Int
 class TransactionConverter(
     @Value("\${fireflyPlaidConnector2.useNameForDestination:true}")
     private val useNameForDestination: Boolean,
+    @Value("\${fireflyPlaidConnector2.timeZone}")
+    private val timeZoneString: String,
 
     @Value("\${fireflyPlaidConnector2.categorization.primary.enable:false}")
     private val enablePrimaryCategorization: Boolean,
@@ -36,20 +37,26 @@ class TransactionConverter(
     private val detailedCategoryPrefix: String,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
+    private val timeZone = TimeZone.getTimeZone(timeZoneString)
 
     companion object {
-        fun getTxTimestamp(tx: PlaidTransaction): OffsetDateTime {
-            return tx.datetime
-                ?: tx.authorizedDatetime
-                // We're using a UTC zone here because the value we're given is only a date
-                ?: tx.date.atTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC))
-        }
-
         fun convertScreamingSnakeCaseToKebabCase(input: String): String {
             return input
                 .replace("_", "-")
                 .lowercase()
         }
+    }
+
+    fun getTxTimestamp(tx: PlaidTransaction): OffsetDateTime {
+        return tx.datetime
+            ?: tx.authorizedDatetime
+            ?: getOffsetDateTimeForDate(tx.date)
+    }
+
+    fun getOffsetDateTimeForDate(date: LocalDate): OffsetDateTime {
+        val instant = date.atStartOfDay(timeZone.toZoneId()).toInstant()
+        val offset = timeZone.toZoneId().rules.getOffset(instant)
+        return date.atTime(OffsetTime.of(0, 0, 0, 0, offset))
     }
 
     fun getSourceOrDestinationName(
@@ -315,12 +322,16 @@ class TransactionConverter(
     protected suspend fun getFireflyCategoryTags(tx: Transaction): List<String> {
         val tagz = mutableListOf<String>()
         if (enablePrimaryCategorization) {
-            tagz.add(primaryCategoryPrefix +
-                    convertScreamingSnakeCaseToKebabCase(tx.personalFinanceCategory.primary))
+            tagz.add(
+                primaryCategoryPrefix +
+                        convertScreamingSnakeCaseToKebabCase(tx.personalFinanceCategory.primary)
+            )
         }
         if (enableDetailedCategorization) {
-            tagz.add(detailedCategoryPrefix +
-                    convertScreamingSnakeCaseToKebabCase(tx.personalFinanceCategory.toEnum().detailed.name))
+            tagz.add(
+                detailedCategoryPrefix +
+                        convertScreamingSnakeCaseToKebabCase(tx.personalFinanceCategory.toEnum().detailed.name)
+            )
         }
         return tagz
     }

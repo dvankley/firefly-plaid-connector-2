@@ -15,6 +15,11 @@ fireflyPlaidConnector2:
   #   a generic "Unknown" name.
   # Defaults to true.
   useNameForDestination: true
+  # Firefly uses a timestamp for when transactions occurred, but Plaid does not always provide a timestamp
+  #   for transactions; often it only provides a date. In those cases, we need a time zone to apply so that
+  #   the timestamp that shows up in Firefly properly spans the specified date in the user's timezone.
+  # Acceptable values are any time zone name from https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+  timeZone: America/New_York
   firefly:
 #    url: https://firefly.yourdomain.com
 #    personalAccessToken: TOKAAAAAN
