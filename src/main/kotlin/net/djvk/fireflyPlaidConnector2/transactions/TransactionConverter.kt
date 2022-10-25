@@ -5,6 +5,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypePropert
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum.Primary.*
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PlaidTransactionId
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
 import net.djvk.fireflyPlaidConnector2.constants.Direction
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -31,7 +32,7 @@ class TransactionConverter(
 
     @Value("\${fireflyPlaidConnector2.categorization.detailed.enable:false}")
     private val enableDetailedCategorization: Boolean,
-    @Value("\${fireflyPlaidConnector2.categorization.primary.prefix:plaid-detailed-cat-}")
+    @Value("\${fireflyPlaidConnector2.categorization.detailed.prefix:plaid-detailed-cat-}")
     private val detailedCategoryPrefix: String,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
@@ -42,6 +43,12 @@ class TransactionConverter(
                 ?: tx.authorizedDatetime
                 // We're using a UTC zone here because the value we're given is only a date
                 ?: tx.date.atTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC))
+        }
+
+        fun convertScreamingSnakeCaseToKebabCase(input: String): String {
+            return input
+                .replace("_", "-")
+                .lowercase()
         }
     }
 
@@ -250,7 +257,8 @@ class TransactionConverter(
     ): FireflyTransaction {
         val (sourceTx, destinationTx) = if (a.amount < 0.0) Pair(b, a) else Pair(a, b)
         return convert(
-            tx = a,
+            // The destination transaction tends to have the most relevant categorization information
+            tx = destinationTx,
             isPair = true,
             sourceId = accountMap[sourceTx.accountId]?.toString()
                 ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${sourceTx.accountId}"),
@@ -267,7 +275,6 @@ class TransactionConverter(
         destinationId: String? = null,
         destinationName: String? = null,
     ): FireflyTransaction {
-        // TODO: categories
         val timestamp = getTxTimestamp(tx)
         val split = TransactionSplit(
             getFireflyTransactionType(tx, isPair),
@@ -287,16 +294,35 @@ class TransactionConverter(
             sourceName = sourceName,
             destinationId = destinationId,
             destinationName = destinationName,
+            tags = getFireflyCategoryTags(tx),
             externalId = getExternalId(tx),
             order = 0,
+            reconciled = false,
             // Why the eff does the Firefly API require this
             foreignAmount = "0",
-            reconciled = false,
         )
         return FireflyTransaction(
             listOf(split),
             timestamp,
         )
+    }
+
+    /**
+     * This is our primary mechanism for enabling the use of Firefly's budgets and categories.
+     * The intent is to use this functionality to tag Firefly transactions with Plaid category data,
+     *  then use those tags with Firefly's rule engine to apply categories and budgets as desired.
+     */
+    protected suspend fun getFireflyCategoryTags(tx: Transaction): List<String> {
+        val tagz = mutableListOf<String>()
+        if (enablePrimaryCategorization) {
+            tagz.add(primaryCategoryPrefix +
+                    convertScreamingSnakeCaseToKebabCase(tx.personalFinanceCategory.primary))
+        }
+        if (enableDetailedCategorization) {
+            tagz.add(detailedCategoryPrefix +
+                    convertScreamingSnakeCaseToKebabCase(tx.personalFinanceCategory.toEnum().detailed.name))
+        }
+        return tagz
     }
 
     /**

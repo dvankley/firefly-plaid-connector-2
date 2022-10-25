@@ -22,40 +22,38 @@ fireflyPlaidConnector2:
 #    url: https://development.plaid.com
 #    clientId: HI I'M A CLIENT ID
 #    secret: SECRETZ
-    # Transaction categorization configuration (optional, defaults to disable categorization)
-    # Plaid currently supplies two types of categorization information https://plaid.com/blog/transactions-categorization-taxonomy/
-    # For either categorization type, the provided category strings for a given transaction
-    #   will be added as tags to the Firefly transaction using the prefixes below.
-    # This is intended to allow you to use Firefly's rule engine to use the tags as triggers to add the transaction to
-    #   a budget or category or whatever, rather than trying to squeeze all that logic in here.
-    categorization:
-      # Add old Plaid categorization information (transaction.category) as tags to Firefly transactions
-      # Optional, defaults to disabled.
-      old:
-        enable: true
-        # This value will prefix all Firefly transaction tags populated from old categories.
-        # An empty string is a valid value and is the same as omitting this key.
-        prefix: "plaid-old-"
-        # 'Old' categories are returned in a hierarchical array, with increasing detail farther into the array as per
-        #   https://plaid.com/docs/api/products/transactions/#categoriesget
-        # This value limits how far into the array we will go when building Firefly transaction tags.
-        # For instance, consider a transaction with old categories:
-        #   "TRANSFER", "THIRD_PARTY", "PAYPAL"
-        # With depthLimit set to 1, the Firefly transaction tag would be ${prefix}TRANSFER
-        # With depthLimit set to 2, the Firefly transaction tag would be ${prefix}TRANSFER-THIRD_PARTY
-        # With depthLimit set to 3 or greater, the Firefly transaction tag would be ${prefix}TRANSFER-THIRD_PARTY-PAYPAL
-        #   (I don't think a depth higher than 3 is possible, for what it's worth)
-        # Optional, defaults to 3
-        depthLimit: 3
-      # Use new Plaid categorization information (transaction.personalFinanceCategory)
-      # Optional, defaults to disabled.
-      new:
-        primary:
-          enable: true
-          prefix: "plaid-new-primary-"
-        detailed:
-          enable: true
-          prefix: "plaid-new-detailed-"
+  # Transaction categorization configuration (optional, defaults to disable categorization)
+  # Plaid currently supplies two types of categorization information https://plaid.com/blog/transactions-categorization-taxonomy/
+  # The current plan is to ignore the old categorization type because the new type (transaction.personalFinanceCategory)
+  #   is fully rolled out and seems superior across the board.
+  # If categorization is enabled, the category strings provided by Plaid for a given transaction
+  #   will be added as tags to the Firefly transaction using the prefixes below.
+  # This is intended to allow you to use Firefly's rule engine to use the tags as triggers to add the transaction to
+  #   a budget or category or whatever, rather than trying to squeeze all that logic in here.
+  # See https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv for a list of categories
+  categorization:
+    # Controls tagging for a Plaid transaction's primary personal finance category
+    # If enabled, the prefix below will be used to create a tag with the transaction's primary personal finance category.
+    # For instance, consider a transaction with primary category INCOME.
+    #   With the default prefix, that transaction would be tagged in Firefly with "plaid-primary-cat-income"
+    # Optional, defaults to disabled
+    primary:
+      # Set to true to enable tags for a Plaid transaction's primary personal finance category
+      # Optional, defaults to false
+      enable: true
+      # Optional, defaults to "plaid-primary-cat-"
+      prefix: "plaid-primary-cat-"
+    # Controls tagging for a Plaid transaction's detailed personal finance category
+    # Same as primary above, but using the detailed personal finance category field.
+    # For instance, consider a transaction with detailed category INCOME_DIVIDENDS.
+    #   With the default prefix, that transaction would be tagged in Firefly with "plaid-detailed-cat-dividends"
+    # Optional, defaults to disabled
+    detailed:
+      # Set to true to enable tags for a Plaid transaction's detailed personal finance category
+      # Optional, defaults to false
+      enable: true
+      # Optional, defaults to "plaid-detailed-cat-"
+      prefix: "plaid-detailed-cat-"
   # An array of accounts to sync from Plaid to Firefly
   accounts:
       # The account id in Firefly to sync this data to.
