@@ -7,6 +7,9 @@ fireflyPlaidConnector2:
   syncMode: batch
   syncFrequencyMinutes: 10
   maxSyncDays: 5
+  # The maximum number of days apart transactions can be and still be candidates for matching up as a Firefly transfer.
+  # This is used to limit data we fetch from Firefly and retain in memory for matching up transfers.
+  transferMatchWindowDays: 3
   # PlaidTransaction.merchantName will always be used, if available, as the name of a transaction's
   #   destination (or source, for some transfers) account in Firefly.
   # If this is set to true and PlaidTransaction.merchantName is null, then PlaidTransaction.name will
@@ -27,6 +30,10 @@ fireflyPlaidConnector2:
 #    url: https://development.plaid.com
 #    clientId: HI I'M A CLIENT ID
 #    secret: SECRETZ
+    # The number of transactions to fetch from Plaid at a time.
+    # This doesn't have a major effect on anything as in both batch and sync mode we have to retain data sets larger
+    #   than just the Plaid transaction batch in memory to try to match up transfers.
+    batchSize: 100
   # Transaction categorization configuration (optional, defaults to disable categorization)
   # Plaid currently supplies two types of categorization information https://plaid.com/blog/transactions-categorization-taxonomy/
   # The current plan is to ignore the old categorization type because the new type (transaction.personalFinanceCategory)

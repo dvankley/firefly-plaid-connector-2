@@ -8,6 +8,7 @@ import io.ktor.utils.io.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.SystemInfo
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.SystemInfoData
 import net.djvk.fireflyPlaidConnector2.lib.TestApplication
+import net.djvk.fireflyPlaidConnector2.sync.BatchSyncRunner
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
