@@ -32,6 +32,8 @@ import com.fasterxml.jackson.annotation.JsonProperty
  */
 
 data class PageLink(
+    @field:JsonProperty("prev")
+    val prev: java.net.URI? = null,
 
     @field:JsonProperty("self")
     val self: java.net.URI? = null,
