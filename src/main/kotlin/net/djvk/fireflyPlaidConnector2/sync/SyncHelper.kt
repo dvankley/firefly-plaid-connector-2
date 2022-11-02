@@ -3,8 +3,7 @@ package net.djvk.fireflyPlaidConnector2.sync
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.yield
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.FireflyApiError
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.Transaction
@@ -14,6 +13,7 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.clientIdHeader
 import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.secretHeader
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
+import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -58,33 +58,61 @@ class SyncHelper(
         })
     }
 
-    fun optimisticInsertIntoFirefly(fireflyTxs: List<Transaction>) {
-        runBlocking {
-            for (fireflyTx in fireflyTxs) {
-                try {
-                    fireflyTxApi.storeTransaction(
-                        TransactionStore(
-                            fireflyTx.transactions,
-                            errorIfDuplicateHash = true,
-                            applyRules = true,
-                            fireWebhooks = true,
-                            groupTitle = null,
-                        )
+    suspend fun optimisticInsertIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
+        for (fireflyTx in fireflyTxs) {
+            try {
+                fireflyTxApi.storeTransaction(
+                    TransactionStore(
+                        listOf(fireflyTx.tx),
+                        errorIfDuplicateHash = true,
+                        applyRules = true,
+                        fireWebhooks = true,
+                        groupTitle = null,
                     )
-                } catch (cre: ClientRequestException) {
-                    if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
-                        val error = cre.response.body<FireflyApiError>()
-                        if (error.message.lowercase().contains("duplicate of transaction")) {
-                            logger.info("Skipped transaction ${fireflyTx.transactions.first().externalId} that Firefly identified as a duplicate")
-                        } else {
-                            logger.error("Firefly API error $error")
-                            throw cre
-                        }
+                )
+            } catch (cre: ClientRequestException) {
+                if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
+                    val error = cre.response.body<FireflyApiError>()
+                    if (error.message.lowercase().contains("duplicate of transaction")) {
+                        logger.info("Skipped transaction ${fireflyTx.tx.externalId} that Firefly identified as a duplicate")
                     } else {
+                        logger.error("Firefly API error $error")
                         throw cre
                     }
+                } else {
+                    throw cre
                 }
             }
+        }
+    }
+
+    suspend fun updateIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
+        for (fireflyTx in fireflyTxs) {
+//                try {
+            fireflyTxApi.updateTransaction(
+                fireflyTx.id
+                    ?: throw IllegalArgumentException("Can't update Firefly transaction without id: $fireflyTx"),
+                fireflyTx.toTransactionUpdate(),
+            )
+//                } catch (cre: ClientRequestException) {
+//                    if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
+//                        val error = cre.response.body<FireflyApiError>()
+//                        if (error.message.lowercase().contains("duplicate of transaction")) {
+//                            logger.info("Skipped transaction ${fireflyTx.transactions.first().externalId} that Firefly identified as a duplicate")
+//                        } else {
+//                            logger.error("Firefly API error $error")
+//                            throw cre
+//                        }
+//                    } else {
+//                        throw cre
+//                    }
+//                }
+        }
+    }
+
+    suspend fun deleteInFirefly(fireflyTxIds: List<FireflyTransactionId>) {
+        for (fireflyTxId in fireflyTxIds) {
+            fireflyTxApi.deleteTransaction(fireflyTxId)
         }
     }
 }

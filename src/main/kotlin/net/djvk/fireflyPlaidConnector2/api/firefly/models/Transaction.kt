@@ -33,7 +33,6 @@ import com.fasterxml.jackson.annotation.JsonProperty
  */
 
 data class Transaction(
-
     @field:JsonProperty("transactions")
     val transactions: kotlin.collections.List<TransactionSplit>,
 
@@ -50,6 +49,5 @@ data class Transaction(
     /* Title of the transaction if it has been split in more than one piece. Empty otherwise. */
     @field:JsonProperty("group_title")
     val groupTitle: kotlin.String? = null
-
 )
 

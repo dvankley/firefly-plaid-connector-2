@@ -8,6 +8,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
 import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
+import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
@@ -18,7 +19,6 @@ import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.Path
 import kotlin.time.Duration.Companion.minutes
-import net.djvk.fireflyPlaidConnector2.api.firefly.models.Transaction as FireflyTransaction
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 
 typealias IntervalMinutes = Int
@@ -46,6 +46,8 @@ class PolledSyncRunner(
     private val converter: TransactionConverter,
 ) : Runner, DisposableBean {
     private val logger = LoggerFactory.getLogger(this::class.java)
+
+    private val fireflyPageCountMax = 20
 
     private val terminated = AtomicBoolean(false)
     private lateinit var mainJob: Job
@@ -92,7 +94,7 @@ class PolledSyncRunner(
                     /**
                      * Get all Firefly transactions within [transferMatchWindowDays] so that we can try to match up transfers.
                      */
-                    val existingFireflyTxs = mutableListOf<FireflyTransaction>()
+                    val existingFireflyTxs = mutableListOf<FireflyTransactionDto>()
 
                     var fireflyTxPage = 0
                     do {
@@ -103,16 +105,24 @@ class PolledSyncRunner(
                             LocalDate.now(),
                             TransactionTypeFilter.all,
                         ).body()
-                        val txList = response.data.map { it.attributes }
                         val pagination = response.meta.pagination
 
-                        existingFireflyTxs.addAll(txList)
-                        logger.debug(response.hashCode().toString())
-                        logger.debug("Fetched ${txList.size} existing Firefly transactions with window starting at $transferWindowStart")
+                        /**
+                         * Filter out split transactions; we're not going to bother trying to match those up as transfers
+                         */
+                        existingFireflyTxs.addAll(response.data
+                            .filter { it.attributes.transactions.size == 1 }
+                            .map { FireflyTransactionDto(it.id, it.attributes.transactions.first()) }
+                        )
+                        logger.debug("Fetched ${response.data.size} existing Firefly single-split transactions with window starting at $transferWindowStart")
                     } while (pagination != null &&
                         pagination.currentPage < pagination.totalPages &&
-                        fireflyTxPage < 20
+                        // This condition is a failsafe to avoid an infinite loop
+                        fireflyTxPage < fireflyPageCountMax
                     )
+                    if (fireflyTxPage >= fireflyPageCountMax) {
+                        throw RuntimeException("Exceeded Firefly failsafe max page count $fireflyPageCountMax")
+                    }
 
                     val plaidCreatedTxs = mutableListOf<PlaidTransaction>()
                     val plaidUpdatedTxs = mutableListOf<PlaidTransaction>()
@@ -151,18 +161,27 @@ class PolledSyncRunner(
                             // Keep going until we get all the transactions
                         } while (response.hasMore)
                     }
-                    val thing = 1
-//                // Map Plaid transactions to Firefly transactions
-//                val fireflyTxs = converter.convertBatch(allPlaidTxs, accountMap)
+                    // Map Plaid transactions to Firefly transactions
+                    // TODO: do we need to dedupe the create/update/delete events and keep only the latest event?
+                    //  Or has Plaid already done that for us?
+                    val convertResult = converter.convertPollSync(
+                        accountMap,
+                        plaidCreatedTxs,
+                        plaidUpdatedTxs,
+                        plaidDeletedTxs,
+                        existingFireflyTxs,
+                    )
 //
-//                // Insert into Firefly
-//                syncHelper.optimisticInsertIntoFirefly(fireflyTxs)
+                    // Insert into Firefly
+                    syncHelper.optimisticInsertIntoFirefly(convertResult.creates)
+                    syncHelper.updateIntoFirefly(convertResult.updates)
+                    syncHelper.deleteInFirefly(convertResult.deletes)
 
                     /**
                      * Trigger GC to try to reduce heap size (depends on VM configuration)
                      *
                      * The application sits idle for the vast majority of its executing time in polling mode, so here
-                     *  we try to trigger the GC first to hopefully reclaim some heap.
+                     *  we try to trigger the GC before sleeping to hopefully reclaim some heap.
                      * This depends a lot on the VM and GC configuration.
                      * TODO: do some GC tests and give some guidance here.
                      */

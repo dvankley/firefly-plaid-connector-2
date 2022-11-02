@@ -89,6 +89,14 @@ data class TransactionSplitUpdate(
     @field:JsonProperty("description")
     val description: kotlin.String? = null,
 
+    /* ID of the source account. For a withdrawal or a transfer, this must always be an asset account. For deposits, this must be a revenue account. */
+    @field:JsonProperty("source_id")
+    val sourceId: kotlin.String? = null,
+
+    /* ID of the destination account. For a deposit or a transfer, this must always be an asset account. For withdrawals this must be an expense account. */
+    @field:JsonProperty("destination_id")
+    val destinationId: kotlin.String? = null,
+
     /* Order of this entry in the list of transactions. */
     @field:JsonProperty("order")
     val order: kotlin.Int? = null,
@@ -111,10 +119,6 @@ data class TransactionSplitUpdate(
     @field:JsonProperty("currency_decimal_places")
     val currencyDecimalPlaces: kotlin.Int? = null,
 
-    /* The amount in a foreign currency. */
-    @field:JsonProperty("foreign_amount")
-    val foreignAmount: kotlin.String? = null,
-
     /* Currency ID of the foreign currency. Default is null. Is required when you submit a foreign amount. */
     @field:JsonProperty("foreign_currency_id")
     val foreignCurrencyId: kotlin.String? = null,
@@ -130,6 +134,23 @@ data class TransactionSplitUpdate(
     @field:JsonProperty("foreign_currency_decimal_places")
     val foreignCurrencyDecimalPlaces: kotlin.Int? = null,
 
+    /* The amount in a foreign currency. */
+    @field:JsonProperty("foreign_amount")
+    val foreignAmount: kotlin.String? = null,
+
+    /* Name of the source account. For a withdrawal or a transfer, this must always be an asset account. For deposits, this must be a revenue account. Can be used instead of the source_id. If the transaction is a deposit, the source_name can be filled in freely: the account will be created based on the name. */
+    @field:JsonProperty("source_name")
+    val sourceName: kotlin.String? = null,
+
+    @field:JsonProperty("source_iban")
+    val sourceIban: kotlin.String? = null,
+
+    /* Name of the destination account. You can submit the name instead of the ID. For everything except transfers, the account will be auto-generated if unknown, so submitting a name is enough. */
+    @field:JsonProperty("destination_name")
+    val destinationName: kotlin.String? = null,
+
+    @field:JsonProperty("destination_iban")
+    val destinationIban: kotlin.String? = null,
     /* The budget ID for this transaction. */
     @field:JsonProperty("budget_id")
     val budgetId: kotlin.String? = null,
@@ -146,32 +167,6 @@ data class TransactionSplitUpdate(
     @field:JsonProperty("category_name")
     val categoryName: kotlin.String? = null,
 
-    /* ID of the source account. For a withdrawal or a transfer, this must always be an asset account. For deposits, this must be a revenue account. */
-    @field:JsonProperty("source_id")
-    val sourceId: kotlin.String? = null,
-
-    /* Name of the source account. For a withdrawal or a transfer, this must always be an asset account. For deposits, this must be a revenue account. Can be used instead of the source_id. If the transaction is a deposit, the source_name can be filled in freely: the account will be created based on the name. */
-    @field:JsonProperty("source_name")
-    val sourceName: kotlin.String? = null,
-
-    @field:JsonProperty("source_iban")
-    val sourceIban: kotlin.String? = null,
-
-    /* ID of the destination account. For a deposit or a transfer, this must always be an asset account. For withdrawals this must be an expense account. */
-    @field:JsonProperty("destination_id")
-    val destinationId: kotlin.String? = null,
-
-    /* Name of the destination account. You can submit the name instead of the ID. For everything except transfers, the account will be auto-generated if unknown, so submitting a name is enough. */
-    @field:JsonProperty("destination_name")
-    val destinationName: kotlin.String? = null,
-
-    @field:JsonProperty("destination_iban")
-    val destinationIban: kotlin.String? = null,
-
-    /* If the transaction has been reconciled already. When you set this, the amount can no longer be edited by the user. */
-    @field:JsonProperty("reconciled")
-    val reconciled: kotlin.Boolean? = null,
-
     /* Optional. Use either this or the bill_name */
     @field:JsonProperty("bill_id")
     val billId: kotlin.String? = null,
@@ -180,12 +175,16 @@ data class TransactionSplitUpdate(
     @field:JsonProperty("bill_name")
     val billName: kotlin.String? = null,
 
-    /* Array of tags. */
-    @field:JsonProperty("tags")
-    val tags: kotlin.collections.List<kotlin.String>? = null,
+    /* If the transaction has been reconciled already. When you set this, the amount can no longer be edited by the user. */
+    @field:JsonProperty("reconciled")
+    val reconciled: kotlin.Boolean? = null,
 
     @field:JsonProperty("notes")
     val notes: kotlin.String? = null,
+
+    /* Array of tags. */
+    @field:JsonProperty("tags")
+    val tags: kotlin.collections.List<kotlin.String>? = null,
 
     /* Reference to internal reference of other systems. */
     @field:JsonProperty("internal_reference")

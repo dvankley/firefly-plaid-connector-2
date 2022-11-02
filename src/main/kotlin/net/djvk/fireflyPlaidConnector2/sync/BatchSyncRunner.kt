@@ -103,7 +103,7 @@ class BatchSyncRunner(
             }
 
             // Map Plaid transactions to Firefly transactions
-            val fireflyTxs = converter.convertBatch(allPlaidTxs, accountMap)
+            val fireflyTxs = converter.convertBatchSync(allPlaidTxs, accountMap)
 
             // Insert into Firefly
             syncHelper.optimisticInsertIntoFirefly(fireflyTxs)

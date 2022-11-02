@@ -21,6 +21,7 @@
 package net.djvk.fireflyPlaidConnector2.api.firefly.models
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionSplitId
 
 /**
  *
@@ -89,7 +90,6 @@ import com.fasterxml.jackson.annotation.JsonProperty
  */
 
 data class TransactionSplit(
-
     @field:JsonProperty("type")
     val type: TransactionTypeProperty,
 
@@ -119,7 +119,7 @@ data class TransactionSplit(
 
     /* ID of the underlying transaction journal. Each transaction consists of a transaction group (see the top ID) and one or more journals making up the splits of the transaction.  */
     @field:JsonProperty("transaction_journal_id")
-    val transactionJournalId: kotlin.String? = null,
+    val transactionJournalId: FireflyTransactionSplitId? = null,
 
     /* Order of this entry in the list of transactions. */
     @field:JsonProperty("order")
@@ -318,6 +318,57 @@ data class TransactionSplit(
     /* If the transaction has attachments. */
     @field:JsonProperty("has_attachments")
     val hasAttachments: kotlin.Boolean? = null
-
-)
+) {
+    fun toTransactionSplitUpdate(): TransactionSplitUpdate {
+        return TransactionSplitUpdate(
+            date = date,
+            amount = amount,
+            description = description,
+            sourceId = sourceId,
+            destinationId = destinationId,
+            order = order,
+            currencyId = currencyId,
+            currencyCode = currencyCode,
+            currencySymbol = currencySymbol,
+            currencyName = currencyName,
+            currencyDecimalPlaces = currencyDecimalPlaces,
+            foreignCurrencyId = foreignCurrencyId,
+            foreignCurrencyCode = foreignCurrencyCode,
+            foreignCurrencySymbol = foreignCurrencySymbol,
+            foreignCurrencyDecimalPlaces = foreignCurrencyDecimalPlaces,
+            foreignAmount = foreignAmount,
+            sourceName = sourceName,
+            sourceIban = sourceIban,
+            destinationName = destinationName,
+            destinationIban = destinationIban,
+            budgetId = budgetId,
+            budgetName = budgetName,
+            categoryId = categoryId,
+            categoryName = categoryName,
+            billId = billId,
+            billName = billName,
+            reconciled = reconciled,
+            notes = notes,
+            tags = tags,
+            internalReference = internalReference,
+            externalId = externalId,
+            externalUrl = externalUrl,
+            bunqPaymentId = bunqPaymentId,
+            sepaCc = sepaCc,
+            sepaCtOp = sepaCtOp,
+            sepaCtId = sepaCtId,
+            sepaDb = sepaDb,
+            sepaCountry = sepaCountry,
+            sepaEp = sepaEp,
+            sepaCi = sepaCi,
+            sepaBatchId = sepaBatchId,
+            interestDate = interestDate,
+            bookDate = bookDate,
+            processDate = processDate,
+            dueDate = dueDate,
+            paymentDate = paymentDate,
+            invoiceDate = invoiceDate
+        )
+    }
+}
 

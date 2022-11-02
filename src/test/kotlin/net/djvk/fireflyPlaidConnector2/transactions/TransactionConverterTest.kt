@@ -131,9 +131,10 @@ internal class TransactionConverterTest {
                 enablePrimaryCategorization = false,
                 primaryCategoryPrefix = "a",
                 enableDetailedCategorization = false,
-                detailedCategoryPrefix = "b"
+                detailedCategoryPrefix = "b",
+                timeZoneString = "America/New_York",
             )
-            val (actualSingles, actualPairs) = converter.sortByPairs(input)
+            val (actualSingles, actualPairs) = converter.sortByPairsBatched(input)
 
             assertThat(actualSingles).isEqualTo(expectedSingles)
             assertThat(actualPairs).isEqualTo(expectedPairs)
@@ -161,14 +162,13 @@ internal class TransactionConverterTest {
                 enablePrimaryCategorization = false,
                 primaryCategoryPrefix = "a",
                 enableDetailedCategorization = false,
-                detailedCategoryPrefix = "b"
+                detailedCategoryPrefix = "b",
+                timeZoneString = "America/New_York",
             )
-            val actual = converter.convertBatch(listOf(input), accountMap)
+            val actual = converter.convertBatchSync(listOf(input), accountMap)
 
             assertThat(actual.size).isEqualTo(1)
-            val txs = actual.first()
-            assertThat(txs.transactions.size).isEqualTo(1)
-            val tx = txs.transactions.first()
+            val tx = actual.first().tx
             assertThat(tx.sourceId).isEqualTo(expectedSourceId)
             assertThat(tx.sourceName).isEqualTo(expectedSourceName)
             assertThat(tx.destinationId).isEqualTo(expectedDestinationId)

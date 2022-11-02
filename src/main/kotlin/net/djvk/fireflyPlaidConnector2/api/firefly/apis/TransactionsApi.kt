@@ -28,6 +28,9 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.*
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 
+typealias FireflyTransactionId = String
+typealias FireflyTransactionSplitId = String
+
 @Component
 open class TransactionsApi(
     @Value("\${fireflyPlaidConnector2.firefly.url}")
@@ -43,7 +46,7 @@ open class TransactionsApi(
      * @param id The ID of the transaction.
      * @return void
      */
-    open suspend fun deleteTransaction(id: kotlin.String): HttpResponse<Unit> {
+    open suspend fun deleteTransaction(id: FireflyTransactionId): HttpResponse<Unit> {
 
         val localVariableAuthNames = listOf<String>("firefly_iii_auth")
 
@@ -74,7 +77,7 @@ open class TransactionsApi(
      * @param id The ID of the transaction journal (the split) you wish to delete.
      * @return void
      */
-    open suspend fun deleteTransactionJournal(id: kotlin.String): HttpResponse<Unit> {
+    open suspend fun deleteTransactionJournal(id: FireflyTransactionSplitId): HttpResponse<Unit> {
 
         val localVariableAuthNames = listOf<String>("firefly_iii_auth")
 
@@ -103,10 +106,10 @@ open class TransactionsApi(
      * Get a single transaction.
      * Get a single transaction.
      * @param id The ID of the transaction.
-     * @return TransactionSingle
+     * @return [TransactionSingle]
      */
     @Suppress("UNCHECKED_CAST")
-    open suspend fun getTransaction(id: kotlin.String): HttpResponse<TransactionSingle> {
+    open suspend fun getTransaction(id: FireflyTransactionId): HttpResponse<TransactionSingle> {
 
         val localVariableAuthNames = listOf<String>("firefly_iii_auth")
 
@@ -138,7 +141,7 @@ open class TransactionsApi(
      * @return TransactionSingle
      */
     @Suppress("UNCHECKED_CAST")
-    open suspend fun getTransactionByJournal(id: kotlin.String): HttpResponse<TransactionSingle> {
+    open suspend fun getTransactionByJournal(id: FireflyTransactionSplitId): HttpResponse<TransactionSingle> {
 
         val localVariableAuthNames = listOf<String>("firefly_iii_auth")
 
@@ -171,7 +174,7 @@ open class TransactionsApi(
      * @return AttachmentArray
      */
     @Suppress("UNCHECKED_CAST")
-    open suspend fun listAttachmentByTransaction(id: kotlin.String, page: kotlin.Int?): HttpResponse<AttachmentArray> {
+    open suspend fun listAttachmentByTransaction(id: FireflyTransactionId, page: kotlin.Int?): HttpResponse<AttachmentArray> {
 
         val localVariableAuthNames = listOf<String>("firefly_iii_auth")
 
@@ -205,7 +208,7 @@ open class TransactionsApi(
      * @return PiggyBankEventArray
      */
     @Suppress("UNCHECKED_CAST")
-    open suspend fun listEventByTransaction(id: kotlin.String, page: kotlin.Int?): HttpResponse<PiggyBankEventArray> {
+    open suspend fun listEventByTransaction(id: FireflyTransactionId, page: kotlin.Int?): HttpResponse<PiggyBankEventArray> {
 
         val localVariableAuthNames = listOf<String>("firefly_iii_auth")
 
@@ -239,7 +242,7 @@ open class TransactionsApi(
      * @return TransactionLinkArray
      */
     @Suppress("UNCHECKED_CAST")
-    open suspend fun listLinksByJournal(id: kotlin.String, page: kotlin.Int?): HttpResponse<TransactionLinkArray> {
+    open suspend fun listLinksByJournal(id: FireflyTransactionSplitId, page: kotlin.Int?): HttpResponse<TransactionLinkArray> {
 
         val localVariableAuthNames = listOf<String>("firefly_iii_auth")
 
@@ -349,7 +352,7 @@ open class TransactionsApi(
      */
     @Suppress("UNCHECKED_CAST")
     open suspend fun updateTransaction(
-        id: kotlin.String,
+        id: FireflyTransactionId,
         transactionUpdate: TransactionUpdate
     ): HttpResponse<TransactionSingle> {
 

@@ -22,6 +22,10 @@ package net.djvk.fireflyPlaidConnector2.api.plaid.models
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import net.djvk.fireflyPlaidConnector2.constants.Direction
+import net.djvk.fireflyPlaidConnector2.transactions.SortableTransaction
+import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
+import java.time.OffsetDateTime
+import java.time.ZoneId
 
 typealias PlaidTransactionId = String
 
@@ -88,7 +92,7 @@ data class Transaction(
 
     /* The settled value of the transaction, denominated in the transactions's currency, as stated in `iso_currency_code` or `unofficial_currency_code`. Positive values when money moves out of the account; negative values when money moves in. For example, debit card purchases are positive; credit card payments, direct deposits, and refunds are negative. */
     @field:JsonProperty("amount")
-    val amount: kotlin.Double,
+    override val amount: kotlin.Double,
 
     /* The ISO-4217 currency code of the transaction. Always `null` if `unofficial_currency_code` is non-null. */
     @field:JsonProperty("iso_currency_code")
@@ -108,7 +112,7 @@ data class Transaction(
 
     /* The unique ID of the transaction. Like all Plaid identifiers, the `transaction_id` is case sensitive. */
     @field:JsonProperty("transaction_id")
-    val transactionId: PlaidTransactionId,
+    override val transactionId: PlaidTransactionId,
 
     /* The channel used to make a payment. `online:` transactions that took place online.  `in store:` transactions that were made at a physical location.  `other:` transactions that relate to banks, e.g. fees or deposits.  This field replaces the `transaction_type` field.  */
     @field:JsonProperty("payment_channel")
@@ -152,7 +156,7 @@ data class Transaction(
      */
     @field:JsonProperty("personal_finance_category")
     val personalFinanceCategory: PersonalFinanceCategory
-) {
+) : SortableTransaction {
     /**
      * Please use the `payment_channel` field, `transaction_type` will be deprecated in the future.  `digital:` transactions that took place online.  `place:` transactions that were made at a physical location.  `special:` transactions that relate to banks, e.g. fees or deposits.  `unresolved:` transactions that do not fit into the other three types.
      *
@@ -175,6 +179,12 @@ data class Transaction(
         } else {
             Direction.IN
         }
+    }
+
+    override fun getTimestamp(zoneId: ZoneId): OffsetDateTime {
+        return datetime
+            ?: authorizedDatetime
+            ?: TransactionConverter.getOffsetDateTimeForDate(zoneId, date)
     }
 }
 
