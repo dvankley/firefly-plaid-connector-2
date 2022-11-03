@@ -6,8 +6,6 @@ import io.ktor.http.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.FireflyApiError
-import net.djvk.fireflyPlaidConnector2.api.firefly.models.Transaction
-import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionStore
 import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
 import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.clientIdHeader
 import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.secretHeader
@@ -61,15 +59,7 @@ class SyncHelper(
     suspend fun optimisticInsertIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
         for (fireflyTx in fireflyTxs) {
             try {
-                fireflyTxApi.storeTransaction(
-                    TransactionStore(
-                        listOf(fireflyTx.tx),
-                        errorIfDuplicateHash = true,
-                        applyRules = true,
-                        fireWebhooks = true,
-                        groupTitle = null,
-                    )
-                )
+                fireflyTxApi.storeTransaction(fireflyTx.toTransactionStore())
             } catch (cre: ClientRequestException) {
                 if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
                     val error = cre.response.body<FireflyApiError>()
@@ -88,25 +78,11 @@ class SyncHelper(
 
     suspend fun updateIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
         for (fireflyTx in fireflyTxs) {
-//                try {
             fireflyTxApi.updateTransaction(
                 fireflyTx.id
                     ?: throw IllegalArgumentException("Can't update Firefly transaction without id: $fireflyTx"),
                 fireflyTx.toTransactionUpdate(),
             )
-//                } catch (cre: ClientRequestException) {
-//                    if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
-//                        val error = cre.response.body<FireflyApiError>()
-//                        if (error.message.lowercase().contains("duplicate of transaction")) {
-//                            logger.info("Skipped transaction ${fireflyTx.transactions.first().externalId} that Firefly identified as a duplicate")
-//                        } else {
-//                            logger.error("Firefly API error $error")
-//                            throw cre
-//                        }
-//                    } else {
-//                        throw cre
-//                    }
-//                }
         }
     }
 

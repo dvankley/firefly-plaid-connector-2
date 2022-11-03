@@ -51,6 +51,16 @@ class TransactionConverter(
             return date.atTime(OffsetTime.of(0, 0, 0, 0, offset))
         }
 
+        /**
+         * Basically the inverse of [getFireflyTransactionDtoType]
+         */
+        fun getPlaidAmount(tx: FireflyTransactionDto): Double {
+            return when (tx.tx.type) {
+                TransactionTypeProperty.withdrawal -> tx.tx.amount.toDouble()
+                TransactionTypeProperty.deposit -> -tx.tx.amount.toDouble()
+                else -> throw IllegalArgumentException("Can't get Plaid amount for a Firefly transaction of type ${tx.tx.type}")
+            }
+        }
     }
 
     fun getTxTimestamp(tx: PlaidTransaction): OffsetDateTime {
@@ -108,7 +118,7 @@ class TransactionConverter(
         txs: List<PlaidTransaction>,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): List<FireflyTransactionDto> {
-        val (singles, pairs) = sortByPairsBatched(txs)
+        val (singles, pairs) = sortByPairsBatched(txs, accountMap)
         val out = mutableListOf<FireflyTransactionDto>()
 
         for (single in singles) {
@@ -149,8 +159,9 @@ class TransactionConverter(
         val updates = mutableListOf<FireflyTransactionDto>()
         val deletes = mutableListOf<FireflyTransactionId>()
 
-        val (singles, pairs) = sortByPairs((plaidCreatedTxs + plaidUpdatedTxs + existingFireflyTxs) as List<SortableTransaction>)
+        val (singles, pairs) = sortByPairs(plaidCreatedTxs + plaidUpdatedTxs + existingFireflyTxs, accountMap)
 
+        logger.trace(singles.hashCode().toString())
         for (single in singles) {
             val convertedSingle = when (single) {
                 is PlaidTransaction -> convertSingle(single, accountMap)
@@ -210,7 +221,11 @@ class TransactionConverter(
             }
         }
 
-        return ConvertPollSyncResult(creates, updates, deletes)
+        return ConvertPollSyncResult(
+            creates = creates,
+            updates = updates,
+            deletes = deletes,
+        )
     }
 
     data class SortByPairsBatchedResult(
@@ -218,12 +233,15 @@ class TransactionConverter(
         val pairs: List<Pair<PlaidTransaction, PlaidTransaction>>,
     )
 
-    suspend fun sortByPairsBatched(txs: List<PlaidTransaction>): SortByPairsBatchedResult {
+    suspend fun sortByPairsBatched(
+        txs: List<PlaidTransaction>,
+        accountMap: Map<PlaidAccountId, FireflyAccountId>,
+    ): SortByPairsBatchedResult {
         // Split Plaid transactions based on whether they are transfers or not
         val (transfers, nonTransfers) = txs.partition {
             transferTypes.contains(it.personalFinanceCategory.toEnum().primary)
         }
-        val (singles, pairs) = sortByPairs(transfers)
+        val (singles, pairs) = sortByPairs(transfers, accountMap)
 
         return SortByPairsBatchedResult(
             singles as List<PlaidTransaction> + nonTransfers,
@@ -257,6 +275,7 @@ class TransactionConverter(
      */
     protected suspend fun sortByPairs(
         txs: List<SortableTransaction>,
+        accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): SortByPairsResult {
         val pairsOut = mutableListOf<Pair<SortableTransaction, SortableTransaction>>()
         val singlesOut = mutableListOf<SortableTransaction>()
@@ -327,6 +346,32 @@ class TransactionConverter(
                     continue
                 }
 
+                // Check if one and only one tx is Firefly
+                val (fireflyTx, plaidTx) = if (aTx is FireflyTransactionDto && bTx is PlaidTransaction) {
+                    Pair(aTx, bTx)
+                } else if (aTx is PlaidTransaction && bTx is FireflyTransactionDto) {
+                    Pair(bTx, aTx)
+                } else if (aTx is FireflyTransactionDto && bTx is FireflyTransactionDto) {
+                    // Transfer can't be composed of two Firefly transactions
+                    continue
+                } else {
+                    // Two Plaid transactions, which is fine
+                    Pair(null, null)
+                }
+
+                // If one and only one tx is Firefly, verify that the Plaid transaction source or destination matches
+                if (fireflyTx != null && plaidTx != null) {
+                    val convertedPlaid = convertSingle(plaidTx, accountMap)
+                    val sourceMatches = fireflyTx.tx.sourceName?.lowercase() == convertedPlaid.tx.destinationName?.lowercase() ||
+                            fireflyTx.tx.sourceId == convertedPlaid.tx.destinationId
+                    val destinationMatches = fireflyTx.tx.destinationName?.lowercase() == convertedPlaid.tx.sourceName?.lowercase() ||
+                            fireflyTx.tx.destinationId == convertedPlaid.tx.sourceId
+                    if (!(sourceMatches && destinationMatches)) {
+                        // If the source and destination of each end don't match up, they're not a match
+                        continue
+                    }
+                }
+
                 // Otherwise let's peel off the next pair of transactions
                 pairsOut.add(Pair(aTx, bTx))
                 usedATxIds.add(aTx.transactionId)
@@ -334,7 +379,11 @@ class TransactionConverter(
             }
         }
 
-        return SortByPairsResult(singlesOut, pairsOut)
+        /**
+         * Existing Firefly transactions are only used here to create transfers, so filter them out
+         *  of the output
+         */
+        return SortByPairsResult(singlesOut.filter { it !is FireflyTransactionDto }, pairsOut)
     }
 
     protected suspend fun convertSingle(
@@ -480,6 +529,7 @@ class TransactionConverter(
 
     /**
      * [Firefly transaction types](https://docs.firefly-iii.org/firefly-iii/support/transaction_types/)
+     * See [getPlaidAmount] for sort of the inverse of this.
      *
      * @param isPair True if [t] is part of a pair of offsetting Plaid transactions, false otherwise.
      */

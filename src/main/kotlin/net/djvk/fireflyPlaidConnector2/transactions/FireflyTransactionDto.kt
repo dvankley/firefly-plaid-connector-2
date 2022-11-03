@@ -1,10 +1,7 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
-import net.djvk.fireflyPlaidConnector2.api.firefly.models.Transaction
-import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
-import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplitUpdate
-import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionUpdate
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.*
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
@@ -26,22 +23,28 @@ data class FireflyTransactionDto(
         get() = id ?: throw RuntimeException("Can't use a Firefly transaction without an id for sorting")
 
     override val amount: Double
-        get() = tx.amount.toDouble()
+        get() = TransactionConverter.getPlaidAmount(this)
 
     override fun getTimestamp(zoneId: ZoneId): OffsetDateTime {
         return tx.date
     }
 
-    fun toTransaction(): Transaction {
-        return Transaction(
+    fun toTransactionStore(): TransactionStore {
+        return TransactionStore(
             listOf(tx),
-            tx.date,
+            errorIfDuplicateHash = true,
+            applyRules = true,
+            fireWebhooks = true,
+            groupTitle = null,
         )
     }
 
     fun toTransactionUpdate(): TransactionUpdate {
         return TransactionUpdate(
             transactions = listOf(tx.toTransactionSplitUpdate()),
+            applyRules = true,
+            fireWebhooks = true,
+            groupTitle = tx.description,
         )
     }
 }
