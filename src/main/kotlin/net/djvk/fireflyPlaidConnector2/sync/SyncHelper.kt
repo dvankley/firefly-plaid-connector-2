@@ -3,6 +3,7 @@ package net.djvk.fireflyPlaidConnector2.sync
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.CategoriesApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.FireflyApiError
@@ -26,6 +27,7 @@ class SyncHelper(
     @Value("\${fireflyPlaidConnector2.firefly.personalAccessToken}")
     private val fireflyAccessToken: String,
     private val fireflyTxApi: TransactionsApi,
+    private val fireflyCategoriesApi: CategoriesApi,
 
     private val plaidApi: PlaidApi,
     @Value("\${fireflyPlaidConnector2.plaid.clientId}")
@@ -41,6 +43,7 @@ class SyncHelper(
         plaidApi.setApiKey(plaidClientId, clientIdHeader)
         plaidApi.setApiKey(plaidSecret, secretHeader)
         fireflyTxApi.setAccessToken(fireflyAccessToken)
+        fireflyCategoriesApi.setAccessToken(fireflyAccessToken)
     }
 
     fun getAllPlaidAccessTokenAccountIdSets():
@@ -58,6 +61,10 @@ class SyncHelper(
 
     suspend fun optimisticInsertIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
         for (fireflyTx in fireflyTxs) {
+            if (fireflyTx.tx.amount.toDouble() == 0.0) {
+                logger.info("Skipped transaction ${fireflyTx.tx.externalId} with amount 0.0")
+                continue
+            }
             try {
                 fireflyTxApi.storeTransaction(fireflyTx.toTransactionStore())
             } catch (cre: ClientRequestException) {

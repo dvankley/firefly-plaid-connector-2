@@ -460,10 +460,13 @@ class TransactionConverter(
             isPair = true,
             sourceId = sourceId,
             destinationId = destinationId,
-            transactionId = fireflyTx.transactionId,
+            fireflyTx = fireflyTx,
         )
     }
 
+    /**
+     * @param fireflyTx Only included in cases where we're converting a Plaid/Firefly tx pair into a transfer.
+     */
     protected suspend fun convert(
         tx: PlaidTransaction,
         isPair: Boolean,
@@ -471,7 +474,7 @@ class TransactionConverter(
         sourceName: String? = null,
         destinationId: String? = null,
         destinationName: String? = null,
-        transactionId: String? = null,
+        fireflyTx: FireflyTransactionDto? = null,
     ): FireflyTransactionDto {
         val timestamp = getTxTimestamp(tx)
         val split = TransactionSplit(
@@ -498,9 +501,13 @@ class TransactionConverter(
             reconciled = false,
             // Why the eff does the Firefly API require this
             foreignAmount = "0",
+            // These are all explicitly required, but only for updates
+            currencyId = fireflyTx?.tx?.currencyId,
+            currencyCode = fireflyTx?.tx?.currencyCode,
+            categoryId = fireflyTx?.tx?.categoryId,
         )
         return FireflyTransactionDto(
-            transactionId,
+            fireflyTx?.transactionId,
             split,
         )
     }

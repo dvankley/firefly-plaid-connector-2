@@ -4,8 +4,10 @@ import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
 import kotlinx.coroutines.*
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.CategoriesApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
@@ -38,9 +40,12 @@ class PolledSyncRunner(
     private val transferMatchWindowDays: Int,
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
+    @Value("\${fireflyPlaidConnector2.firefly.defaultCategoryId}")
+    private val defaultFireflyCategoryId: Int,
 
     private val plaidApi: PlaidApi,
     private val fireflyTxApi: TransactionsApi,
+    private val fireflyCategoriesApi: CategoriesApi,
     private val syncHelper: SyncHelper,
 
     private val converter: TransactionConverter,
@@ -86,6 +91,21 @@ class PolledSyncRunner(
                 // TODO: Ensure the Dockerfile provides a volume for the cursor map
 
                 /**
+                 * This is here solely in case we need a valid category to attach to a transaction update
+                 *  (see large comment below near where [SyncHelper.updateIntoFirefly] is called.)
+                 */
+                val firstCategory = try {
+                    fireflyCategoriesApi.getCategory(defaultFireflyCategoryId.toString(), null, null).body().data
+                } catch (e: Exception) {
+                    logger.error(
+                        "Failed to fetch default category with id ${defaultFireflyCategoryId}, " +
+                                "which we need for transaction updates. Please add a valid default category to " +
+                                " Firefly and this application's configuration"
+                    )
+                    throw e
+                }
+
+                /**
                  * Periodic polling loop
                  */
                 do {
@@ -107,11 +127,15 @@ class PolledSyncRunner(
                         ).body()
                         val pagination = response.meta.pagination
 
-                        /**
-                         * Filter out split transactions; we're not going to bother trying to match those up as transfers
-                         */
                         existingFireflyTxs.addAll(response.data
+                            /**
+                             * Filter out split transactions; we're not going to bother trying to match those up as transfers
+                             */
                             .filter { it.attributes.transactions.size == 1 }
+                            /**
+                             * Also filter out transactions that are already transfers
+                             */
+                            .filter { it.attributes.transactions.first().type != TransactionTypeProperty.transfer }
                             .map { FireflyTransactionDto(it.id, it.attributes.transactions.first()) }
                         )
                         logger.debug("Fetched ${response.data.size} existing Firefly single-split transactions with window starting at $transferWindowStart")
@@ -174,7 +198,35 @@ class PolledSyncRunner(
 //
                     // Insert into Firefly
                     syncHelper.optimisticInsertIntoFirefly(convertResult.creates)
-                    syncHelper.updateIntoFirefly(convertResult.updates)
+                    if (convertResult.updates.isNotEmpty()) {
+                        /**
+                         * Firefly's transaction update endpoint has a "BelongsUser"
+                         *  [validation rule](https://github.com/firefly-iii/firefly-iii/blob/bab4c05e5f7de236633d3e6ba2f2b8b4f5410391/app/Api/V1/Requests/Models/Transaction/UpdateRequest.php#L328)
+                         *  on category_id, which
+                         *  [requires that](https://github.com/firefly-iii/firefly-iii/blob/d1a09ff33b11613872acc30dda941b8960057058/app/Rules/BelongsUser.php#L240)
+                         *  the category exists in the database and belongs to the current user.
+                         * This is irritating as categories are not strictly required for Firefly transactions,
+                         *  for instance consider the transaction creation endpoint
+                         *  [validation](https://github.com/firefly-iii/firefly-iii/blob/2b615cf757268912bdafa7df9a41e02c82df4d27/app/Api/V1/Requests/Models/Transaction/StoreRequest.php#L214)
+                         *  that is nullable.
+                         *
+                         * So until we get that fixed, we have to attach _some_ category to the transaction we're updating,
+                         *  which is what we use [defaultFireflyCategoryId] for.
+                         */
+                        val updates = convertResult.updates.map { update ->
+                            if (update.tx.categoryId == null || update.tx.categoryId == "0") {
+                                update.copy(
+                                    tx = update.tx.copy(
+                                        categoryId = defaultFireflyCategoryId.toString(),
+                                    )
+                                )
+                            } else {
+                                update
+                            }
+                        }
+
+                        syncHelper.updateIntoFirefly(updates)
+                    }
                     syncHelper.deleteInFirefly(convertResult.deletes)
 
                     /**
@@ -188,6 +240,7 @@ class PolledSyncRunner(
                     System.gc()
 
                     // Sleep until next poll
+                    logger.info("Sleeping $syncFrequencyMinutes")
                     delay(syncFrequencyMinutes.minutes)
                 } while (!terminated.get())
             }
