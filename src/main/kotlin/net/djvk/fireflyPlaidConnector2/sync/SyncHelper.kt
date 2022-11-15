@@ -27,7 +27,6 @@ class SyncHelper(
     @Value("\${fireflyPlaidConnector2.firefly.personalAccessToken}")
     private val fireflyAccessToken: String,
     private val fireflyTxApi: TransactionsApi,
-    private val fireflyCategoriesApi: CategoriesApi,
 
     private val plaidApi: PlaidApi,
     @Value("\${fireflyPlaidConnector2.plaid.clientId}")
@@ -43,13 +42,14 @@ class SyncHelper(
         plaidApi.setApiKey(plaidClientId, clientIdHeader)
         plaidApi.setApiKey(plaidSecret, secretHeader)
         fireflyTxApi.setAccessToken(fireflyAccessToken)
-        fireflyCategoriesApi.setAccessToken(fireflyAccessToken)
     }
 
     fun getAllPlaidAccessTokenAccountIdSets():
             Pair<Map<PlaidAccountId, FireflyAccountId>, Sequence<Pair<PlaidAccessToken, List<PlaidAccountId>>>> {
         val accountMap = plaidAccountsConfig.accounts.associate { Pair(it.plaidAccountId, it.fireflyAccountId) }
+        logger.trace("Read config mapping data for ${accountMap.size} Firefly accounts")
         val accountsByAccessToken = plaidAccountsConfig.accounts.groupBy { it.plaidItemAccessToken }
+        logger.trace("Read config mapping data for ${accountsByAccessToken.size} Plaid access tokens")
 
         return Pair(accountMap, sequence {
             for ((accessToken, accountConfigs) in accountsByAccessToken) {
@@ -59,14 +59,11 @@ class SyncHelper(
         })
     }
 
-    suspend fun optimisticInsertIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
+    suspend fun optimisticInsertBatchIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
+        logger.trace("Optimistic insert of ${fireflyTxs.size} txs into Firefly")
         for (fireflyTx in fireflyTxs) {
-            if (fireflyTx.tx.amount.toDouble() == 0.0) {
-                logger.info("Skipped transaction ${fireflyTx.tx.externalId} with amount 0.0")
-                continue
-            }
             try {
-                fireflyTxApi.storeTransaction(fireflyTx.toTransactionStore())
+                insertIntoFirefly(fireflyTx)
             } catch (cre: ClientRequestException) {
                 if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
                     val error = cre.response.body<FireflyApiError>()
@@ -83,7 +80,26 @@ class SyncHelper(
         }
     }
 
-    suspend fun updateIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
+    /**
+     * The only difference between this and [optimisticInsertBatchIntoFirefly] is that this doesn't expect or tolerate
+     *  duplicate errors.
+     */
+    suspend fun pessimisticInsertBatchIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
+        logger.trace("Pessimistic insert of ${fireflyTxs.size} txs into Firefly")
+        for (fireflyTx in fireflyTxs) {
+            insertIntoFirefly(fireflyTx)
+        }
+    }
+
+    suspend fun insertIntoFirefly(fireflyTx: FireflyTransactionDto) {
+        if (fireflyTx.tx.amount.toDouble() == 0.0) {
+            logger.info("Skipped transaction ${fireflyTx.tx.externalId} with amount 0.0")
+            return
+        }
+        fireflyTxApi.storeTransaction(fireflyTx.toTransactionStore())
+    }
+
+    suspend fun updateBatchInFirefly(fireflyTxs: List<FireflyTransactionDto>) {
         for (fireflyTx in fireflyTxs) {
             fireflyTxApi.updateTransaction(
                 fireflyTx.id
@@ -93,7 +109,8 @@ class SyncHelper(
         }
     }
 
-    suspend fun deleteInFirefly(fireflyTxIds: List<FireflyTransactionId>) {
+    suspend fun deleteBatchInFirefly(fireflyTxIds: List<FireflyTransactionId>) {
+        logger.trace("Delete batch of ${fireflyTxIds.size} txs in Firefly")
         for (fireflyTxId in fireflyTxIds) {
             fireflyTxApi.deleteTransaction(fireflyTxId)
         }

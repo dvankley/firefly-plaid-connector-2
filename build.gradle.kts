@@ -35,13 +35,13 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.39.3.0")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
     implementation("io.ktor:ktor-serialization-jackson:$ktorVersion")
-    implementation("io.ktor:ktor-client-core-jvm:2.1.2")
-    implementation("io.ktor:ktor-client-cio-jvm:2.1.2")
-    implementation("io.ktor:ktor-client-logging-jvm:2.1.2")
+    implementation("io.ktor:ktor-client-core-jvm:2.1.3")
+    implementation("io.ktor:ktor-client-cio-jvm:2.1.3")
+    implementation("io.ktor:ktor-client-logging-jvm:2.1.3")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.mockito.kotlin:mockito-kotlin:4.0.0")
     testImplementation("org.assertj:assertj-core:3.11.1")
-    testImplementation("io.ktor:ktor-client-mock-jvm:2.1.2")
+    testImplementation("io.ktor:ktor-client-mock-jvm:2.1.3")
 }
 
 tasks.withType<KotlinCompile> {

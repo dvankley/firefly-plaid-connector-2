@@ -106,7 +106,7 @@ class BatchSyncRunner(
             val fireflyTxs = converter.convertBatchSync(allPlaidTxs, accountMap)
 
             // Insert into Firefly
-            syncHelper.optimisticInsertIntoFirefly(fireflyTxs)
+            syncHelper.optimisticInsertBatchIntoFirefly(fireflyTxs)
         }
     }
 }

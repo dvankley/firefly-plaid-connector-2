@@ -40,12 +40,9 @@ class PolledSyncRunner(
     private val transferMatchWindowDays: Int,
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
-    @Value("\${fireflyPlaidConnector2.firefly.defaultCategoryId}")
-    private val defaultFireflyCategoryId: Int,
 
     private val plaidApi: PlaidApi,
     private val fireflyTxApi: TransactionsApi,
-    private val fireflyCategoriesApi: CategoriesApi,
     private val syncHelper: SyncHelper,
 
     private val converter: TransactionConverter,
@@ -64,11 +61,13 @@ class PolledSyncRunner(
             mainJob = launch {
                 val cursorMap = readCursorMap()
                 val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
+                logger.debug("Beginning Plaid sync endpoint cursor initialization")
                 for ((accessToken, _) in accountAccessTokenSequence) {
                     /**
                      * If we already have a cursor for this access token, then move on
                      */
                     if (cursorMap.contains(accessToken)) {
+                        logger.debug("Cursor map contains $accessToken, skipping initialization for it")
                         continue
                     }
                     /**
@@ -80,7 +79,7 @@ class PolledSyncRunner(
                             executeTransactionSyncRequest(accessToken, cursorMap[accessToken], plaidBatchSize)
                         logger.debug(
                             "Received initial batch of sync updates for access token $accessToken. " +
-                                    "Next cursor ${response.nextCursor}"
+                                    "Updating cursor map to next cursor: ${response.nextCursor}"
                         )
                         if (response.nextCursor.isNotBlank()) {
                             cursorMap[accessToken] = response.nextCursor
@@ -91,24 +90,10 @@ class PolledSyncRunner(
                 // TODO: Ensure the Dockerfile provides a volume for the cursor map
 
                 /**
-                 * This is here solely in case we need a valid category to attach to a transaction update
-                 *  (see large comment below near where [SyncHelper.updateIntoFirefly] is called.)
-                 */
-                val firstCategory = try {
-                    fireflyCategoriesApi.getCategory(defaultFireflyCategoryId.toString(), null, null).body().data
-                } catch (e: Exception) {
-                    logger.error(
-                        "Failed to fetch default category with id ${defaultFireflyCategoryId}, " +
-                                "which we need for transaction updates. Please add a valid default category to " +
-                                " Firefly and this application's configuration"
-                    )
-                    throw e
-                }
-
-                /**
                  * Periodic polling loop
                  */
                 do {
+                    logger.trace("Polling loop start")
                     val transferWindowStart = LocalDate.now().minusDays(transferMatchWindowDays.toLong())
 
                     /**
@@ -127,7 +112,7 @@ class PolledSyncRunner(
                         ).body()
                         val pagination = response.meta.pagination
 
-                        existingFireflyTxs.addAll(response.data
+                        val filteredTxs = response.data
                             /**
                              * Filter out split transactions; we're not going to bother trying to match those up as transfers
                              */
@@ -137,8 +122,8 @@ class PolledSyncRunner(
                              */
                             .filter { it.attributes.transactions.first().type != TransactionTypeProperty.transfer }
                             .map { FireflyTransactionDto(it.id, it.attributes.transactions.first()) }
-                        )
-                        logger.debug("Fetched ${response.data.size} existing Firefly single-split transactions with window starting at $transferWindowStart")
+                        logger.debug("Fetched ${filteredTxs.size} existing Firefly single-split, non transfer transactions with window starting at $transferWindowStart")
+                        existingFireflyTxs.addAll(filteredTxs)
                     } while (pagination != null &&
                         pagination.currentPage < pagination.totalPages &&
                         // This condition is a failsafe to avoid an infinite loop
@@ -153,6 +138,8 @@ class PolledSyncRunner(
                     val plaidDeletedTxs = mutableListOf<PlaidTransactionId>()
 
                     for ((accessToken, accountIds) in accountAccessTokenSequence) {
+                        logger.trace("Querying Plaid transaction sync endpoint for access token $accessToken " +
+                            " and account ids ${accountIds.joinToString("; ")}")
                         val accountIdSet = accountIds.toSet()
                         /**
                          * Plaid transaction batch loop
@@ -185,7 +172,10 @@ class PolledSyncRunner(
                             // Keep going until we get all the transactions
                         } while (response.hasMore)
                     }
+                    writeCursorMap(cursorMap)
+                    
                     // Map Plaid transactions to Firefly transactions
+                    logger.trace("Converting Plaid transactions to Firefly transactions")
                     // TODO: do we need to dedupe the create/update/delete events and keep only the latest event?
                     //  Or has Plaid already done that for us?
                     val convertResult = converter.convertPollSync(
@@ -195,39 +185,39 @@ class PolledSyncRunner(
                         plaidDeletedTxs,
                         existingFireflyTxs,
                     )
+                    logger.debug("Conversion result: ${convertResult.creates.size} creates; " +
+                            "${convertResult.updates.size} updates; " +
+                            "${convertResult.deletes.size} deletes;")
 //
                     // Insert into Firefly
-                    syncHelper.optimisticInsertIntoFirefly(convertResult.creates)
-                    if (convertResult.updates.isNotEmpty()) {
+                    syncHelper.optimisticInsertBatchIntoFirefly(convertResult.creates)
+                    for (update in convertResult.updates) {
                         /**
-                         * Firefly's transaction update endpoint has a "BelongsUser"
-                         *  [validation rule](https://github.com/firefly-iii/firefly-iii/blob/bab4c05e5f7de236633d3e6ba2f2b8b4f5410391/app/Api/V1/Requests/Models/Transaction/UpdateRequest.php#L328)
-                         *  on category_id, which
-                         *  [requires that](https://github.com/firefly-iii/firefly-iii/blob/d1a09ff33b11613872acc30dda941b8960057058/app/Rules/BelongsUser.php#L240)
-                         *  the category exists in the database and belongs to the current user.
-                         * This is irritating as categories are not strictly required for Firefly transactions,
-                         *  for instance consider the transaction creation endpoint
-                         *  [validation](https://github.com/firefly-iii/firefly-iii/blob/2b615cf757268912bdafa7df9a41e02c82df4d27/app/Api/V1/Requests/Models/Transaction/StoreRequest.php#L214)
-                         *  that is nullable.
-                         *
-                         * So until we get that fixed, we have to attach _some_ category to the transaction we're updating,
-                         *  which is what we use [defaultFireflyCategoryId] for.
+                         * Firefly's transaction update endpoint does not allow changing transaction types
+                         *  (i.e. deposit to transfer), so we have to resolve updates as deletes and creates.
+                         * I'm not crazy about this because any other reference to the existing record will be
+                         *  broken, but such is life.
                          */
-                        val updates = convertResult.updates.map { update ->
-                            if (update.tx.categoryId == null || update.tx.categoryId == "0") {
-                                update.copy(
-                                    tx = update.tx.copy(
-                                        categoryId = defaultFireflyCategoryId.toString(),
-                                    )
-                                )
-                            } else {
-                                update
-                            }
-                        }
 
-                        syncHelper.updateIntoFirefly(updates)
+                        update.id ?: throw IllegalArgumentException("Unexpected update tx missing id: $update")
+                        /**
+                         * Delete first, if that fails, don't do the create.
+                         */
+                        try {
+                            syncHelper.deleteBatchInFirefly(listOf(update.id))
+                        } catch (e: Exception) {
+                            logger.error(
+                                "Failed to execute delete as first part of updating transaction ${update.id}; " +
+                                        "aborting create part of update operation", e
+                            )
+                            continue
+                        }
+                        /**
+                         * This should not be a duplicate, so allow an exception to propagate if it is
+                         */
+                        syncHelper.pessimisticInsertBatchIntoFirefly(listOf(update))
                     }
-                    syncHelper.deleteInFirefly(convertResult.deletes)
+                    syncHelper.deleteBatchInFirefly(convertResult.deletes)
 
                     /**
                      * Trigger GC to try to reduce heap size (depends on VM configuration)
@@ -237,6 +227,7 @@ class PolledSyncRunner(
                      * This depends a lot on the VM and GC configuration.
                      * TODO: do some GC tests and give some guidance here.
                      */
+                    logger.trace("Calling System.gc()")
                     System.gc()
 
                     // Sleep until next poll
@@ -254,10 +245,12 @@ class PolledSyncRunner(
      * If it doesn't exist, returns an empty map.
      */
     suspend fun readCursorMap(): MutableMap<PlaidAccessToken, PlaidSyncCursor> {
+        logger.trace("Reading Plaid sync cursor map from file")
         return withContext(Dispatchers.IO) {
             val file = cursorFilePath.toFile()
 
             if (!file.exists()) {
+                logger.trace("No existing Plaid sync cursor map found, starting from scratch")
                 return@withContext mutableMapOf()
             }
 
@@ -275,11 +268,13 @@ class PolledSyncRunner(
      * Writes the cursor map to file storage.
      */
     suspend fun writeCursorMap(map: Map<PlaidAccessToken, PlaidSyncCursor>) {
+        logger.trace("Writing ${map.size} Plaid sync cursors to map file")
         return withContext(Dispatchers.IO) {
             cursorFilePath
                 .toFile()
                 .writeText(
                     map.entries
+                        .filter { it.value != "" }
                         .joinToString("\n") { (token, cursor) ->
                             "$token|$cursor"
                         }

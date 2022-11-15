@@ -102,6 +102,8 @@ internal class TransactionConverterTest {
                     "Base case",
 //                    input: List<Transaction>,
                     singles + pairs.flatMap { sequenceOf(it.first, it.second) }.shuffled(),
+//                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
+                    mapOf("testPlaidAccountId" to 42),
 //                    expectedSingles: List<Transaction>,
                     singles,
 //                    expectedPairs: List<Pair<Transaction, Transaction>>,
@@ -122,6 +124,7 @@ internal class TransactionConverterTest {
     fun sortByPairs(
         testName: String,
         input: List<Transaction>,
+        accountMap: Map<PlaidAccountId, FireflyAccountId>,
         expectedSingles: List<Transaction>,
         expectedPairs: List<Pair<Transaction, Transaction>>,
     ) {
@@ -133,8 +136,9 @@ internal class TransactionConverterTest {
                 enableDetailedCategorization = false,
                 detailedCategoryPrefix = "b",
                 timeZoneString = "America/New_York",
+                transferMatchWindowDays = 10L,
             )
-            val (actualSingles, actualPairs) = converter.sortByPairsBatched(input)
+            val (actualSingles, actualPairs) = converter.sortByPairsBatched(input, accountMap)
 
             assertThat(actualSingles).isEqualTo(expectedSingles)
             assertThat(actualPairs).isEqualTo(expectedPairs)
@@ -164,6 +168,7 @@ internal class TransactionConverterTest {
                 enableDetailedCategorization = false,
                 detailedCategoryPrefix = "b",
                 timeZoneString = "America/New_York",
+                transferMatchWindowDays = 10L,
             )
             val actual = converter.convertBatchSync(listOf(input), accountMap)
 

@@ -174,7 +174,10 @@ open class TransactionsApi(
      * @return AttachmentArray
      */
     @Suppress("UNCHECKED_CAST")
-    open suspend fun listAttachmentByTransaction(id: FireflyTransactionId, page: kotlin.Int?): HttpResponse<AttachmentArray> {
+    open suspend fun listAttachmentByTransaction(
+        id: FireflyTransactionId,
+        page: kotlin.Int?
+    ): HttpResponse<AttachmentArray> {
 
         val localVariableAuthNames = listOf<String>("firefly_iii_auth")
 
@@ -208,7 +211,10 @@ open class TransactionsApi(
      * @return PiggyBankEventArray
      */
     @Suppress("UNCHECKED_CAST")
-    open suspend fun listEventByTransaction(id: FireflyTransactionId, page: kotlin.Int?): HttpResponse<PiggyBankEventArray> {
+    open suspend fun listEventByTransaction(
+        id: FireflyTransactionId,
+        page: kotlin.Int?
+    ): HttpResponse<PiggyBankEventArray> {
 
         val localVariableAuthNames = listOf<String>("firefly_iii_auth")
 
@@ -242,7 +248,10 @@ open class TransactionsApi(
      * @return TransactionLinkArray
      */
     @Suppress("UNCHECKED_CAST")
-    open suspend fun listLinksByJournal(id: FireflyTransactionSplitId, page: kotlin.Int?): HttpResponse<TransactionLinkArray> {
+    open suspend fun listLinksByJournal(
+        id: FireflyTransactionSplitId,
+        page: kotlin.Int?
+    ): HttpResponse<TransactionLinkArray> {
 
         val localVariableAuthNames = listOf<String>("firefly_iii_auth")
 

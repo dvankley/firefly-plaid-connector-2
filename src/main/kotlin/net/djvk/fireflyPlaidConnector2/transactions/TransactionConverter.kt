@@ -24,6 +24,8 @@ class TransactionConverter(
     private val useNameForDestination: Boolean,
     @Value("\${fireflyPlaidConnector2.timeZone}")
     private val timeZoneString: String,
+    @Value("\${fireflyPlaidConnector2.transferMatchWindowDays}")
+    private val transferMatchWindowDays: Long,
 
     @Value("\${fireflyPlaidConnector2.categorization.primary.enable:false}")
     private val enablePrimaryCategorization: Boolean,
@@ -37,6 +39,7 @@ class TransactionConverter(
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
     private val timeZone = TimeZone.getTimeZone(timeZoneString)
+    private val transferMatchWindowSeconds = transferMatchWindowDays * 24 * 60 * 60
 
     companion object {
         fun convertScreamingSnakeCaseToKebabCase(input: String): String {
@@ -152,6 +155,7 @@ class TransactionConverter(
         plaidDeletedTxs: List<PlaidTransactionId>,
         existingFireflyTxs: List<FireflyTransactionDto>,
     ): ConvertPollSyncResult {
+        logger.trace("Starting ${::convertPollSync.name}")
         val createdSet = plaidCreatedTxs.toSet()
         val updatedSet = plaidUpdatedTxs.toSet()
 
@@ -161,7 +165,6 @@ class TransactionConverter(
 
         val (singles, pairs) = sortByPairs(plaidCreatedTxs + plaidUpdatedTxs + existingFireflyTxs, accountMap)
 
-        logger.trace(singles.hashCode().toString())
         for (single in singles) {
             val convertedSingle = when (single) {
                 is PlaidTransaction -> convertSingle(single, accountMap)
@@ -277,11 +280,11 @@ class TransactionConverter(
         txs: List<SortableTransaction>,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): SortByPairsResult {
+        logger.trace("Starting ${::sortByPairs.name}")
         val pairsOut = mutableListOf<Pair<SortableTransaction, SortableTransaction>>()
         val singlesOut = mutableListOf<SortableTransaction>()
 
-        val amountIndexedTxs = txs
-            .groupBy { it.amount }
+        val amountIndexedTxs = txs.groupBy { it.amount }
         // The loop below will process an amount value and its inverse, so we use this to mark the inverse
         //  as processed so we don't double process amount sets
         val processedAmounts = mutableSetOf<Double>()
@@ -321,7 +324,9 @@ class TransactionConverter(
                 }
             }
 
-            val sortedPairs = txsSecondsDiff.sortedBy { it.secondsDiff }
+            val sortedPairs = txsSecondsDiff
+                .filter { it.secondsDiff < transferMatchWindowSeconds }
+                .sortedBy { it.secondsDiff }
 
             /**
              * Ids of transactions we've already used from either group so we don't use them again.
@@ -359,18 +364,32 @@ class TransactionConverter(
                     Pair(null, null)
                 }
 
-                // If one and only one tx is Firefly, verify that the Plaid transaction source or destination matches
-                if (fireflyTx != null && plaidTx != null) {
-                    val convertedPlaid = convertSingle(plaidTx, accountMap)
-                    val sourceMatches = fireflyTx.tx.sourceName?.lowercase() == convertedPlaid.tx.destinationName?.lowercase() ||
-                            fireflyTx.tx.sourceId == convertedPlaid.tx.destinationId
-                    val destinationMatches = fireflyTx.tx.destinationName?.lowercase() == convertedPlaid.tx.sourceName?.lowercase() ||
-                            fireflyTx.tx.destinationId == convertedPlaid.tx.sourceId
-                    if (!(sourceMatches && destinationMatches)) {
-                        // If the source and destination of each end don't match up, they're not a match
-                        continue
-                    }
-                }
+                /**
+                 * If one and only one tx is Firefly, this is a candidate for updating the existing Firefly transaction
+                 *  to a transfer.
+                 */
+//                if (fireflyTx != null && plaidTx != null) {
+//                    val plaidAccountName = accountMap[plaidTx.accountId]
+//                        ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${plaidTx.accountId}")
+//                    when (fireflyTx.tx.type) {
+//                        TransactionTypeProperty.deposit -> {
+//                            val sourceMatches =
+//                        }
+//                        TransactionTypeProperty.withdrawal ->
+//                        TransactionTypeProperty.transfer ->
+//                    }
+////                    val plaidType =
+//                    val convertedPlaid = convertSingle(plaidTx, accountMap)
+//                    logger.trace(plaidTx.hashCode().toString())
+//                    val sourceMatches = fireflyTx.tx.sourceName?.lowercase() == convertedPlaid.tx.destinationName?.lowercase() ||
+//                            fireflyTx.tx.sourceId == convertedPlaid.tx.destinationId
+//                    val destinationMatches = fireflyTx.tx.destinationName?.lowercase() == convertedPlaid.tx.sourceName?.lowercase() ||
+//                            fireflyTx.tx.destinationId == convertedPlaid.tx.sourceId
+//                    if (!(sourceMatches && destinationMatches)) {
+//                        // If the source and destination of each end don't match up, they're not a match
+//                        continue
+//                    }
+//                }
 
                 // Otherwise let's peel off the next pair of transactions
                 pairsOut.add(Pair(aTx, bTx))
@@ -442,24 +461,61 @@ class TransactionConverter(
         fireflyTx: FireflyTransactionDto,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): FireflyTransactionDto {
-        val (sourceId, destinationId) = if (plaidTx.amount < 0.0) {
-            Pair(
-                fireflyTx.tx.sourceId,
-                accountMap[plaidTx.accountId]?.toString()
-                    ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${plaidTx.accountId}"),
-            )
-        } else {
-            Pair(
-                accountMap[plaidTx.accountId]?.toString()
-                    ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${plaidTx.accountId}"),
-                fireflyTx.tx.destinationId,
+        val plaidTxFireflyAccountId = accountMap[plaidTx.accountId]
+            ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${plaidTx.accountId}")
+
+        /**
+         * With transfers, the two component transactions are the inverse of each other.
+         * Since we know the transaction amounts have opposite signs, we know, in Firefly terms, one is a deposit
+         *  and one is a withdrawal.
+         *
+         * For Plaid transactions, we can only be confident in the accuracy of the account the transaction is
+         *  "on," the rest is just based on the name field, which isn't super accurate.
+         * For Firefly transactions, it depends;
+         * - Withdrawal: positive Plaid value. The Firefly tx would have the source account right, and the
+         *  destination account would be garbage.
+         * - Deposit: negative Plaid value. The Firefly tx would have the destination account right, and the
+         *  source account would be garbage.
+         *
+        //         * We can't use source and destination id because either the source or destination account on the existing
+        //         *  Firefly transaction won't be an asset account, which is required for transfers. So instead we use names
+        //         *  so Firefly tries to match up to existing asset accounts.
+         *
+         */
+        val sourceId: String?
+        val sourceName: String?
+        val destinationId: String?
+        val destinationName: String?
+        when (fireflyTx.tx.type) {
+            TransactionTypeProperty.withdrawal -> {
+                sourceName = fireflyTx.tx.sourceName
+                sourceId = null
+
+                destinationName = null
+                destinationId = plaidTxFireflyAccountId.toString()
+            }
+
+            TransactionTypeProperty.deposit -> {
+                sourceName = null
+                sourceId = plaidTxFireflyAccountId.toString()
+
+                destinationName = fireflyTx.tx.destinationName
+                destinationId = null
+            }
+
+            else -> throw IllegalArgumentException(
+                "Unable to convert an existing Firefly transaction of type " +
+                        "${fireflyTx.tx.type} to a transfer."
             )
         }
+
         return convert(
             tx = plaidTx,
             isPair = true,
             sourceId = sourceId,
+            sourceName = sourceName,
             destinationId = destinationId,
+            destinationName = destinationName,
             fireflyTx = fireflyTx,
         )
     }
@@ -485,12 +541,13 @@ class TransactionConverter(
              * "Direction" of transactions handled in [getFireflyTransactionDtoType]
              */
             abs(tx.amount).toString(),
-            tx.name +
-                    if (tx.originalDescription == null) {
-                        ""
-                    } else {
-                        ": ${tx.originalDescription}"
-                    },
+            fireflyTx?.tx?.description
+                ?: (tx.name +
+                        if (tx.originalDescription == null) {
+                            ""
+                        } else {
+                            ": ${tx.originalDescription}"
+                        }),
             sourceId = sourceId,
             sourceName = sourceName,
             destinationId = destinationId,
@@ -504,7 +561,6 @@ class TransactionConverter(
             // These are all explicitly required, but only for updates
             currencyId = fireflyTx?.tx?.currencyId,
             currencyCode = fireflyTx?.tx?.currencyCode,
-            categoryId = fireflyTx?.tx?.categoryId,
         )
         return FireflyTransactionDto(
             fireflyTx?.transactionId,
