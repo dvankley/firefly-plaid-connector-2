@@ -35,7 +35,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 data class TransactionStore(
 
     @field:JsonProperty("transactions")
-    val transactions: kotlin.collections.List<TransactionSplitStore>,
+    val transactions: kotlin.collections.List<TransactionSplit>,
 
     /* Break if the submitted transaction exists already. */
     @field:JsonProperty("error_if_duplicate_hash")

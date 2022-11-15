@@ -40,7 +40,10 @@ data class CategoryRead(
     val id: kotlin.String,
 
     @field:JsonProperty("attributes")
-    val attributes: Category
+    val attributes: Category,
+
+    @field:JsonProperty("links")
+    val links: ObjectLink,
 
 )
 

@@ -45,10 +45,10 @@ data class MetaPagination(
     val perPage: kotlin.Int? = null,
 
     @field:JsonProperty("current_page")
-    val currentPage: kotlin.Int? = null,
+    val currentPage: kotlin.Int,
 
     @field:JsonProperty("total_pages")
-    val totalPages: kotlin.Int? = null
+    val totalPages: kotlin.Int
 
 )
 

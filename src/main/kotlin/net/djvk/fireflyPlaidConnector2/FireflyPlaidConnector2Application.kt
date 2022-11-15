@@ -1,5 +1,6 @@
 package net.djvk.fireflyPlaidConnector2
 
+import net.djvk.fireflyPlaidConnector2.sync.Runner
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan

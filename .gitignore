@@ -1,6 +1,7 @@
 .idea/
 .gradle/
 build/
+persistence/
 
 # Compiled class file
 *.class
