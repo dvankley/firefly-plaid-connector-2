@@ -1,8 +1,13 @@
 package net.djvk.fireflyPlaidConnector2.lib
 
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
+import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import net.djvk.fireflyPlaidConnector2.util.Utilities
 import java.time.LocalDate
+import java.time.ZoneId
+
+val defaultLocalNow: LocalDate = LocalDate.of(2022, 9, 1)
+val defaultOffsetNow = TransactionConverter.getOffsetDateTimeForDate(ZoneId.of("America/New_York"), defaultLocalNow)
 
 object PlaidFixtures {
     fun getPaymentTransaction(
@@ -35,7 +40,7 @@ object PlaidFixtures {
         amount: Double = 1111.22,
         isoCurrencyCode: String? = "USD",
         unofficialCurrencyCode: String? = null,
-        date: LocalDate = LocalDate.of(2022, 9, 1),
+        date: LocalDate = defaultLocalNow,
         pending: Boolean = false,
         transactionId: String = "ccccccccccccccccccccccccccccccccccccc",
         paymentChannel: PaymentChannel = PaymentChannel.other,
@@ -109,7 +114,7 @@ object PlaidFixtures {
         accountId: String = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         isoCurrencyCode: String? = "USD",
         unofficialCurrencyCode: String? = null,
-        date: LocalDate = LocalDate.of(2022, 9, 1),
+        date: LocalDate = defaultLocalNow,
         pending: Boolean = false,
         transactionId: String = Utilities.getRandomAlphabeticalString(30),
         paymentChannel: PaymentChannel = PaymentChannel.other,
@@ -179,7 +184,7 @@ object PlaidFixtures {
         amount: Double = 1111.22,
         isoCurrencyCode: String? = "USD",
         unofficialCurrencyCode: String? = null,
-        date: LocalDate = LocalDate.of(2022, 9, 1),
+        date: LocalDate = defaultLocalNow,
         pending: Boolean = false,
         transactionId: String = "ccccccccccccccccccccccccccccccccccccc",
         paymentChannel: PaymentChannel,

@@ -351,7 +351,11 @@ class TransactionConverter(
                     continue
                 }
 
-                // Check if one and only one tx is Firefly
+                /**
+                 * Check if one and only one tx is Firefly
+                 * If one and only one tx is Firefly, this is a candidate for updating the existing Firefly transaction
+                 *  to a transfer.
+                 */
                 val (fireflyTx, plaidTx) = if (aTx is FireflyTransactionDto && bTx is PlaidTransaction) {
                     Pair(aTx, bTx)
                 } else if (aTx is PlaidTransaction && bTx is FireflyTransactionDto) {
@@ -363,33 +367,6 @@ class TransactionConverter(
                     // Two Plaid transactions, which is fine
                     Pair(null, null)
                 }
-
-                /**
-                 * If one and only one tx is Firefly, this is a candidate for updating the existing Firefly transaction
-                 *  to a transfer.
-                 */
-//                if (fireflyTx != null && plaidTx != null) {
-//                    val plaidAccountName = accountMap[plaidTx.accountId]
-//                        ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${plaidTx.accountId}")
-//                    when (fireflyTx.tx.type) {
-//                        TransactionTypeProperty.deposit -> {
-//                            val sourceMatches =
-//                        }
-//                        TransactionTypeProperty.withdrawal ->
-//                        TransactionTypeProperty.transfer ->
-//                    }
-////                    val plaidType =
-//                    val convertedPlaid = convertSingle(plaidTx, accountMap)
-//                    logger.trace(plaidTx.hashCode().toString())
-//                    val sourceMatches = fireflyTx.tx.sourceName?.lowercase() == convertedPlaid.tx.destinationName?.lowercase() ||
-//                            fireflyTx.tx.sourceId == convertedPlaid.tx.destinationId
-//                    val destinationMatches = fireflyTx.tx.destinationName?.lowercase() == convertedPlaid.tx.sourceName?.lowercase() ||
-//                            fireflyTx.tx.destinationId == convertedPlaid.tx.sourceId
-//                    if (!(sourceMatches && destinationMatches)) {
-//                        // If the source and destination of each end don't match up, they're not a match
-//                        continue
-//                    }
-//                }
 
                 // Otherwise let's peel off the next pair of transactions
                 pairsOut.add(Pair(aTx, bTx))
@@ -476,11 +453,6 @@ class TransactionConverter(
          *  destination account would be garbage.
          * - Deposit: negative Plaid value. The Firefly tx would have the destination account right, and the
          *  source account would be garbage.
-         *
-        //         * We can't use source and destination id because either the source or destination account on the existing
-        //         *  Firefly transaction won't be an asset account, which is required for transfers. So instead we use names
-        //         *  so Firefly tries to match up to existing asset accounts.
-         *
          */
         val sourceId: String?
         val sourceName: String?

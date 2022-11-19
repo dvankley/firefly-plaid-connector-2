@@ -2,10 +2,11 @@ package net.djvk.fireflyPlaidConnector2.transactions
 
 import io.ktor.client.engine.mock.*
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.PlaidTransactionId
+import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
-import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
@@ -13,9 +14,60 @@ import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 
 internal class TransactionConverterTest {
     companion object {
+        @JvmStatic
+        fun provideConvertPollSync(): List<Arguments> {
+            return listOf(
+                Arguments.of(
+//                    testName: String,
+                    "Existing Firefly withdrawal",
+//                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
+                    mapOf("testPlaidAccountId" to 42),
+//                    plaidCreatedTxs: List<PlaidTransaction>,
+                    listOf(
+                        PlaidFixtures.getPaymentTransaction(
+                            accountId = "testPlaidAccountId",
+                            transactionId = "plaidTransactionId",
+                            amount = -1111.22,
+                        ),
+                    ),
+//                    plaidUpdatedTxs: List<PlaidTransaction>,
+                    listOf<PlaidTransaction>(),
+//                    plaidDeletedTxs: List<PlaidTransactionId>,
+                    listOf<PlaidTransactionId>(),
+//                    existingFireflyTxs: List<FireflyTransactionDto>,
+                    listOf(
+                        FireflyTransactionDto(
+                            "fireflyTransactionId",
+                            FireflyFixtures.getTransaction(
+                                type = TransactionTypeProperty.withdrawal,
+                                amount = "1111.22",
+                                transactionJournalId = "fireflyTransactionId",
+                            ).transactions.first(),
+                        ),
+                    ),
+//                    expectedResult: TransactionConverter.ConvertPollSyncResult,
+                    TransactionConverter.ConvertPollSyncResult(
+                        listOf(
+                            FireflyTransactionDto(
+                                "fireflyTransactionId",
+                                FireflyFixtures.getTransaction(
+                                    type = TransactionTypeProperty.withdrawal,
+                                    amount = "1111.22",
+                                    transactionJournalId = "fireflyTransactionId",
+                                ).transactions.first()
+                            )
+                        ),
+                        listOf(),
+                        listOf(),
+                    ),
+                )
+            )
+        }
+
         @JvmStatic
         fun provideConvertSingleSourceAndDestination(): List<Arguments> {
             return listOf(
@@ -113,20 +165,47 @@ internal class TransactionConverterTest {
         }
     }
 
-    @Test
-    fun convertBatch(
-
+    @ParameterizedTest(name = "{index} => {0}")
+    @MethodSource("provideConvertPollSync")
+    fun convertPollSync(
+        testName: String,
+        accountMap: Map<PlaidAccountId, FireflyAccountId>,
+        plaidCreatedTxs: List<PlaidTransaction>,
+        plaidUpdatedTxs: List<PlaidTransaction>,
+        plaidDeletedTxs: List<PlaidTransactionId>,
+        existingFireflyTxs: List<FireflyTransactionDto>,
+        expectedResult: TransactionConverter.ConvertPollSyncResult,
     ) {
+        runBlocking {
+            val converter = TransactionConverter(
+                useNameForDestination = false,
+                enablePrimaryCategorization = false,
+                primaryCategoryPrefix = "a",
+                enableDetailedCategorization = false,
+                detailedCategoryPrefix = "b",
+                timeZoneString = "America/New_York",
+                transferMatchWindowDays = 10L,
+            )
+            val actual = converter.convertPollSync(
+                accountMap,
+                plaidCreatedTxs,
+                plaidUpdatedTxs,
+                plaidDeletedTxs,
+                existingFireflyTxs,
+            )
+
+            assertEquals(expectedResult, actual)
+        }
     }
 
     @ParameterizedTest(name = "{index} => {0}")
     @MethodSource("provideSortByPairs")
     fun sortByPairs(
         testName: String,
-        input: List<Transaction>,
+        input: List<PlaidTransaction>,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
-        expectedSingles: List<Transaction>,
-        expectedPairs: List<Pair<Transaction, Transaction>>,
+        expectedSingles: List<PlaidTransaction>,
+        expectedPairs: List<Pair<PlaidTransaction, PlaidTransaction>>,
     ) {
         runBlocking {
             val converter = TransactionConverter(
@@ -140,8 +219,8 @@ internal class TransactionConverterTest {
             )
             val (actualSingles, actualPairs) = converter.sortByPairsBatched(input, accountMap)
 
-            assertThat(actualSingles).isEqualTo(expectedSingles)
-            assertThat(actualPairs).isEqualTo(expectedPairs)
+            assertEquals(expectedSingles, actualSingles)
+            assertEquals(expectedPairs, actualPairs)
         }
     }
 
@@ -153,7 +232,7 @@ internal class TransactionConverterTest {
     @MethodSource("provideConvertSingleSourceAndDestination")
     fun convertSingleSourceAndDestination(
         testName: String,
-        input: Transaction,
+        input: PlaidTransaction,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
         expectedSourceId: String?,
         expectedSourceName: String?,
@@ -172,24 +251,12 @@ internal class TransactionConverterTest {
             )
             val actual = converter.convertBatchSync(listOf(input), accountMap)
 
-            assertThat(actual.size).isEqualTo(1)
+            assertEquals(1, actual.size)
             val tx = actual.first().tx
-            assertThat(tx.sourceId).isEqualTo(expectedSourceId)
-            assertThat(tx.sourceName).isEqualTo(expectedSourceName)
-            assertThat(tx.destinationId).isEqualTo(expectedDestinationId)
-            assertThat(tx.destinationName).isEqualTo(expectedDestinationName)
+            assertEquals(expectedSourceId, tx.sourceId)
+            assertEquals(expectedSourceName, tx.sourceName)
+            assertEquals(expectedDestinationId, tx.destinationId)
+            assertEquals(expectedDestinationName, tx.destinationName)
         }
-    }
-
-    @Test
-    fun convertDouble() {
-    }
-
-    @Test
-    fun convert() {
-    }
-
-    @Test
-    fun getFireflyTransactionType() {
     }
 }
