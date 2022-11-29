@@ -45,7 +45,6 @@ internal class TransactionConverterTest {
                             FireflyFixtures.getTransaction(
                                 type = TransactionTypeProperty.withdrawal,
                                 amount = "1111.22",
-//                                transactionJournalId = "fireflyTransactionId",
                             ).transactions.first(),
                         ),
                     ),
@@ -58,9 +57,52 @@ internal class TransactionConverterTest {
                                 FireflyFixtures.getTransaction(
                                     type = TransactionTypeProperty.transfer,
                                     amount = "1111.22",
-//                                    transactionJournalId = "fireflyTransactionId",
                                     externalId = "plaid-plaidTransactionId",
                                     destinationId = "42",
+                                ).transactions.first()
+                            )
+                        ),
+                        deletes = listOf(),
+                    ),
+                ),
+                Arguments.of(
+//                    testName: String,
+                    "Existing Firefly deposit",
+//                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
+                    mapOf("testPlaidAccountId" to 42),
+//                    plaidCreatedTxs: List<PlaidTransaction>,
+                    listOf(
+                        PlaidFixtures.getPaymentTransaction(
+                            accountId = "testPlaidAccountId",
+                            transactionId = "plaidTransactionId",
+                            amount = 1111.22,
+                        ),
+                    ),
+//                    plaidUpdatedTxs: List<PlaidTransaction>,
+                    listOf<PlaidTransaction>(),
+//                    plaidDeletedTxs: List<PlaidTransactionId>,
+                    listOf<PlaidTransactionId>(),
+//                    existingFireflyTxs: List<FireflyTransactionDto>,
+                    listOf(
+                        FireflyTransactionDto(
+                            "fireflyTransactionId",
+                            FireflyFixtures.getTransaction(
+                                type = TransactionTypeProperty.deposit,
+                                amount = "1111.22",
+                            ).transactions.first(),
+                        ),
+                    ),
+//                    expectedResult: TransactionConverter.ConvertPollSyncResult,
+                    TransactionConverter.ConvertPollSyncResult(
+                        creates = listOf(),
+                        updates = listOf(
+                            FireflyTransactionDto(
+                                "fireflyTransactionId",
+                                FireflyFixtures.getTransaction(
+                                    type = TransactionTypeProperty.transfer,
+                                    amount = "1111.22",
+                                    externalId = "plaid-plaidTransactionId",
+                                    sourceId = "42",
                                 ).transactions.first()
                             )
                         ),
