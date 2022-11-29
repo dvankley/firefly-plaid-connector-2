@@ -45,24 +45,26 @@ internal class TransactionConverterTest {
                             FireflyFixtures.getTransaction(
                                 type = TransactionTypeProperty.withdrawal,
                                 amount = "1111.22",
-                                transactionJournalId = "fireflyTransactionId",
+//                                transactionJournalId = "fireflyTransactionId",
                             ).transactions.first(),
                         ),
                     ),
 //                    expectedResult: TransactionConverter.ConvertPollSyncResult,
                     TransactionConverter.ConvertPollSyncResult(
-                        listOf(
+                        creates = listOf(),
+                        updates = listOf(
                             FireflyTransactionDto(
                                 "fireflyTransactionId",
                                 FireflyFixtures.getTransaction(
-                                    type = TransactionTypeProperty.withdrawal,
+                                    type = TransactionTypeProperty.transfer,
                                     amount = "1111.22",
-                                    transactionJournalId = "fireflyTransactionId",
+//                                    transactionJournalId = "fireflyTransactionId",
+                                    externalId = "plaid-plaidTransactionId",
+                                    destinationId = "42",
                                 ).transactions.first()
                             )
                         ),
-                        listOf(),
-                        listOf(),
+                        deletes = listOf(),
                     ),
                 )
             )
@@ -219,8 +221,9 @@ internal class TransactionConverterTest {
             )
             val (actualSingles, actualPairs) = converter.sortByPairsBatched(input, accountMap)
 
-            assertEquals(expectedSingles, actualSingles)
-            assertEquals(expectedPairs, actualPairs)
+            // Ignore order
+            assertEquals(expectedSingles.toSet(), actualSingles.toSet())
+            assertEquals(expectedPairs.toSet(), actualPairs.toSet())
         }
     }
 
