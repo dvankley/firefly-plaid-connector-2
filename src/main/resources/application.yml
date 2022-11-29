@@ -26,9 +26,6 @@ fireflyPlaidConnector2:
   firefly:
 #    url: https://firefly.yourdomain.com
 #    personalAccessToken: TOKAAAAAN
-    # Firefly requires a category in some cases where it probably shouldn't (i.e. transaction updates)
-    #   For now, we'll get around that by using a default category. Enter its id here.
-    defaultCategoryId: 1
   plaid:
 #    url: https://development.plaid.com
 #    clientId: HI I'M A CLIENT ID
