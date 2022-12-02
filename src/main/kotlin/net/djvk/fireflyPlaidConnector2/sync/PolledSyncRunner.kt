@@ -34,7 +34,7 @@ typealias PlaidSyncCursor = String
 @ConditionalOnProperty(name = ["fireflyPlaidConnector2.syncMode"], havingValue = "polled")
 @Component
 class PolledSyncRunner(
-    @Value("\${fireflyPlaidConnector2.syncFrequencyMinutes}")
+    @Value("\${fireflyPlaidConnector2.polled.syncFrequencyMinutes}")
     private val syncFrequencyMinutes: IntervalMinutes,
     @Value("\${fireflyPlaidConnector2.transferMatchWindowDays}")
     private val transferMatchWindowDays: Int,

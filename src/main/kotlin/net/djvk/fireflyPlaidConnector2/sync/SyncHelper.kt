@@ -70,7 +70,7 @@ class SyncHelper(
                     if (error.message.lowercase().contains("duplicate of transaction")) {
                         logger.info("Skipped transaction ${fireflyTx.tx.externalId} that Firefly identified as a duplicate")
                     } else {
-                        logger.error("Firefly API error $error")
+                        logger.error("Firefly transaction insert $error for tx: $fireflyTx")
                         throw cre
                     }
                 } else {
@@ -87,7 +87,15 @@ class SyncHelper(
     suspend fun pessimisticInsertBatchIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
         logger.trace("Pessimistic insert of ${fireflyTxs.size} txs into Firefly")
         for (fireflyTx in fireflyTxs) {
-            insertIntoFirefly(fireflyTx)
+            try {
+                insertIntoFirefly(fireflyTx)
+            } catch (cre: ClientRequestException) {
+                val error = cre.response.body<FireflyApiError>()
+                if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
+                    logger.error("Firefly transaction insert $error for tx: $fireflyTx")
+                    throw cre
+                }
+            }
         }
     }
 

@@ -4,16 +4,19 @@ import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsGetRequest
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsGetRequestOptions
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
+import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
 import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.util.*
 
 /**
  * Batch sync runner.
@@ -23,10 +26,14 @@ import java.time.LocalDate
 @ConditionalOnProperty(name = ["fireflyPlaidConnector2.syncMode"], havingValue = "batch")
 @Component
 class BatchSyncRunner(
-    @Value("\${fireflyPlaidConnector2.maxSyncDays}")
+    @Value("\${fireflyPlaidConnector2.batch.maxSyncDays}")
     private val syncDays: Int,
+    @Value("\${fireflyPlaidConnector2.batch.setInitialBalance:false}")
+    private val setInitialBalance: Boolean,
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
+    @Value("\${fireflyPlaidConnector2.timeZone}")
+    private val timeZoneString: String,
 
     private val plaidApi: PlaidApi,
     private val syncHelper: SyncHelper,
@@ -35,11 +42,12 @@ class BatchSyncRunner(
 
     ) : Runner {
     private val logger = LoggerFactory.getLogger(this::class.java)
+    private val timeZone = TimeZone.getTimeZone(timeZoneString)
 
     override fun run() {
         syncHelper.setApiCreds()
 
-        val allPlaidTxs = mutableListOf<Transaction>()
+        val allPlaidTxs = mutableMapOf<PlaidAccessToken, MutableList<Transaction>>()
 
         val startDate = LocalDate.now().minusDays(syncDays.toLong())
         val endDate = LocalDate.now()
@@ -87,7 +95,9 @@ class BatchSyncRunner(
                         logger.error("Error requesting Plaid transactions. Request: $request; ")
                         throw cre
                     }
-                    allPlaidTxs.addAll(plaidTxs)
+                    allPlaidTxs
+                        .getOrPut(accessToken) { mutableListOf() }
+                        .addAll(plaidTxs)
 
                     /**
                      * This would be where we query transactions from Firefly and look for dupes, but the Firefly
@@ -103,10 +113,83 @@ class BatchSyncRunner(
             }
 
             // Map Plaid transactions to Firefly transactions
-            val fireflyTxs = converter.convertBatchSync(allPlaidTxs, accountMap)
+            val fireflyTxs = converter.convertBatchSync(allPlaidTxs.values.flatten(), accountMap)
 
             // Insert into Firefly
             syncHelper.optimisticInsertBatchIntoFirefly(fireflyTxs)
+
+            // Set initial balance transaction if configured
+            if (setInitialBalance) {
+                setInitialBalances(allPlaidTxs, plaidApi, syncHelper, startDate)
+            }
+        }
+    }
+
+    suspend fun setInitialBalances(
+        allPlaidTxs: Map<PlaidAccessToken, List<Transaction>>,
+        plaidApi: PlaidApi,
+        syncHelper: SyncHelper,
+        startDate: LocalDate,
+    ) {
+        logger.info("Attempting to set initial balances")
+        val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
+        // Iterate over all Plaid items/access tokens we have configured
+        for ((accessToken, accountIds) in accountAccessTokenSequence) {
+            val plaidTxs = allPlaidTxs[accessToken] ?: continue
+            // Request balance data for this item/access token
+            logger.debug("Requesting balances for access token $accessToken and account ids ${accountIds.joinToString()}")
+            val balances: AccountsGetResponse
+            try {
+                balances = plaidApi.accountsBalanceGet(AccountsBalanceGetRequest(
+                    accessToken, null, null, AccountsBalanceGetRequestOptions(accountIds)
+                )).body()
+            } catch (e: Exception) {
+                logger.error("Failed to fetch balances for access token $accessToken and account ids ${accountIds.joinToString()}", e)
+                continue
+            }
+
+            // Group transactions and balance data by Plaid account id
+            val plaidTxsByAccountId = plaidTxs.groupBy { it.accountId }
+            val balancesByAccountId = balances.accounts.associate { Pair(it.accountId, it.balances.current) }
+
+            // Iterate over account ids
+            for ((accountId, currentBalance) in balancesByAccountId) {
+                val fireflyAccountId = accountMap[accountId]
+                if (fireflyAccountId == null) {
+                    logger.warn("Failed to find Firefly account id for Plaid account $accountId")
+                    continue
+                }
+                if (currentBalance == null) {
+                    logger.warn("No current balance data received for Plaid account $accountId")
+                    continue
+                }
+                val txs = plaidTxsByAccountId[accountId] ?: listOf()
+                val total = txs.fold(0.0) { acc, tx -> acc + tx.amount }
+                val initialBalance = currentBalance + total
+
+                val earliestTimestamp = txs.fold(OffsetDateTime.now()) { acc, tx ->
+                    val ts = tx.getTimestamp(timeZone.toZoneId())
+                    if (ts < acc) { ts } else { acc }
+                }
+                logger.debug("Inserting initial balance $initialBalance for Firefly account id $fireflyAccountId")
+                syncHelper.optimisticInsertBatchIntoFirefly(listOf(FireflyTransactionDto(null, TransactionSplit(
+                    /**
+                     * Would like this to be [TransactionTypeProperty.openingBalance], but the Firefly API doesn't
+                     *  let us insert with that value.
+                     */
+                    type = TransactionTypeProperty.deposit,
+                    date = earliestTimestamp.minusHours(1),
+                    amount = initialBalance.toString(),
+                    description = "Plaid Connector Initial Balance",
+                    sourceName = "Initial Balance",
+                    sourceId = null,
+                    destinationId = fireflyAccountId.toString(),
+                    order = 0,
+                    reconciled = false,
+                    // Why the eff does the Firefly API require this
+                    foreignAmount = "0",
+                ))))
+            }
         }
     }
 }
