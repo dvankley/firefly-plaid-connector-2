@@ -55,6 +55,7 @@ class BatchSyncRunner(
         runBlocking {
             val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
             for ((accessToken, accountIds) in accountAccessTokenSequence) {
+                logger.debug("Fetching Plaid data for access token $accessToken and account ids ${accountIds.joinToString()}")
                 var offset = 0
                 do {
                     /**
@@ -91,6 +92,7 @@ class BatchSyncRunner(
                     val plaidTxs: List<Transaction>
                     try {
                         plaidTxs = plaidApi.transactionsGet(request).body().transactions
+                        logger.debug("\tReceived a batch of ${plaidTxs.size} Plaid transactions")
                     } catch (cre: ClientRequestException) {
                         logger.error("Error requesting Plaid transactions. Request: $request; ")
                         throw cre
@@ -110,6 +112,7 @@ class BatchSyncRunner(
 
                     // Keep going until we get all the transactions
                 } while (plaidTxs.size == plaidBatchSize)
+                logger.debug("Done fetching Plaid data for access token $accessToken and account ids ${accountIds.joinToString()}")
             }
 
             // Map Plaid transactions to Firefly transactions

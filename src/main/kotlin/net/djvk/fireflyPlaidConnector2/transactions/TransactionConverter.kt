@@ -121,6 +121,7 @@ class TransactionConverter(
         txs: List<PlaidTransaction>,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): List<FireflyTransactionDto> {
+        logger.debug("Batch sync converting Plaid transactions to Firefly transactions")
         val (singles, pairs) = sortByPairsBatched(txs, accountMap)
         val out = mutableListOf<FireflyTransactionDto>()
 

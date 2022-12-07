@@ -60,7 +60,7 @@ class SyncHelper(
     }
 
     suspend fun optimisticInsertBatchIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
-        logger.trace("Optimistic insert of ${fireflyTxs.size} txs into Firefly")
+        logger.debug("Optimistic insert of ${fireflyTxs.size} txs into Firefly")
         for (fireflyTx in fireflyTxs) {
             try {
                 insertIntoFirefly(fireflyTx)
