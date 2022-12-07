@@ -1,6 +1,8 @@
 package net.djvk.fireflyPlaidConnector2.lib
 
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
+import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
+import net.djvk.fireflyPlaidConnector2.transactions.PlaidAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import net.djvk.fireflyPlaidConnector2.util.Utilities
 import java.time.LocalDate
@@ -10,6 +12,8 @@ val defaultLocalNow: LocalDate = LocalDate.of(2022, 9, 1)
 val defaultOffsetNow = TransactionConverter.getOffsetDateTimeForDate(ZoneId.of("America/New_York"), defaultLocalNow)
 
 object PlaidFixtures {
+    val plaidIdLength = 37
+
     fun getPaymentTransaction(
         pendingTransactionId: String? = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         categoryId: String? = "16001000",
@@ -86,7 +90,7 @@ object PlaidFixtures {
         datetime: java.time.OffsetDateTime,
         personalFinanceCategory: PersonalFinanceCategoryEnum,
         amount: Double,
-        pendingTransactionId: String? = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        pendingTransactionId: String? = "1111111111111111111111111111111111111",
         categoryId: String? = null,
         category: List<String>? = null,
         location: Location = Location(
@@ -224,5 +228,17 @@ object PlaidFixtures {
             checkNumber = checkNumber,
             personalFinanceCategory = personalFinanceCategory,
         )
+    }
+
+    fun getStandardAccountMapping(): Map<PlaidAccountId, FireflyAccountId> {
+        val out = mutableMapOf<PlaidAccountId, FireflyAccountId>()
+        var index = 1
+
+        for (letter in 'a'..'z') {
+            val id = letter.toString().repeat(plaidIdLength)
+            out[id] = index
+            index++
+        }
+        return out
     }
 }

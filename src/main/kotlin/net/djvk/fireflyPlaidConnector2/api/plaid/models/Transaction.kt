@@ -22,6 +22,8 @@ package net.djvk.fireflyPlaidConnector2.api.plaid.models
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import net.djvk.fireflyPlaidConnector2.constants.Direction
+import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
+import net.djvk.fireflyPlaidConnector2.transactions.PlaidAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.SortableTransaction
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import java.time.OffsetDateTime
@@ -185,6 +187,12 @@ data class Transaction(
         return datetime
             ?: authorizedDatetime
             ?: TransactionConverter.getOffsetDateTimeForDate(zoneId, date)
+    }
+
+    override fun getFireflyAccountId(accountMap: Map<PlaidAccountId, FireflyAccountId>): FireflyAccountId {
+        return accountMap[accountId]
+            ?: throw IllegalArgumentException("SortableTransaction.getFireflyAccountId can't be called on a Plaid " +
+                    "transaction with an account id that isn't mapped to a Firefly account id")
     }
 }
 

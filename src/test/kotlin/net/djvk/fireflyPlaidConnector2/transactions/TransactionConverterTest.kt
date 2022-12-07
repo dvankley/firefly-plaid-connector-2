@@ -25,11 +25,11 @@ internal class TransactionConverterTest {
 //                    testName: String,
                     "Existing Firefly withdrawal",
 //                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
-                    mapOf("testPlaidAccountId" to 42),
+                    PlaidFixtures.getStandardAccountMapping(),
 //                    plaidCreatedTxs: List<PlaidTransaction>,
                     listOf(
                         PlaidFixtures.getPaymentTransaction(
-                            accountId = "testPlaidAccountId",
+                            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                             transactionId = "plaidTransactionId",
                             amount = -1111.22,
                         ),
@@ -45,6 +45,7 @@ internal class TransactionConverterTest {
                             FireflyFixtures.getTransaction(
                                 type = TransactionTypeProperty.withdrawal,
                                 amount = "1111.22",
+                                sourceId = "2",
                             ).transactions.first(),
                         ),
                     ),
@@ -58,7 +59,8 @@ internal class TransactionConverterTest {
                                     type = TransactionTypeProperty.transfer,
                                     amount = "1111.22",
                                     externalId = "plaid-plaidTransactionId",
-                                    destinationId = "42",
+                                    sourceId = "2",
+                                    destinationId = "1",
                                 ).transactions.first()
                             )
                         ),
@@ -69,11 +71,11 @@ internal class TransactionConverterTest {
 //                    testName: String,
                     "Existing Firefly deposit",
 //                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
-                    mapOf("testPlaidAccountId" to 42),
+                    PlaidFixtures.getStandardAccountMapping(),
 //                    plaidCreatedTxs: List<PlaidTransaction>,
                     listOf(
                         PlaidFixtures.getPaymentTransaction(
-                            accountId = "testPlaidAccountId",
+                            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                             transactionId = "plaidTransactionId",
                             amount = 1111.22,
                         ),
@@ -89,6 +91,7 @@ internal class TransactionConverterTest {
                             FireflyFixtures.getTransaction(
                                 type = TransactionTypeProperty.deposit,
                                 amount = "1111.22",
+                                destinationId = "2",
                             ).transactions.first(),
                         ),
                     ),
@@ -102,7 +105,8 @@ internal class TransactionConverterTest {
                                     type = TransactionTypeProperty.transfer,
                                     amount = "1111.22",
                                     externalId = "plaid-plaidTransactionId",
-                                    sourceId = "42",
+                                    sourceId = "1",
+                                    destinationId = "2",
                                 ).transactions.first()
                             )
                         ),
@@ -144,26 +148,38 @@ internal class TransactionConverterTest {
                 PlaidFixtures.getTransferTestTransaction(
                     datetime = baseDateTime.minusHours(18),
                     personalFinanceCategory = PersonalFinanceCategoryEnum.BANK_FEES_ATM_FEES,
-                    18.0,
+                    accountId = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+                    amount = 18.0,
                 ),
                 // Single because not a transfer, even though it has a matching amount
                 PlaidFixtures.getTransferTestTransaction(
                     datetime = baseDateTime.minusHours(19),
                     personalFinanceCategory = PersonalFinanceCategoryEnum.INCOME_WAGES,
-                    100.0,
+                    accountId = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+                    amount = 100.0,
                 ),
                 // Single because no matching amount
                 PlaidFixtures.getTransferTestTransaction(
                     datetime = baseDateTime.minusHours(19),
                     personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_IN_ACCOUNT_TRANSFER,
-                    19.0,
+                    accountId = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                    amount = 19.0,
+                ),
+                // Single because while it's a transfer and has a matching amount, it's on the same account as
+                //  the matching transaction
+                PlaidFixtures.getTransferTestTransaction(
+                    datetime = baseDateTime.minusHours(5),
+                    personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_IN_ACCOUNT_TRANSFER,
+                    accountId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    amount = -100.0,
                 ),
                 // Single because while it's a transfer and has a matching amount, its timestamp is farther away than
                 //  all the other candidates
                 PlaidFixtures.getTransferTestTransaction(
                     datetime = baseDateTime.minusHours(20),
                     personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_IN_ACCOUNT_TRANSFER,
-                    -100.0,
+                    accountId = "wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww",
+                    amount = -100.0,
                 ),
             )
             val pairs = listOf(
@@ -171,24 +187,28 @@ internal class TransactionConverterTest {
                     PlaidFixtures.getTransferTestTransaction(
                         datetime = baseDateTime.minusHours(4),
                         personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_IN_ACCOUNT_TRANSFER,
-                        -100.0,
+                        accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        amount = -100.0,
                     ),
                     PlaidFixtures.getTransferTestTransaction(
-                        datetime = baseDateTime.minusHours(4),
+                        datetime = baseDateTime.minusHours(5),
                         personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_OUT_ACCOUNT_TRANSFER,
-                        100.0,
+                        accountId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        amount = 100.0,
                     ),
                 ),
                 Pair(
                     PlaidFixtures.getTransferTestTransaction(
                         datetime = baseDateTime.minusHours(6),
                         personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_IN_DEPOSIT,
-                        -100.0,
+                        accountId = "ccccccccccccccccccccccccccccccccccccc",
+                        amount = -100.0,
                     ),
                     PlaidFixtures.getTransferTestTransaction(
                         datetime = baseDateTime.minusHours(7),
                         personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_OUT_WITHDRAWAL,
-                        100.0,
+                        accountId = "ddddddddddddddddddddddddddddddddddddd",
+                        amount = 100.0,
                     ),
                 ),
             )
@@ -199,12 +219,12 @@ internal class TransactionConverterTest {
 //                    input: List<Transaction>,
                     singles + pairs.flatMap { sequenceOf(it.first, it.second) }.shuffled(),
 //                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
-                    mapOf("testPlaidAccountId" to 42),
+                    PlaidFixtures.getStandardAccountMapping(),
 //                    expectedSingles: List<Transaction>,
                     singles,
 //                    expectedPairs: List<Pair<Transaction, Transaction>>,
                     pairs,
-                )
+                ),
             )
         }
     }
@@ -263,9 +283,8 @@ internal class TransactionConverterTest {
             )
             val (actualSingles, actualPairs) = converter.sortByPairsBatched(input, accountMap)
 
-            // Ignore order
-            assertEquals(expectedSingles.toSet(), actualSingles.toSet())
-            assertEquals(expectedPairs.toSet(), actualPairs.toSet())
+            assertEquals(expectedSingles.sortedBy { it.transactionId }, actualSingles.sortedBy { it.transactionId })
+            assertEquals(expectedPairs.sortedBy { it.first.transactionId }, actualPairs.sortedBy { it.first.transactionId })
         }
     }
 

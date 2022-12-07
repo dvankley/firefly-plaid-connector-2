@@ -351,6 +351,11 @@ class TransactionConverter(
                     continue
                 }
 
+                // If either transaction is "on" the same account, they're not a valid transfer candidate and we should move on
+                if (aTx.getFireflyAccountId(accountMap) == bTx.getFireflyAccountId(accountMap)) {
+                    continue
+                }
+
                 /**
                  * Check if one and only one tx is Firefly
                  * If one and only one tx is Firefly, this is a candidate for updating the existing Firefly transaction
@@ -461,7 +466,7 @@ class TransactionConverter(
         when (fireflyTx.tx.type) {
             TransactionTypeProperty.withdrawal -> {
                 sourceName = fireflyTx.tx.sourceName
-                sourceId = null
+                sourceId = fireflyTx.tx.sourceId
 
                 destinationName = null
                 destinationId = plaidTxFireflyAccountId.toString()
@@ -472,7 +477,7 @@ class TransactionConverter(
                 sourceId = plaidTxFireflyAccountId.toString()
 
                 destinationName = fireflyTx.tx.destinationName
-                destinationId = null
+                destinationId = fireflyTx.tx.destinationId
             }
 
             else -> throw IllegalArgumentException(

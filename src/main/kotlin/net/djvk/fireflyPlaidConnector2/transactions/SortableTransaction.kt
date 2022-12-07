@@ -12,4 +12,10 @@ interface SortableTransaction {
      */
     val amount: Double
     fun getTimestamp(zoneId: ZoneId): OffsetDateTime
+
+    /**
+     * Returns the Firefly account id that this transaction is "on," which is the Firefly source id for Firefly withdrawals,
+     *  Firefly destination id for Firefly deposits, and the account id for Plaid transactions.
+     */
+    fun getFireflyAccountId(accountMap: Map<PlaidAccountId, FireflyAccountId>): FireflyAccountId
 }
