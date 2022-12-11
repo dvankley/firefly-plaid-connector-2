@@ -39,6 +39,7 @@ class TransactionConverter(
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
     private val timeZone = TimeZone.getTimeZone(timeZoneString)
+    private val zoneId = timeZone.toZoneId()
     private val transferMatchWindowSeconds = transferMatchWindowDays * 24 * 60 * 60
 
     companion object {
@@ -69,7 +70,7 @@ class TransactionConverter(
     fun getTxTimestamp(tx: PlaidTransaction): OffsetDateTime {
         return tx.datetime
             ?: tx.authorizedDatetime
-            ?: getOffsetDateTimeForDate(timeZone.toZoneId(), tx.date)
+            ?: getOffsetDateTimeForDate(zoneId, tx.date)
     }
 
     fun getSourceOrDestinationName(
@@ -162,9 +163,9 @@ class TransactionConverter(
 
         val creates = mutableListOf<FireflyTransactionDto>()
         val updates = mutableListOf<FireflyTransactionDto>()
-        val deletes = mutableListOf<FireflyTransactionId>()
 
         val (singles, pairs) = sortByPairs(plaidCreatedTxs + plaidUpdatedTxs + existingFireflyTxs, accountMap)
+        logger.debug("${::convertPollSync.name} call to ${::sortByPairs.name} received ${singles.size} singles and ${pairs.size} pairs")
 
         for (single in singles) {
             val convertedSingle = when (single) {
@@ -228,7 +229,7 @@ class TransactionConverter(
         return ConvertPollSyncResult(
             creates = creates,
             updates = updates,
-            deletes = deletes,
+            deletes = plaidDeletedTxs,
         )
     }
 
@@ -291,6 +292,7 @@ class TransactionConverter(
         val processedAmounts = mutableSetOf<Double>()
 
         for ((amount, groupTxs) in amountIndexedTxs) {
+            logger.trace("${::sortByPairs.name} processing amount $amount with ${groupTxs.size} transactions")
             if (processedAmounts.contains(amount)) {
                 continue
             }
@@ -310,13 +312,14 @@ class TransactionConverter(
             val txsSecondsDiff = mutableListOf<CandidatePair>()
 
             // Index txs by their temporal difference from each other so we can match up the closest pairs
+            logger.trace("${::sortByPairs.name} indexing transactions by time diff for amount $amount")
             for (aTx in aTxs) {
                 for (bTx in bTxs) {
                     txsSecondsDiff.add(
                         CandidatePair(
                             abs(
-                                aTx.getTimestamp(timeZone.toZoneId()).toEpochSecond() -
-                                        bTx.getTimestamp(timeZone.toZoneId()).toEpochSecond()
+                                aTx.getTimestamp(zoneId).toEpochSecond() -
+                                        bTx.getTimestamp(zoneId).toEpochSecond()
                             ),
                             aTx,
                             bTx
@@ -375,6 +378,8 @@ class TransactionConverter(
                 }
 
                 // Otherwise let's peel off the next pair of transactions
+                logger.trace("${::sortByPairs.name} found valid pair with timestamps ${aTx.getTimestamp(zoneId)};" +
+                        "${bTx.getTimestamp(zoneId)} and amount $amount")
                 pairsOut.add(Pair(aTx, bTx))
                 usedATxIds.add(aTx.transactionId)
                 usedBTxIds.add(bTx.transactionId)
@@ -392,6 +397,7 @@ class TransactionConverter(
         tx: PlaidTransaction,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): FireflyTransactionDto {
+        logger.trace("Starting ${::sortByPairs.name}")
         val fireflyAccountId = accountMap[tx.accountId]?.toString()
             ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${tx.accountId}")
 

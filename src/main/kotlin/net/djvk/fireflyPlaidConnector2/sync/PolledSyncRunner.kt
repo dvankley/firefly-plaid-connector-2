@@ -93,7 +93,7 @@ class PolledSyncRunner(
                  * Periodic polling loop
                  */
                 do {
-                    logger.trace("Polling loop start")
+                    logger.debug("Polling loop start")
                     val transferWindowStart = LocalDate.now().minusDays(transferMatchWindowDays.toLong())
 
                     /**
@@ -138,7 +138,7 @@ class PolledSyncRunner(
                     val plaidDeletedTxs = mutableListOf<PlaidTransactionId>()
 
                     for ((accessToken, accountIds) in accountAccessTokenSequence) {
-                        logger.trace("Querying Plaid transaction sync endpoint for access token $accessToken " +
+                        logger.debug("Querying Plaid transaction sync endpoint for access token $accessToken " +
                             " and account ids ${accountIds.joinToString("; ")}")
                         val accountIdSet = accountIds.toSet()
                         /**
@@ -188,7 +188,7 @@ class PolledSyncRunner(
                     logger.debug("Conversion result: ${convertResult.creates.size} creates; " +
                             "${convertResult.updates.size} updates; " +
                             "${convertResult.deletes.size} deletes;")
-//
+
                     // Insert into Firefly
                     syncHelper.optimisticInsertBatchIntoFirefly(convertResult.creates)
                     for (update in convertResult.updates) {

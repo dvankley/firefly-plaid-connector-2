@@ -1,6 +1,7 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
 import io.ktor.client.call.*
+import io.ktor.client.network.sockets.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.CategoriesApi
@@ -61,9 +62,14 @@ class SyncHelper(
 
     suspend fun optimisticInsertBatchIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
         logger.debug("Optimistic insert of ${fireflyTxs.size} txs into Firefly")
+        var index = 0
         for (fireflyTx in fireflyTxs) {
             try {
                 insertIntoFirefly(fireflyTx)
+                index++
+                if (index % 100 == 0) {
+                    logger.debug("Insert of tx index $index successful")
+                }
             } catch (cre: ClientRequestException) {
                 if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
                     val error = cre.response.body<FireflyApiError>()
@@ -76,6 +82,8 @@ class SyncHelper(
                 } else {
                     throw cre
                 }
+            } catch (e: ConnectTimeoutException) {
+                logger.error("Timeout inserting firefly tx; skipping for now: $fireflyTx", e)
             }
         }
     }

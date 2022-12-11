@@ -32,8 +32,8 @@ fireflyPlaidConnector2:
     #   balance in the account as reported by Plaid.
     # This is useful for ensuring the current balance in your accounts is accurate even if you don't
     #   pull every transaction from the beginning of time.
-    # Defaults to true.
-    setInitialBalance: true
+    # Defaults to false.
+    setInitialBalance: false
   firefly:
 #    url: https://firefly.yourdomain.com
 #    personalAccessToken: TOKAAAAAN
