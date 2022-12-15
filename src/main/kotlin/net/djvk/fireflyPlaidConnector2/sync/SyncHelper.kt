@@ -4,6 +4,7 @@ import io.ktor.client.call.*
 import io.ktor.client.network.sockets.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AccountsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.CategoriesApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
@@ -28,6 +29,7 @@ class SyncHelper(
     @Value("\${fireflyPlaidConnector2.firefly.personalAccessToken}")
     private val fireflyAccessToken: String,
     private val fireflyTxApi: TransactionsApi,
+    private val fireflyAccountsApi: AccountsApi,
 
     private val plaidApi: PlaidApi,
     @Value("\${fireflyPlaidConnector2.plaid.clientId}")
@@ -43,6 +45,7 @@ class SyncHelper(
         plaidApi.setApiKey(plaidClientId, clientIdHeader)
         plaidApi.setApiKey(plaidSecret, secretHeader)
         fireflyTxApi.setAccessToken(fireflyAccessToken)
+        fireflyAccountsApi.setAccessToken(fireflyAccessToken)
     }
 
     fun getAllPlaidAccessTokenAccountIdSets():

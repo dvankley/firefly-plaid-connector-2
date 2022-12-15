@@ -4,6 +4,8 @@ import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AccountsApi
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.AccountRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Component
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.*
+import kotlin.math.absoluteValue
 
 /**
  * Batch sync runner.
@@ -37,6 +40,7 @@ class BatchSyncRunner(
 
     private val plaidApi: PlaidApi,
     private val syncHelper: SyncHelper,
+    private val fireflyAccountsApi: AccountsApi,
 
     private val converter: TransactionConverter,
 
@@ -143,11 +147,16 @@ class BatchSyncRunner(
             logger.debug("Requesting balances for access token $accessToken and account ids ${accountIds.joinToString()}")
             val balances: AccountsGetResponse
             try {
-                balances = plaidApi.accountsBalanceGet(AccountsBalanceGetRequest(
-                    accessToken, null, null, AccountsBalanceGetRequestOptions(accountIds)
-                )).body()
+                balances = plaidApi.accountsBalanceGet(
+                    AccountsBalanceGetRequest(
+                        accessToken, null, null, AccountsBalanceGetRequestOptions(accountIds)
+                    )
+                ).body()
             } catch (e: Exception) {
-                logger.error("Failed to fetch balances for access token $accessToken and account ids ${accountIds.joinToString()}", e)
+                logger.error(
+                    "Failed to fetch balances for access token $accessToken and account ids ${accountIds.joinToString()}",
+                    e
+                )
                 continue
             }
 
@@ -166,32 +175,61 @@ class BatchSyncRunner(
                     logger.warn("No current balance data received for Plaid account $accountId")
                     continue
                 }
+                val fireflyAccount: AccountRead
+                try {
+                    fireflyAccount = fireflyAccountsApi.getAccount(fireflyAccountId.toString(), null).body().data
+                } catch (e: Exception) {
+                    logger.error("Error fetching Firefly account $fireflyAccountId", e)
+                    continue
+                }
+                val isCreditCard = fireflyAccount.attributes.accountRole?.value == "ccAsset"
+
                 val txs = plaidTxsByAccountId[accountId] ?: listOf()
                 val total = txs.fold(0.0) { acc, tx -> acc + tx.amount }
-                val initialBalance = currentBalance + total
+
+                /**
+                 * Plaid returns positive balances regardless, even though they're functionally negative for
+                 *  credit card accounts.
+                 */
+                val initialBalance = if (isCreditCard) {
+                    total - currentBalance
+                } else {
+                    total + currentBalance
+                }
 
                 val earliestTimestamp = txs.fold(OffsetDateTime.now()) { acc, tx ->
                     val ts = tx.getTimestamp(timeZone.toZoneId())
-                    if (ts < acc) { ts } else { acc }
+                    if (ts < acc) {
+                        ts
+                    } else {
+                        acc
+                    }
                 }
                 logger.debug("Inserting initial balance $initialBalance for Firefly account id $fireflyAccountId")
-                syncHelper.optimisticInsertBatchIntoFirefly(listOf(FireflyTransactionDto(null, TransactionSplit(
-                    /**
-                     * Would like this to be [TransactionTypeProperty.openingBalance], but the Firefly API doesn't
-                     *  let us insert with that value.
-                     */
-                    type = TransactionTypeProperty.deposit,
-                    date = earliestTimestamp.minusHours(1),
-                    amount = initialBalance.toString(),
-                    description = "Plaid Connector Initial Balance",
-                    sourceName = "Initial Balance",
-                    sourceId = null,
-                    destinationId = fireflyAccountId.toString(),
-                    order = 0,
-                    reconciled = false,
-                    // Why the eff does the Firefly API require this
-                    foreignAmount = "0",
-                ))))
+                syncHelper.optimisticInsertBatchIntoFirefly(
+                    listOf(
+                        FireflyTransactionDto(
+                            null, TransactionSplit(
+                                /**
+                                 * Would like this to be [TransactionTypeProperty.openingBalance], but the Firefly API doesn't
+                                 *  let us insert with that value.
+                                 *
+                                 */
+                                type = if (initialBalance < 0) TransactionTypeProperty.withdrawal else TransactionTypeProperty.deposit,
+                                date = earliestTimestamp.minusHours(1),
+                                amount = (initialBalance.absoluteValue).toString(),
+                                description = "Plaid Connector Initial Balance",
+                                sourceName = "Initial Balance",
+                                sourceId = if (initialBalance < 0) fireflyAccountId.toString() else null,
+                                destinationId = if (initialBalance < 0) null else fireflyAccountId.toString(),
+                                order = 0,
+                                reconciled = false,
+                                // Why the eff does the Firefly API require this
+                                foreignAmount = "0",
+                            )
+                        )
+                    )
+                )
             }
         }
     }

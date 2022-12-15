@@ -40,7 +40,9 @@ data class AccountRead(
     val id: kotlin.String,
 
     @field:JsonProperty("attributes")
-    val attributes: Account
+    val attributes: Account,
 
+    @field:JsonProperty("links")
+    val links: ObjectLink,
 )
 
