@@ -2,6 +2,8 @@ package net.djvk.fireflyPlaidConnector2.transactions
 
 import io.ktor.client.engine.mock.*
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PlaidTransactionId
@@ -38,15 +40,14 @@ internal class TransactionConverterTest {
                     listOf<PlaidTransaction>(),
 //                    plaidDeletedTxs: List<PlaidTransactionId>,
                     listOf<PlaidTransactionId>(),
-//                    existingFireflyTxs: List<FireflyTransactionDto>,
+//                    existingFireflyTxs: List<TransactionRead>,
                     listOf(
-                        FireflyTransactionDto(
-                            "fireflyTransactionId",
+                        TransactionRead("thing", "fireflyTransactionId",
                             FireflyFixtures.getTransaction(
                                 type = TransactionTypeProperty.withdrawal,
                                 amount = "1111.22",
                                 sourceId = "2",
-                            ).transactions.first(),
+                            ), ObjectLink()
                         ),
                     ),
 //                    expectedResult: TransactionConverter.ConvertPollSyncResult,
@@ -84,15 +85,14 @@ internal class TransactionConverterTest {
                     listOf<PlaidTransaction>(),
 //                    plaidDeletedTxs: List<PlaidTransactionId>,
                     listOf<PlaidTransactionId>(),
-//                    existingFireflyTxs: List<FireflyTransactionDto>,
+//                    existingFireflyTxs: List<TransactionRead>,
                     listOf(
-                        FireflyTransactionDto(
-                            "fireflyTransactionId",
+                        TransactionRead("thing", "fireflyTransactionId",
                             FireflyFixtures.getTransaction(
                                 type = TransactionTypeProperty.deposit,
                                 amount = "1111.22",
                                 destinationId = "2",
-                            ).transactions.first(),
+                            ), ObjectLink()
                         ),
                     ),
 //                    expectedResult: TransactionConverter.ConvertPollSyncResult,
@@ -237,7 +237,7 @@ internal class TransactionConverterTest {
         plaidCreatedTxs: List<PlaidTransaction>,
         plaidUpdatedTxs: List<PlaidTransaction>,
         plaidDeletedTxs: List<PlaidTransactionId>,
-        existingFireflyTxs: List<FireflyTransactionDto>,
+        existingFireflyTxs: List<TransactionRead>,
         expectedResult: TransactionConverter.ConvertPollSyncResult,
     ) {
         runBlocking {
