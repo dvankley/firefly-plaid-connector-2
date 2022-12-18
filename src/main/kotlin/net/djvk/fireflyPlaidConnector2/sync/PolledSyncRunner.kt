@@ -6,6 +6,8 @@ import io.ktor.http.*
 import kotlinx.coroutines.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.CategoriesApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.AccountRead
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
@@ -36,8 +38,8 @@ typealias PlaidSyncCursor = String
 class PolledSyncRunner(
     @Value("\${fireflyPlaidConnector2.polled.syncFrequencyMinutes}")
     private val syncFrequencyMinutes: IntervalMinutes,
-    @Value("\${fireflyPlaidConnector2.transferMatchWindowDays}")
-    private val transferMatchWindowDays: Int,
+    @Value("\${fireflyPlaidConnector2.polled.existingFireflyPullWindowDays}")
+    private val existingFireflyPullWindowDays: Int,
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
 
@@ -94,12 +96,13 @@ class PolledSyncRunner(
                  */
                 do {
                     logger.debug("Polling loop start")
-                    val transferWindowStart = LocalDate.now().minusDays(transferMatchWindowDays.toLong())
+                    val transferWindowStart = LocalDate.now().minusDays(existingFireflyPullWindowDays.toLong())
 
                     /**
-                     * Get all Firefly transactions within [transferMatchWindowDays] so that we can try to match up transfers.
+                     * Get all Firefly transactions within [existingFireflyPullWindowDays] so that we can handle Plaid
+                     *  updates and deletes, as well as try to match up transfers.
                      */
-                    val existingFireflyTxs = mutableListOf<FireflyTransactionDto>()
+                    val existingFireflyTxs = mutableListOf<TransactionRead>()
 
                     var fireflyTxPage = 0
                     do {
@@ -112,16 +115,14 @@ class PolledSyncRunner(
                         ).body()
                         val pagination = response.meta.pagination
 
+                        /**
+                         * Don't do any more filtering here, we will need all transactions for potentially matching
+                         *  up to update and delete requests.
+                         *
+                         * See [TransactionConverter.filterFireflyCandidateTransferTxs] for the filtering we do
+                         *  before trying to match up transfers.
+                         */
                         val filteredTxs = response.data
-                            /**
-                             * Filter out split transactions; we're not going to bother trying to match those up as transfers
-                             */
-                            .filter { it.attributes.transactions.size == 1 }
-                            /**
-                             * Also filter out transactions that are already transfers
-                             */
-                            .filter { it.attributes.transactions.first().type != TransactionTypeProperty.transfer }
-                            .map { FireflyTransactionDto(it.id, it.attributes.transactions.first()) }
                         logger.debug("Fetched ${filteredTxs.size} existing Firefly single-split, non transfer transactions with window starting at $transferWindowStart")
                         existingFireflyTxs.addAll(filteredTxs)
                     } while (pagination != null &&
@@ -172,8 +173,11 @@ class PolledSyncRunner(
                             // Keep going until we get all the transactions
                         } while (response.hasMore)
                     }
-                    writeCursorMap(cursorMap)
-                    
+                    /**
+                     * Don't write the cursor map here, wait until after we've successfully committed the transactions
+                     *  to Firefly so that we retry if something goes wrong with the Firefly insert
+                     */
+
                     // Map Plaid transactions to Firefly transactions
                     logger.trace("Converting Plaid transactions to Firefly transactions")
                     // TODO: do we need to dedupe the create/update/delete events and keep only the latest event?
@@ -218,6 +222,11 @@ class PolledSyncRunner(
                         syncHelper.pessimisticInsertBatchIntoFirefly(listOf(update))
                     }
                     syncHelper.deleteBatchInFirefly(convertResult.deletes)
+
+                    /**
+                     * Now that we've committed the changes to Firefly, update the cursor map
+                     */
+                    writeCursorMap(cursorMap)
 
                     /**
                      * Trigger GC to try to reduce heap size (depends on VM configuration)

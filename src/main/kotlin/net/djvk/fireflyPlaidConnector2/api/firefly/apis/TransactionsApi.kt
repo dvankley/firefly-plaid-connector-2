@@ -29,6 +29,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 
 typealias FireflyTransactionId = String
+typealias FireflyExternalId = String
 typealias FireflyTransactionSplitId = String
 
 @Component
@@ -59,7 +60,7 @@ open class TransactionsApi(
 
         val localVariableConfig = RequestConfig<kotlin.Any?>(
             RequestMethod.DELETE,
-            "/api/v1/transactions/{id}".replace("{" + "id" + "}", "$id"),
+            "/api/v1/transactions/$id",
             query = localVariableQuery,
             headers = localVariableHeaders
         )

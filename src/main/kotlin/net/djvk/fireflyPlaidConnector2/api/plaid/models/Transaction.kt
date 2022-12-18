@@ -153,11 +153,11 @@ data class Transaction(
     val checkNumber: kotlin.String? = null,
 
     /**
-     * This is nullable in the OpenAPI spec, but [TransactionGetRequestOptions.includePersonalFinanceCategory] should
-     *  always be true for this application, so I'm setting this as not null for simplicity
+     * This is nullable in the OpenAPI spec. Even though [TransactionGetRequestOptions.includePersonalFinanceCategory]
+     *  should always be true for this application, we're still seeing it as null sometimes, so I'm leaving it nullable here.
      */
     @field:JsonProperty("personal_finance_category")
-    val personalFinanceCategory: PersonalFinanceCategory
+    val personalFinanceCategory: PersonalFinanceCategory?
 ) : SortableTransaction {
     /**
      * Please use the `payment_channel` field, `transaction_type` will be deprecated in the future.  `digital:` transactions that took place online.  `place:` transactions that were made at a physical location.  `special:` transactions that relate to banks, e.g. fees or deposits.  `unresolved:` transactions that do not fit into the other three types.

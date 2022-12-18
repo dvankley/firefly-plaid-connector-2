@@ -1,6 +1,7 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum
@@ -81,7 +82,12 @@ class TransactionConverter(
             ?: if (useNameForDestination) {
                 tx.name.take(255)
             } else {
-                getUnknownSourceOrDestinationName(tx.personalFinanceCategory.toEnum(), isSource)
+                val cat = tx.personalFinanceCategory?.toEnum()
+                if (cat == null) {
+                    return "Unknown"
+                } else {
+                    getUnknownSourceOrDestinationName(cat, isSource)
+                }
             }
     }
 
@@ -106,10 +112,6 @@ class TransactionConverter(
             "Recipient"
         }
         return "Unknown $typeString $sourceString"
-    }
-
-    fun getExternalId(tx: PlaidTransaction): String {
-        return "plaid-${tx.transactionId}"
     }
 
     /**
@@ -155,18 +157,27 @@ class TransactionConverter(
         plaidCreatedTxs: List<PlaidTransaction>,
         plaidUpdatedTxs: List<PlaidTransaction>,
         plaidDeletedTxs: List<PlaidTransactionId>,
-        existingFireflyTxs: List<FireflyTransactionDto>,
+        existingFireflyTxs: List<TransactionRead>,
     ): ConvertPollSyncResult {
         logger.trace("Starting ${::convertPollSync.name}")
+        val transferCandidateExistingFireflyTxs = filterFireflyCandidateTransferTxs(existingFireflyTxs)
         val createdSet = plaidCreatedTxs.toSet()
         val updatedSet = plaidUpdatedTxs.toSet()
 
         val creates = mutableListOf<FireflyTransactionDto>()
         val updates = mutableListOf<FireflyTransactionDto>()
+        val deletes = mutableListOf<FireflyTransactionId>()
 
-        val (singles, pairs) = sortByPairs(plaidCreatedTxs + plaidUpdatedTxs + existingFireflyTxs, accountMap)
+        /**
+         * Don't pass in [plaidUpdatedTxs] here because we're not going to try to update transfers for now
+         *  because it's more complexity than I want to deal with, and I haven't seen any Plaid updates in the wild yet
+         */
+        val (singles, pairs) = sortByPairs(plaidCreatedTxs + transferCandidateExistingFireflyTxs, accountMap)
         logger.debug("${::convertPollSync.name} call to ${::sortByPairs.name} received ${singles.size} singles and ${pairs.size} pairs")
 
+        /**
+         * Handle singles, which are transactions that didn't have any transfer pair matches
+         */
         for (single in singles) {
             val convertedSingle = when (single) {
                 is PlaidTransaction -> convertSingle(single, accountMap)
@@ -181,6 +192,9 @@ class TransactionConverter(
             }
         }
 
+        /**
+         * Handle pairs that we think should become Firefly transfers
+         */
         for (pair in pairs) {
             val out = when {
                 pair.first is FireflyTransactionDto && pair.second is FireflyTransactionDto ->
@@ -226,10 +240,37 @@ class TransactionConverter(
             }
         }
 
+        val indexer = FireflyTransactionExternalIdIndexer(existingFireflyTxs)
+        /**
+         * Handle Plaid updates
+         */
+        for (plaidUpdate in plaidUpdatedTxs) {
+            val target = indexer.findExistingFireflyTx(plaidUpdate.transactionId)
+            if (target == null) {
+                logger.error("Failed to find existing Firefly transaction to update for Plaid id ${plaidUpdate.transactionId}")
+                continue
+            }
+
+            val convertedUpdate = convertSingle(plaidUpdate, accountMap)
+            updates.add(FireflyTransactionDto(target.id, convertedUpdate.tx))
+        }
+        /**
+         * Handle Plaid deletes
+         */
+        for (plaidDeleteId in plaidDeletedTxs) {
+            val target = indexer.findExistingFireflyTx(plaidDeleteId)
+            if (target == null) {
+                logger.error("Failed to find existing Firefly transaction to delete for Plaid id $plaidDeleteId")
+                continue
+            }
+
+            deletes.add(plaidDeleteId)
+        }
+
         return ConvertPollSyncResult(
             creates = creates,
             updates = updates,
-            deletes = plaidDeletedTxs,
+            deletes = deletes,
         )
     }
 
@@ -244,7 +285,7 @@ class TransactionConverter(
     ): SortByPairsBatchedResult {
         // Split Plaid transactions based on whether they are transfers or not
         val (transfers, nonTransfers) = txs.partition {
-            transferTypes.contains(it.personalFinanceCategory.toEnum().primary)
+            transferTypes.contains(it.personalFinanceCategory?.toEnum()?.primary)
         }
         val (singles, pairs) = sortByPairs(transfers, accountMap)
 
@@ -252,6 +293,22 @@ class TransactionConverter(
             singles as List<PlaidTransaction> + nonTransfers,
             pairs as List<Pair<PlaidTransaction, PlaidTransaction>>,
         )
+    }
+
+    fun filterFireflyCandidateTransferTxs(
+        input: List<TransactionRead>,
+    ): List<FireflyTransactionDto> {
+        return input
+            /**
+             * Filter out split transactions; we're not going to bother trying to match those up as transfers
+             */
+            .filter { it.attributes.transactions.size == 1 }
+            /**
+             * Also filter out transactions that are already transfers
+             */
+            .filter { it.attributes.transactions.first().type != TransactionTypeProperty.transfer }
+            .map { FireflyTransactionDto(it.id, it.attributes.transactions.first()) }
+
     }
 
     data class CandidatePair(
@@ -537,7 +594,7 @@ class TransactionConverter(
             destinationId = destinationId,
             destinationName = destinationName,
             tags = getFireflyCategoryTags(tx),
-            externalId = getExternalId(tx),
+            externalId = FireflyTransactionExternalIdIndexer.getExternalId(tx.transactionId),
             order = 0,
             reconciled = false,
             // Why the eff does the Firefly API require this
@@ -560,16 +617,16 @@ class TransactionConverter(
     protected suspend fun getFireflyCategoryTags(tx: PlaidTransaction): List<String> {
         val tagz = mutableListOf<String>()
         if (enablePrimaryCategorization) {
-            tagz.add(
-                primaryCategoryPrefix +
-                        convertScreamingSnakeCaseToKebabCase(tx.personalFinanceCategory.primary)
-            )
+            val primaryCat = tx.personalFinanceCategory?.primary
+            if (primaryCat != null) {
+                tagz.add(primaryCategoryPrefix + convertScreamingSnakeCaseToKebabCase(primaryCat))
+            }
         }
         if (enableDetailedCategorization) {
-            tagz.add(
-                detailedCategoryPrefix +
-                        convertScreamingSnakeCaseToKebabCase(tx.personalFinanceCategory.toEnum().detailed.name)
-            )
+            val detailedCat = tx.personalFinanceCategory?.toEnum()?.detailed?.name
+            if (detailedCat != null) {
+                tagz.add(detailedCategoryPrefix + convertScreamingSnakeCaseToKebabCase(detailedCat))
+            }
         }
         return tagz
     }
