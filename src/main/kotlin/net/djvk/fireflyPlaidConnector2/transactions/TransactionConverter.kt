@@ -264,7 +264,7 @@ class TransactionConverter(
                 continue
             }
 
-            deletes.add(plaidDeleteId)
+            deletes.add(target.id)
         }
 
         return ConvertPollSyncResult(
