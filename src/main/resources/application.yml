@@ -19,11 +19,16 @@ fireflyPlaidConnector2:
   # Acceptable values are any time zone name from https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
   timeZone: America/New_York
   # The maximum number of days apart transactions can be and still be candidates for matching up as a Firefly transfer.
-  # This is used to limit data we fetch from Firefly and retain in memory for matching up transfers.
+  # Must be less than fireflyPlaidConnector2.polled.existingFireflyPullWindowDays.
   transferMatchWindowDays: 3
   polled:
     # How often to run the poll sync process
     syncFrequencyMinutes: 10
+    # How many days in the past we should pull existing Firefly transactions for.
+    # These Firefly transactions are used for searching for targets for Plaid updates and deletes, as well as for
+    #   searching for transfer matches.
+    # Must be more than fireflyPlaidConnector2.transferMatchWindowDays
+    existingFireflyPullWindowDays: 5
   batch:
     # The number of days in the past to pull data for.
     maxSyncDays: 5
