@@ -53,7 +53,7 @@ jobs:
       - name: Build with Gradle
         uses: gradle/gradle-build-action@cfc50b189af149aeb55f94103f47753382d88d33
         with:
-          arguments: bootBuildImage --imageName=${{ env.IMAGE_NAME }}:latest
+          arguments: bootBuildImage --imageName=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
 #      - name: Build and push Docker image
 #        uses: docker/build-push-action@v3
@@ -73,9 +73,9 @@ jobs:
       
       - name: Push
         run: |
-          docker image tag ${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          docker image tag ${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-          docker image push --all-tags ${{ env.IMAGE_NAME }}
+          docker image tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker image tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          docker image push --all-tags ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
 #          readarray -t y <<<"${{ steps.meta.outputs.tags }}"
 #          for tag in $y; do
