@@ -53,7 +53,7 @@ jobs:
       - name: Build with Gradle
         uses: gradle/gradle-build-action@cfc50b189af149aeb55f94103f47753382d88d33
         with:
-          arguments: bootBuildImage --imageName=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          arguments: bootBuildImage --imageName=${{ env.IMAGE_NAME }}:latest
 
 #      - name: Build and push Docker image
 #        uses: docker/build-push-action@v3
@@ -72,6 +72,10 @@ jobs:
 #          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Push
         run: |
-          for tag in ${{ steps.meta.outputs.tags }}; do
-            docker push ${{ env.IMAGE_NAME }}:$tag
+# Parse metadata step output as an array
+          readarray -t y <<<"${{ steps.meta.outputs.tags }}"
+# Add each tag
+          for tag in $y; do
+            docker image tag ${{ env.IMAGE_NAME }}:latest $tag
           done
+          docker image push --all-tags ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
