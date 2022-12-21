@@ -75,7 +75,7 @@ jobs:
         run: |
           docker image tag ${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           docker image tag ${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-          docker image push --all-tags ${{ env.IMAGE_NAME }}:latest
+          docker image push --all-tags ${{ env.IMAGE_NAME }}
 
 #          readarray -t y <<<"${{ steps.meta.outputs.tags }}"
 #          for tag in $y; do
