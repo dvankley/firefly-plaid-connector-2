@@ -70,11 +70,10 @@ jobs:
 #        with:
 #          username: ${{ secrets.DOCKERHUB_USERNAME }}
 #          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
       - name: Push
         run: |
-# Parse metadata step output as an array
           readarray -t y <<<"${{ steps.meta.outputs.tags }}"
-# Add each tag
           for tag in $y; do
             docker image tag ${{ env.IMAGE_NAME }}:latest $tag
           done
