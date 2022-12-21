@@ -35,11 +35,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+#      - name: Extract metadata (tags, labels) for Docker
+#        id: meta
+#        uses: docker/metadata-action@v4
+#        with:
+#          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v3
@@ -73,8 +73,12 @@ jobs:
       
       - name: Push
         run: |
-          readarray -t y <<<"${{ steps.meta.outputs.tags }}"
-          for tag in $y; do
-            docker image tag ${{ env.IMAGE_NAME }}:latest $tag
-          done
-          docker image push --all-tags ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker image tag ${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker image tag ${{ env.IMAGE_NAME }}:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.GITHUB_REF }}
+          docker image push --all-tags ${{ env.IMAGE_NAME }}:latest
+
+#          readarray -t y <<<"${{ steps.meta.outputs.tags }}"
+#          for tag in $y; do
+#            docker image tag ${{ env.IMAGE_NAME }}:latest $tag
+#          done
+#          docker image push --all-tags ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
