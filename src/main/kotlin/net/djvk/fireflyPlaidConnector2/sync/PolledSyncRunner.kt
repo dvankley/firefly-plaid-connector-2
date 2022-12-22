@@ -40,6 +40,8 @@ class PolledSyncRunner(
     private val syncFrequencyMinutes: IntervalMinutes,
     @Value("\${fireflyPlaidConnector2.polled.existingFireflyPullWindowDays}")
     private val existingFireflyPullWindowDays: Int,
+    @Value("\${fireflyPlaidConnector2.polled.cursorFileDirectoryPath}")
+    private val cursorFileDirectoryPath: String,
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
 
@@ -52,6 +54,8 @@ class PolledSyncRunner(
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     private val fireflyPageCountMax = 20
+
+    val cursorFilePath = Path("$cursorFileDirectoryPath/plaid_sync_cursors.txt")
 
     private val terminated = AtomicBoolean(false)
     private lateinit var mainJob: Job
@@ -247,7 +251,6 @@ class PolledSyncRunner(
         }
     }
 
-    val cursorFilePath = Path("persistence/plaid_sync_cursors.txt")
 
     /**
      * Reads the cursor map from file storage, if it exists.

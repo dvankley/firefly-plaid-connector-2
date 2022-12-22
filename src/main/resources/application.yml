@@ -29,6 +29,10 @@ fireflyPlaidConnector2:
     #   searching for transfer matches.
     # Must be more than fireflyPlaidConnector2.transferMatchWindowDays
     existingFireflyPullWindowDays: 5
+    # Path to a directory that the application can use to store a file that tracks the state of the Plaid sync cursors.
+    # This path needs to be writeable by the application's user and needs to be persistent. If you're using Docker,
+    #   you may want to use a volume or bind mount for this so that cursor state is persisted between runs.
+    cursorFileDirectoryPath: persistence/
   batch:
     # The number of days in the past to pull data for.
     maxSyncDays: 5
