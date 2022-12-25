@@ -93,7 +93,6 @@ class PolledSyncRunner(
                     } while (response.hasMore)
                 }
                 writeCursorMap(cursorMap)
-                // TODO: Ensure the Dockerfile provides a volume for the cursor map
 
                 /**
                  * Periodic polling loop
@@ -257,9 +256,9 @@ class PolledSyncRunner(
      * If it doesn't exist, returns an empty map.
      */
     suspend fun readCursorMap(): MutableMap<PlaidAccessToken, PlaidSyncCursor> {
-        logger.trace("Reading Plaid sync cursor map from file")
         return withContext(Dispatchers.IO) {
             val file = cursorFilePath.toFile()
+            logger.trace("Reading Plaid sync cursor map from $file")
 
             if (!file.exists()) {
                 logger.trace("No existing Plaid sync cursor map found, starting from scratch")
@@ -280,7 +279,7 @@ class PolledSyncRunner(
      * Writes the cursor map to file storage.
      */
     suspend fun writeCursorMap(map: Map<PlaidAccessToken, PlaidSyncCursor>) {
-        logger.trace("Writing ${map.size} Plaid sync cursors to map file")
+        logger.trace("Writing ${map.size} Plaid sync cursors to map $cursorFilePath")
         return withContext(Dispatchers.IO) {
             cursorFilePath
                 .toFile()

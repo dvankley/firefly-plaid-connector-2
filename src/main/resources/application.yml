@@ -84,7 +84,6 @@ fireflyPlaidConnector2:
       # Set to true to enable tags for a Plaid transaction's detailed personal finance category
       # Optional, defaults to false
       enable: true
-      # Optional, defaults to "plaid-detailed-cat-"
       prefix: "plaid-detailed-cat-"
   # An array of accounts to sync from Plaid to Firefly
   accounts:
