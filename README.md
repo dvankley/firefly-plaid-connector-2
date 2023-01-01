@@ -3,8 +3,6 @@ Connector to pull Plaid financial data into the Firefly finance tool.
 
 Inspired by [firefly-plaid-connector](https://gitlab.com/GeorgeHahn/firefly-plaid-connector/).
 
-![Alt text](doc/images/thing.jpg "Title")
-
 # Running
 These are basic instructions for installing and running the connector. See further topics below for more details.
 
@@ -27,7 +25,7 @@ The latest version is available at `ghcr.io/dvankley/firefly-plaid-connector-2:l
 ### Requirements
 The application container requires the following:
 1. An application configuration file to read from.
-   2. See [below](#config) for details on configuration.
+   2. See [below](#configuration) for details on configuration.
    2. The `SPRING_CONFIG_LOCATION` environment variable can be 
    used to set the location (in the container) of the application configuration file.
 2. A directory to write the sync cursor file to (if run in polled mode).
@@ -70,6 +68,8 @@ convert it to Firefly transactions, and write them to Firefly.
 
 When started in this mode, the connector will not pull any past transactions, but will check for new transactions every 
 `fireflyPlaidConnector2.polled.syncFrequencyMinutes`.
+
+The last sync position of each account will be stored in `persistence/plaid_sync_cursors.txt`.
 
 ## Firefly Transfers
 The most complex part of the connector by far is the transfer matching logic.
@@ -162,7 +162,82 @@ and customizing it to your preferences. Each property should be well documented 
 This is my workflow for using the connector with Firefly.
 Of course, you don't have to use it exactly like this, but you may find this useful for reference in thinking through your own workflow.
 
-## 
+1. Set up your Plaid developer account, connect to your various financial institutions, and set up the connector
+application configuration file as described in [Configuration](#configuration).
+1. Plan your category mapping
+   2. Determine what Firefly [budgets](https://docs.firefly-iii.org/firefly-iii/concepts/budgets/)
+   and [categories](https://docs.firefly-iii.org/firefly-iii/concepts/categories/) you want to use.
+      3. Note the [functional difference](https://docs.firefly-iii.org/firefly-iii/concepts/budgets/#the-difference-between-budgets-and-categories) between the two.
+      4. In my case, as recommended by the Firefly documentation, we used budgets for expenses that are optional and
+      should have a limit (or target) amount each month. We used categories for expenses that are not optional or
+      should not have a limited amount each month.
+      5. You may want to just put everything in budgets (and not set amounts for categories that don't need them)
+      as it makes the charts and reports a bit easier to read.
+   5. Determine the mapping between your Firefly budgets/categories and Plaid categories.
+      6. The Plaid category taxonomy includes "primary" categories and "detailed" subcategories.
+         7. See the [official reference CSV](https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv)
+         8. Or if you prefer, see the connector's [parsed category list](https://github.com/dvankley/firefly-plaid-connector-2/blob/a31977ff28261593966df66e0e5ba6da07db9746/src/main/kotlin/net/djvk/fireflyPlaidConnector2/api/plaid/models/PersonalFinanceCategoryEnum.kt#L159).
+      9. Assign Plaid primary or detailed categories to your Firefly budgets and categories.
+         10. Each Plaid primary or detailed category may only be assigned to one Firefly budget or category.
+         11. Multiple different Plaid primary or detailed categories may be assigned to a single Firefly budget or category.
+             12. For example, you might assign both `FOOD_AND_DRINK.BEER_WINE_AND_LIQUOR` and `ENTERTAINMENT` to a 
+             "Spending" budget.
+         13. You can assign both a Plaid primary category and its detailed subcategories to different Firefly budgets
+         or categories; just make a careful note in these cases as you have to be careful when building the corresponding
+         Firefly rules later.
+2. Implement your Firefly budgets/categories and corresponding rules
+   3. Creating budgets and categories is straightforward. You do not need amounts for budgets at this time.
+   4. Rules
+      5. I created a rule group for Plaid category processing, then another rule group below it (and thus overriding it)
+      to handle case-by-case overrides of specific transactions that Plaid didn't categorize the way I wanted.
+      6. For Plaid category processing, my basic rule template is:
+         7. Trigger: when a transaction is created
+         8. Stop processing: `true`
+         9. Strict mode: `false`
+         10. Rule Triggers: "Any tag is...": `plaid-detailed-cat-coffee` etc.
+             11. Add additional tag triggers if multiple Plaid categories are assigned to a single Firefly budget or category
+         12. Action: "Set Budget (or Category) to...": corresponding Firefly budget or category name
+13. Save a snapshot of your Firefly database state in case the next steps don't do what you want
+    14. This step is optional but recommended.
+    15. If Firefly's using a Sqlite database, all you have to do is copy the database file. If using Mysql or Postgres,
+    you will need to use the appropriate backup and restore tooling.
+3. Run the connector in `batch` mode
+   4. I recommend doing this connector run on a higher-spec machine (i.e. your laptop or whatever) to give it all the
+   memory it needs. It doesn't matter where you run it as long as the connector can make a network connection to your
+   Firefly server.
+   5. The `fireflyPlaidConnector2.batch.maxSyncDays` property is up to you. I used 2 years for my initial backfill,
+   but your value will depend on your needs and patience for the process.
+      6. For what it's worth, the performance bottleneck is Firefly handling transaction inserts. This isn't a system
+      resource thing either, as it took about as long on my M1 Max as it did on a $5 VPS.
+   7. Keep an eye on the connector's logs to ensure nothing's gone wrong.
+4. Go through transaction reports and add additional rules for any categorization gaps
+   5. I went through transactions without budgets for each month and added new override rules as needed.
+      6. Transactions without budgets in Firefly can be viewed by navigating to Budgets in the sidebar, selecting
+      the desired month in the Period Navigator at the top, then clicking the "Expenses without budget" link in the
+      very bottom left of the window.
+   7. The "Apply rule X to a selection of your transactions" feature in the Firefly Automations UI is very useful
+   for filling in budget/category gaps after you've already run a transaction import.
+8. If anything's gone wrong, restore your database snapshot from before and try again.
+5. Set up the connector to run in `polled` mode.
+   6. I created a `systemd` unit to run the connector on my Debian VPS, your mileage may vary.
+      7. You will of course need to set up users, permissions, directories, etc. to support this.
+```systemd
+[Unit]
+Description=Firefly Plaid Connector 2
+
+[Service]
+WorkingDirectory=/opt/firefly-plaid-connector
+ExecStart=/bin/java -Xms128m -Xmx1024m -jar firefly-plaid-connector.jar --spring.profiles.active=prod
+User=firefly-plaid-connector
+Type=simple
+Restart=on-failure
+RestartSec=10
+Environment=“SPRING_CONFIG_LOCATION=/opt/firefly-plaid-connector/application-prod.yml”
+
+[Install]
+WantedBy=multi-user.target
+
+```
 
 # Troubleshooting
 ## Logs
@@ -197,13 +272,3 @@ is to have a test covering the changes you make.
   * I initially tried firefly-plaid-connector, but I had a few issues with it, and it didn't fully support Plaid categories.
 I tried to set it up for development locally, but after about an hour trying to get the right version of the .NET SDK to work,
 I decided I was better off making my own gravy. So here we are.
-
-
-
-Topics to ensure are covered:
-- Set PLAID_PRODUCTS=auth,transactions to just transactions
-- Run bulk mode from your local machine
-- Why we do delete/create rather than update (because Firefly does not support updating transaction types i.e. from deposit to transfer)
-- When setting initial balances, make sure that the balance in the account before bulk importing is 0
-- When setting initial balances, the Plaid balance endpoint doesn't return `lastUpdatedDatetime` for some reason, so if
-the balance isn't completely up to date in Plaid, your adjusted balance may be off by the last transaction (or few).

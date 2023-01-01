@@ -45,6 +45,7 @@ fireflyPlaidConnector2:
     setInitialBalance: false
   firefly:
 #    url: https://firefly.yourdomain.com
+    # Can be created in Firefly in Options->Profile->Oauth->Personal Access Tokens
 #    personalAccessToken: TOKAAAAAN
   plaid:
 #    url: https://development.plaid.com
@@ -101,3 +102,8 @@ fireflyPlaidConnector2:
 #      plaidAccountId: omgwtfbbq
   product:
     name: Firefly Plaid Connector 2
+logging:
+  level:
+    root: INFO
+    net:
+      djvk: DEBUG
