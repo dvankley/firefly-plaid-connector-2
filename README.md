@@ -110,8 +110,8 @@ Because the initial balance transaction amount is determined from the transactio
 recommend enabling this feature unless you're pulling all of the transactions you intend to backfill for a given
 account (as opposed to just filling in some gaps).
 
-Note that the [Plaid balance endpoint](https://plaid.com/docs/api/products/balance/#accountsbalanceget) is kind of
-crappy (or the underlying institution data sources are crappy). To wit:
+Note that the [Plaid balance endpoint](https://plaid.com/docs/api/products/balance/#accountsbalanceget)
+(or the underlying institution data source) is kind of crappy. To wit:
 * There is a `lastUpdatedDatetime` field in the response schema, but according to the Plaid documentation it's only
 populated for Capital One for whatever reason,
 and due to that it's impossible to tell exactly what point in time the Plaid balance represents.
@@ -138,7 +138,7 @@ Next up, you need to connect Plaid to your various financial institutions. The e
 I recommend copying the `.env.example` file to a new `.env` file, filling in your credentials, setting `PLAID_ENV` to
 `development` (unless you're using `production` for some reason), and setting `PLAID_PRODUCTS` to `transactions`. Note that
 if you leave `PLAID_PRODUCTS` set to the default `auth,transactions`, you won't be able to connect to some of the
-financial institutions you might expect to be able to because they don't support the `auth` product.
+financial institutions you might expect because they don't support the `auth` product.
 
 Once you have Quickstart running, just follow the UI prompts to connect to your financial institutions.
 For each institution you connect to, Plaid should give you an `item_id` and an `access_token`. Make a note of both.
@@ -165,6 +165,33 @@ Of course, you don't have to use it exactly like this, but you may find this use
 ## 
 
 # Troubleshooting
+## Logs
+The `logging` key in the application configuration file controls the logging level of various packages and classes in
+the application. Setting `logging.level.net.djvk` to `DEBUG` or `TRACE` is recommended if you're having problems,
+as it will log additional info that should help diagnose the issue.
+
+## Reporting Issues
+If you have an issue, feel free to report it via the Github issue tracker. I am actively maintaining this project
+but my available time is finite, so the odds of your issue being addressed will be increased if you include relevant
+logs at the `TRACE` level with your issue report.
+Writing a test case (i.e. in `net.djvk.fireflyPlaidConnector2.transactions.TransactionConverterTest`) to demonstrate
+your issue greatly increases the chances of me fixing it quickly. If test infrastructure is missing to test the
+element of the code you see an issue with, let me know and I can work on improving that.
+
+# Development
+## Setup
+Setup should be identical to any other Spring Boot/Gradle application.
+I recommend adding an additional configuration file (i.e. `application-dev.yml`) and enabling the corresponding Spring
+profile (i.e. `dev`) to allow you to persist and iterate on your local configuration.
+
+Connecting to the Plaid `development` environment as usual should be fine for development.
+I recommend setting up a local copy of Firefly for development purposes, especially one that you can easily backup
+and restore the database for to minimize your feedback loop on testing things.
+
+## Guidelines
+I don't currently have firm guidelines yet, but I will adopt some if I ever get contributions. For now the main guideline
+is to have a test covering the changes you make.
+
 # FAQ
 * Why did you make a new program rather than contributing to [firefly-plaid-connector](https://gitlab.com/GeorgeHahn/firefly-plaid-connector/)?
   * I initially tried firefly-plaid-connector, but I had a few issues with it, and it didn't fully support Plaid categories.
