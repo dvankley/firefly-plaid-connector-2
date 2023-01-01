@@ -93,7 +93,34 @@ transaction to a Firefly transfer, the existing Firefly transaction will be dele
 transaction will be created because the Firefly API does not support converting existing transaction types.
 
 ## Initial Balances
+If `fireflyPlaidConnector2.batch.setInitialBalance` is set to `true`, the connector will try to create "initial balance"
+transactions for each Firefly account that result in the current Firefly balance for each account equalling the
+current balance that [Plaid reports](https://plaid.com/docs/api/products/balance/#accountsbalanceget) for that account.
+This is determined by summing up all transactions pulled during
+this run for that account, then subtracting that from the Plaid-reported current balance to get the amount for the 
+"initial balance" transaction.
 
+For Firefly asset accounts that are of the "credit card" type, the Plaid balance is interpreted as a negative rather
+than a positive value. This is because Plaid always reports balances as positive (as far as I can tell), and it's
+assumed that a Firefly account set as a credit card is linked to a Plaid account that's also a credit card.
+
+Ensure that the current balance in the target Firefly accounts are 0 before using this feature.
+
+Because the initial balance transaction amount is determined from the transactions pulled in this batch, I do not
+recommend enabling this feature unless you're pulling all of the transactions you intend to backfill for a given
+account (as opposed to just filling in some gaps).
+
+Note that the [Plaid balance endpoint](https://plaid.com/docs/api/products/balance/#accountsbalanceget) is kind of
+crappy (or the underlying institution data sources are crappy). To wit:
+* There is a `lastUpdatedDatetime` field in the response schema, but according to the Plaid documentation it's only
+populated for Capital One for whatever reason,
+and due to that it's impossible to tell exactly what point in time the Plaid balance represents.
+  * The upshot of this is that if the Plaid balance is out of date by a transaction or two,
+  the "initial balance" transaction amount will also be a bit off. Plan accordingly.
+* According to the docs, the Plaid balance endpoint forces a synchronous update from the underlying institution data
+source, which can cause this part of the connector's run to take a while. The Plaid API timeout has been
+[adjusted](https://github.com/dvankley/firefly-plaid-connector-2/blob/a73fb692937984b64af34a8047c05fcef03cc088/src/main/kotlin/net/djvk/fireflyPlaidConnector2/api/ApiConfiguration.kt#L29)
+to account for this, but it still fails with surprising regularity.
 
 # Configuration
 ## Plaid
