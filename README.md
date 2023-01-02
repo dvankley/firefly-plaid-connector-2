@@ -164,63 +164,64 @@ Of course, you don't have to use it exactly like this, but you may find this use
 
 1. Set up your Plaid developer account, connect to your various financial institutions, and set up the connector
 application configuration file as described in [Configuration](#configuration).
-1. Plan your category mapping
-   2. Determine what Firefly [budgets](https://docs.firefly-iii.org/firefly-iii/concepts/budgets/)
+2. Plan your category mapping
+   1. Determine what Firefly [budgets](https://docs.firefly-iii.org/firefly-iii/concepts/budgets/)
    and [categories](https://docs.firefly-iii.org/firefly-iii/concepts/categories/) you want to use.
-      3. Note the [functional difference](https://docs.firefly-iii.org/firefly-iii/concepts/budgets/#the-difference-between-budgets-and-categories) between the two.
-      4. In my case, as recommended by the Firefly documentation, we used budgets for expenses that are optional and
+      1. Note the [functional difference](https://docs.firefly-iii.org/firefly-iii/concepts/budgets/#the-difference-between-budgets-and-categories) between the two.
+      2. In my case, as recommended by the Firefly documentation, we used budgets for expenses that are optional and
       should have a limit (or target) amount each month. We used categories for expenses that are not optional or
       should not have a limited amount each month.
-      5. You may want to just put everything in budgets (and not set amounts for categories that don't need them)
+      3. You may want to just put everything in budgets (and not set amounts for categories that don't need them)
       as it makes the charts and reports a bit easier to read.
-   5. Determine the mapping between your Firefly budgets/categories and Plaid categories.
-      6. The Plaid category taxonomy includes "primary" categories and "detailed" subcategories.
-         7. See the [official reference CSV](https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv)
-         8. Or if you prefer, see the connector's [parsed category list](https://github.com/dvankley/firefly-plaid-connector-2/blob/a31977ff28261593966df66e0e5ba6da07db9746/src/main/kotlin/net/djvk/fireflyPlaidConnector2/api/plaid/models/PersonalFinanceCategoryEnum.kt#L159).
-      9. Assign Plaid primary or detailed categories to your Firefly budgets and categories.
-         10. Each Plaid primary or detailed category may only be assigned to one Firefly budget or category.
-         11. Multiple different Plaid primary or detailed categories may be assigned to a single Firefly budget or category.
-             12. For example, you might assign both `FOOD_AND_DRINK.BEER_WINE_AND_LIQUOR` and `ENTERTAINMENT` to a 
-             "Spending" budget.
-         13. You can assign both a Plaid primary category and its detailed subcategories to different Firefly budgets
+   2. Determine the mapping between your Firefly budgets/categories and Plaid categories.
+      1. The Plaid category taxonomy includes "primary" categories and "detailed" subcategories.
+         1. See the [official reference CSV](https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv)
+         2. Or if you prefer, see the connector's [parsed category list](https://github.com/dvankley/firefly-plaid-connector-2/blob/a31977ff28261593966df66e0e5ba6da07db9746/src/main/kotlin/net/djvk/fireflyPlaidConnector2/api/plaid/models/PersonalFinanceCategoryEnum.kt#L159).
+      2. Assign Plaid primary or detailed categories to your Firefly budgets and categories.
+         1. Each Plaid primary or detailed category may only be assigned to one Firefly budget or category.
+         2. Multiple different Plaid primary or detailed categories may be assigned to a single Firefly budget or category.
+            1. For example, you might assign both `FOOD_AND_DRINK.BEER_WINE_AND_LIQUOR` and `ENTERTAINMENT` to a 
+            "Spending" budget.
+         3. You can assign both a Plaid primary category and its detailed subcategories to different Firefly budgets
          or categories; just make a careful note in these cases as you have to be careful when building the corresponding
          Firefly rules later.
-2. Implement your Firefly budgets/categories and corresponding rules
-   3. Creating budgets and categories is straightforward. You do not need amounts for budgets at this time.
-   4. Rules
-      5. I created a rule group for Plaid category processing, then another rule group below it (and thus overriding it)
+3. Implement your Firefly budgets/categories and corresponding rules
+   1. Creating budgets and categories is straightforward. You do not need amounts for budgets at this time.
+   2. Rules
+      1. I created a rule group for Plaid category processing, then another rule group below it (and thus overriding it)
       to handle case-by-case overrides of specific transactions that Plaid didn't categorize the way I wanted.
-      6. For Plaid category processing, my basic rule template is:
-         7. Trigger: when a transaction is created
-         8. Stop processing: `true`
-         9. Strict mode: `false`
-         10. Rule Triggers: "Any tag is...": `plaid-detailed-cat-coffee` etc.
-             11. Add additional tag triggers if multiple Plaid categories are assigned to a single Firefly budget or category
-         12. Action: "Set Budget (or Category) to...": corresponding Firefly budget or category name
-13. Save a snapshot of your Firefly database state in case the next steps don't do what you want
-    14. This step is optional but recommended.
-    15. If Firefly's using a Sqlite database, all you have to do is copy the database file. If using Mysql or Postgres,
-    you will need to use the appropriate backup and restore tooling.
-3. Run the connector in `batch` mode
-   4. I recommend doing this connector run on a higher-spec machine (i.e. your laptop or whatever) to give it all the
+      2. For Plaid category processing, my basic rule template is:
+         1. Trigger: when a transaction is created
+         2. Stop processing: `true`
+         3. Strict mode: `false`
+         4. Rule Triggers: "Any tag is...": `plaid-detailed-cat-coffee` etc.
+            1. Add additional tag triggers if multiple Plaid categories are assigned to a single Firefly budget or category
+         5. Action: "Set Budget (or Category) to...": corresponding Firefly budget or category name
+4. Save a snapshot of your Firefly database state in case the next steps don't do what you want
+   1. This step is optional but recommended.
+   2. If Firefly's using a Sqlite database, all you have to do is copy the database file. If using Mysql or Postgres,
+   you will need to use the appropriate backup and restore tooling.
+5. Run the connector in `batch` mode
+   1. I recommend doing this connector run on a higher-spec machine (i.e. your laptop or whatever) to give it all the
    memory it needs. It doesn't matter where you run it as long as the connector can make a network connection to your
    Firefly server.
-   5. The `fireflyPlaidConnector2.batch.maxSyncDays` property is up to you. I used 2 years for my initial backfill,
+   2. The `fireflyPlaidConnector2.batch.maxSyncDays` property is up to you. I used 2 years for my initial backfill,
    but your value will depend on your needs and patience for the process.
-      6. For what it's worth, the performance bottleneck is Firefly handling transaction inserts. This isn't a system
+      1. For what it's worth, the performance bottleneck is Firefly handling transaction inserts. This isn't a system
       resource thing either, as it took about as long on my M1 Max as it did on a $5 VPS.
-   7. Keep an eye on the connector's logs to ensure nothing's gone wrong.
-4. Go through transaction reports and add additional rules for any categorization gaps
-   5. I went through transactions without budgets for each month and added new override rules as needed.
-      6. Transactions without budgets in Firefly can be viewed by navigating to Budgets in the sidebar, selecting
+   3. Keep an eye on the connector's logs to ensure nothing's gone wrong.
+6. Go through transaction reports and add additional rules for any categorization gaps
+   1. I went through transactions without budgets for each month and added new override rules as needed.
+      1. Transactions without budgets in Firefly can be viewed by navigating to Budgets in the sidebar, selecting
       the desired month in the Period Navigator at the top, then clicking the "Expenses without budget" link in the
       very bottom left of the window.
-   7. The "Apply rule X to a selection of your transactions" feature in the Firefly Automations UI is very useful
+   2. The "Apply rule X to a selection of your transactions" feature in the Firefly Automations UI is very useful
    for filling in budget/category gaps after you've already run a transaction import.
-8. If anything's gone wrong, restore your database snapshot from before and try again.
-5. Set up the connector to run in `polled` mode.
-   6. I created a `systemd` unit to run the connector on my Debian VPS, your mileage may vary.
-      7. You will of course need to set up users, permissions, directories, etc. to support this.
+7. If anything's gone wrong, restore your database snapshot from before and try again.
+8. Set up the connector to run in `polled` mode.
+   1. I created a `systemd` unit to run the connector on my Debian VPS, your mileage may vary.
+      1. You will of course need to set up users, permissions, directories, etc. to support this.
+
 ```systemd
 [Unit]
 Description=Firefly Plaid Connector 2
