@@ -402,9 +402,6 @@ class TransactionConverter(
                 if ((aTxIds.size - usedATxIds.size) < 1 ||
                     (bTxIds.size - usedBTxIds.size) < 1
                 ) {
-                    // Output all leftover transactions as singles
-                    singlesOut.addAll(aTxs.filter { !usedATxIds.contains(it.transactionId) })
-                    singlesOut.addAll(bTxs.filter { !usedBTxIds.contains(it.transactionId) })
                     break
                 }
                 // If we already used either transaction A or B, then move on to the next candidate
@@ -441,6 +438,9 @@ class TransactionConverter(
                 usedATxIds.add(aTx.transactionId)
                 usedBTxIds.add(bTx.transactionId)
             }
+            // Output all leftover transactions as singles
+            singlesOut.addAll(aTxs.filter { !usedATxIds.contains(it.transactionId) })
+            singlesOut.addAll(bTxs.filter { !usedBTxIds.contains(it.transactionId) })
         }
 
         /**
