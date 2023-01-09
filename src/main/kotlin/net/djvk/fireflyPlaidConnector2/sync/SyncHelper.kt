@@ -64,7 +64,9 @@ class SyncHelper(
     }
 
     suspend fun optimisticInsertBatchIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
-        logger.debug("Optimistic insert of ${fireflyTxs.size} txs into Firefly")
+        if (fireflyTxs.isNotEmpty()) {
+            logger.debug("Optimistic insert of ${fireflyTxs.size} txs into Firefly")
+        }
         var index = 0
         for (fireflyTx in fireflyTxs) {
             try {
@@ -96,7 +98,9 @@ class SyncHelper(
      *  duplicate errors.
      */
     suspend fun pessimisticInsertBatchIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
-        logger.trace("Pessimistic insert of ${fireflyTxs.size} txs into Firefly")
+        if (fireflyTxs.isNotEmpty()) {
+            logger.debug("Pessimistic insert of ${fireflyTxs.size} txs into Firefly")
+        }
         for (fireflyTx in fireflyTxs) {
             try {
                 insertIntoFirefly(fireflyTx)
@@ -129,7 +133,9 @@ class SyncHelper(
     }
 
     suspend fun deleteBatchInFirefly(fireflyTxIds: List<FireflyTransactionId>) {
-        logger.trace("Delete batch of ${fireflyTxIds.size} txs in Firefly")
+        if (fireflyTxIds.isNotEmpty()) {
+            logger.debug("Delete batch of ${fireflyTxIds.size} txs in Firefly")
+        }
         for (fireflyTxId in fireflyTxIds) {
             fireflyTxApi.deleteTransaction(fireflyTxId)
         }
