@@ -149,7 +149,8 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     ),
     RENT_AND_UTILITIES_TELEPHONE(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.TELEPHONE),
     RENT_AND_UTILITIES_WATER(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.WATER),
-    RENT_AND_UTILITIES_OTHER_UTILITIES(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.OTHER_UTILITIES);
+    RENT_AND_UTILITIES_OTHER_UTILITIES(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.OTHER_UTILITIES),
+    OTHER(Primary.OTHER, OtherDetailed.OTHER);
 
     interface Detailed {
         val description: String
@@ -173,6 +174,7 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
         TRANSPORTATION(Direction.OUT),
         TRAVEL(Direction.OUT),
         RENT_AND_UTILITIES(Direction.OUT),
+        OTHER(Direction.OUT),
     }
 
     enum class IncomeDetailed(override val description: String) : Detailed {
@@ -325,6 +327,10 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
         TELEPHONE("Cell phone bills"),
         WATER("Water bills"),
         OTHER_UTILITIES("Other miscellaneous utility bills"),
+    }
+
+    enum class OtherDetailed(override val description: String) : Detailed {
+        OTHER("Other"),
     }
 }
 
