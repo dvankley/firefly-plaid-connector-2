@@ -22,7 +22,7 @@ The latest version is available at `ghcr.io/dvankley/firefly-plaid-connector-2:l
 
 ### Docker Compose
 1. Pull down the [docker-compose.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose.yml) file.
-   2. Ensure you copy the raw file with the exact same whitespace, otherwise you'll have issues. YAML is very picky about whitespace.
+   1. Ensure you copy the raw file with the exact same whitespace, otherwise you'll have issues. YAML is very picky about whitespace.
 2. Set the `HOST_APPLICATION_CONFIG_FILE_LOCATION` environment variable to point to your config file.
 3. Run `docker compose up`.
 ### Docker CLI
