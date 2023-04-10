@@ -7,8 +7,6 @@ Inspired by [firefly-plaid-connector](https://gitlab.com/GeorgeHahn/firefly-plai
 These are basic instructions for installing and running the connector. See further topics below for more details.
 
 ## Running the JAR Directly 
-This method is recommended due to it being simpler than Docker.
-
 1. Ensure you have a JRE or JDK for at least Java 17.
 2. Download the latest JAR from the [releases page](https://github.com/dvankley/firefly-plaid-connector-2/releases).
 2. Move the JAR to your desired working directory. 
@@ -22,7 +20,13 @@ See [below](#config) for details on configuration.
 New versions of the Docker image are pushed to GHCR with each release.
 The latest version is available at `ghcr.io/dvankley/firefly-plaid-connector-2:latest`.
 
-### Requirements
+### Docker Compose
+1. Pull down the [docker-compose.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose.yml) file.
+   2. Ensure you copy the raw file with the exact same whitespace, otherwise you'll have issues. YAML is very picky about whitespace.
+2. Set the `HOST_APPLICATION_CONFIG_FILE_LOCATION` environment variable to point to your config file.
+3. Run `docker compose up`.
+### Docker CLI
+#### Requirements
 The application container requires the following:
 1. An application configuration file to read from.
    2. See [below](#configuration) for details on configuration.
@@ -38,7 +42,7 @@ If using volumes you will need to use an intermediate container
 to write the application configuration file to a volume, as well as setting permissions to allow the
 application user `cnb` to write to the cursor file directory's volume.
 
-### Example Docker Run Command
+#### Example Docker Run Command
 ```shell
 docker run \
 --mount type=bind,source=/host/machine/application/config/file/directory,destination=/opt/fpc-config,readonly \
