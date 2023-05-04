@@ -104,7 +104,7 @@ class TransactionConverter(
             TRANSFER_IN, TRANSFER_OUT -> "Transfer"
             LOAN_PAYMENTS, BANK_FEES, ENTERTAINMENT, FOOD_AND_DRINK, GENERAL_MERCHANDISE, HOME_IMPROVEMENT,
             MEDICAL, PERSONAL_CARE, GENERAL_SERVICES, GOVERNMENT_AND_NON_PROFIT, TRANSPORTATION, TRAVEL,
-            RENT_AND_UTILITIES -> "Payment"
+            RENT_AND_UTILITIES, OTHER -> "Payment"
         }
         val sourceString = if (isSource) {
             "Source"

@@ -4,15 +4,11 @@ import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
 import kotlinx.coroutines.*
-import net.djvk.fireflyPlaidConnector2.api.firefly.apis.CategoriesApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
-import net.djvk.fireflyPlaidConnector2.api.firefly.models.AccountRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
-import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
-import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
+import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
-import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
@@ -45,7 +41,7 @@ class PolledSyncRunner(
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
 
-    private val plaidApi: PlaidApi,
+    private val plaidApiWrapper: PlaidApiWrapper,
     private val fireflyTxApi: TransactionsApi,
     private val syncHelper: SyncHelper,
 
@@ -142,8 +138,10 @@ class PolledSyncRunner(
                     val plaidDeletedTxs = mutableListOf<PlaidTransactionId>()
 
                     for ((accessToken, accountIds) in accountAccessTokenSequence) {
-                        logger.debug("Querying Plaid transaction sync endpoint for access token $accessToken " +
-                            " and account ids ${accountIds.joinToString("; ")}")
+                        logger.debug(
+                            "Querying Plaid transaction sync endpoint for access token $accessToken " +
+                                    " and account ids ${accountIds.joinToString("; ")}"
+                        )
                         val accountIdSet = accountIds.toSet()
                         /**
                          * Plaid transaction batch loop
@@ -192,9 +190,11 @@ class PolledSyncRunner(
                         plaidDeletedTxs,
                         existingFireflyTxs,
                     )
-                    logger.debug("Conversion result: ${convertResult.creates.size} creates; " +
-                            "${convertResult.updates.size} updates; " +
-                            "${convertResult.deletes.size} deletes;")
+                    logger.debug(
+                        "Conversion result: ${convertResult.creates.size} creates; " +
+                                "${convertResult.updates.size} updates; " +
+                                "${convertResult.deletes.size} deletes;"
+                    )
 
                     // Insert into Firefly
                     syncHelper.optimisticInsertBatchIntoFirefly(convertResult.creates)
@@ -318,7 +318,10 @@ class PolledSyncRunner(
     ): TransactionsSyncResponse {
         val request = getTransactionSyncRequest(accessToken, cursor, plaidBatchSize)
         try {
-            return plaidApi.transactionsSync(request).body()
+            return plaidApiWrapper.executeRequest(
+                { plaidApi -> plaidApi.transactionsSync(request) },
+                "transaction sync request"
+            ).body()
         } catch (cre: ClientRequestException) {
             logger.error("Error requesting Plaid transactions. Request: $request; ")
             throw cre

@@ -5,13 +5,9 @@ import io.ktor.client.network.sockets.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AccountsApi
-import net.djvk.fireflyPlaidConnector2.api.firefly.apis.CategoriesApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.FireflyApiError
-import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
-import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.clientIdHeader
-import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.secretHeader
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
@@ -30,20 +26,12 @@ class SyncHelper(
     private val fireflyAccessToken: String,
     private val fireflyTxApi: TransactionsApi,
     private val fireflyAccountsApi: AccountsApi,
-
-    private val plaidApi: PlaidApi,
-    @Value("\${fireflyPlaidConnector2.plaid.clientId}")
-    private val plaidClientId: String,
-    @Value("\${fireflyPlaidConnector2.plaid.secret}")
-    private val plaidSecret: String,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     fun setApiCreds() {
         // Spring components are singletons by default, so this should set these credentials for any other
-        //  component that also uses the plaidApi component
-        plaidApi.setApiKey(plaidClientId, clientIdHeader)
-        plaidApi.setApiKey(plaidSecret, secretHeader)
+        //  component that also uses these components
         fireflyTxApi.setAccessToken(fireflyAccessToken)
         fireflyAccountsApi.setAccessToken(fireflyAccessToken)
     }

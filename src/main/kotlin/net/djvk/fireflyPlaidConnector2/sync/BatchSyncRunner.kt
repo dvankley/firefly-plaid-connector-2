@@ -8,7 +8,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AccountsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.AccountRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
-import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
+import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
@@ -38,7 +38,7 @@ class BatchSyncRunner(
     @Value("\${fireflyPlaidConnector2.timeZone}")
     private val timeZoneString: String,
 
-    private val plaidApi: PlaidApi,
+    private val plaidApiWrapper: PlaidApiWrapper,
     private val syncHelper: SyncHelper,
     private val fireflyAccountsApi: AccountsApi,
 
@@ -95,7 +95,10 @@ class BatchSyncRunner(
                     )
                     val plaidTxs: List<Transaction>
                     try {
-                        plaidTxs = plaidApi.transactionsGet(request).body().transactions
+                        plaidTxs = plaidApiWrapper.executeRequest(
+                            { plaidApi -> plaidApi.transactionsGet(request) },
+                            "transaction get request"
+                        ).body().transactions
                         logger.debug("\tReceived a batch of ${plaidTxs.size} Plaid transactions")
                     } catch (cre: ClientRequestException) {
                         logger.error("Error requesting Plaid transactions. Request: $request; ")
@@ -127,14 +130,13 @@ class BatchSyncRunner(
 
             // Set initial balance transaction if configured
             if (setInitialBalance) {
-                setInitialBalances(allPlaidTxs, plaidApi, syncHelper, startDate)
+                setInitialBalances(allPlaidTxs, syncHelper, startDate)
             }
         }
     }
 
     suspend fun setInitialBalances(
         allPlaidTxs: Map<PlaidAccessToken, List<Transaction>>,
-        plaidApi: PlaidApi,
         syncHelper: SyncHelper,
         startDate: LocalDate,
     ) {
@@ -147,10 +149,15 @@ class BatchSyncRunner(
             logger.debug("Requesting balances for access token $accessToken and account ids ${accountIds.joinToString()}")
             val balances: AccountsGetResponse
             try {
-                balances = plaidApi.accountsBalanceGet(
-                    AccountsBalanceGetRequest(
-                        accessToken, null, null, AccountsBalanceGetRequestOptions(accountIds)
-                    )
+                balances = plaidApiWrapper.executeRequest(
+                    { plaidApi ->
+                        plaidApi.accountsBalanceGet(
+                            AccountsBalanceGetRequest(
+                                accessToken, null, null, AccountsBalanceGetRequestOptions(accountIds)
+                            )
+                        )
+                    },
+                    "transaction get request"
                 ).body()
             } catch (e: Exception) {
                 logger.error(
