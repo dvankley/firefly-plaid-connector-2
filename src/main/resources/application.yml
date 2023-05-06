@@ -52,9 +52,12 @@ fireflyPlaidConnector2:
 #    clientId: HI I'M A CLIENT ID
 #    secret: SECRETZ
     # The number of transactions to fetch from Plaid at a time.
-    # This doesn't have a major effect on anything as in both batch and sync mode we have to retain data sets larger
+    # This doesn't have a major effect as in both batch and sync mode we have to retain data sets larger
     #   than just the Plaid transaction batch in memory to try to match up transfers.
+    # Larger batch sizes can reduce rate limiting issues.
     batchSize: 100
+    # The number of times to retry a failed API call.
+    maxRetries: 3
   # Transaction categorization configuration (optional, defaults to disable categorization)
   # Plaid currently supplies two types of categorization information https://plaid.com/blog/transactions-categorization-taxonomy/
   # The current plan is to ignore the old categorization type because the new type (transaction.personalFinanceCategory)

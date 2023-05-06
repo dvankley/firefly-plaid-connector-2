@@ -21,7 +21,7 @@ import kotlin.time.Duration.Companion.minutes
 @Component
 class PlaidApiWrapper(
     private val plaidApi: PlaidApi,
-    @Value("\${fireflyPlaidConnector2.plaid.maxRetries}")
+    @Value("\${fireflyPlaidConnector2.plaid.maxRetries:3}")
     private val maxRetries: Int,
     @Value("\${fireflyPlaidConnector2.plaid.clientId}")
     private val plaidClientId: String,
