@@ -21,9 +21,19 @@ New versions of the Docker image are pushed to GHCR with each release.
 The latest version is available at `ghcr.io/dvankley/firefly-plaid-connector-2:latest`.
 
 ### Docker Compose
-1. Pull down the [docker-compose.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose.yml) file.
+1. Pull down the [docker-compose-polled.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose-polled.yml) and/or
+[docker-compose-batch.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose-batch.yml) files.
    1. Ensure you copy the raw file with the exact same whitespace, otherwise you'll have issues. YAML is very picky about whitespace.
-2. Set the `HOST_APPLICATION_CONFIG_FILE_LOCATION` environment variable to point to your config file.
+   2. The two different compose files correspond to different [run modes](https://github.com/dvankley/firefly-plaid-connector-2/blob/main/README.md#mode)
+   and contain suggested configuration for a given mode.
+2. Set the `HOST_APPLICATION_CONFIG_FILE_LOCATION` environment variable to point to your
+[config file](https://github.com/dvankley/firefly-plaid-connector-2/blob/main/README.md#configuration-file)
+(or just manually insert your path in the compose file).
+3. If running in polled mode (and thus using `docker-compose-polled.yml`), create a directory on your host machine
+that is writable by anyone, then pass its location in as `HOST_PERSISTENCE_DIRECTORY_LOCATION`.
+   1. This directory will store the polled mode cursor file, which is basically the polled mode's last synced state.
+   2. Using a bind mount for this is kind of crappy, but I couldn't find a good way to make the Spring Boot Gradle
+   bootBuildImage plugin set perms on a named volume cleanly. Suggestions welcome.
 3. Run `docker compose up`.
 ### Docker CLI
 #### Requirements

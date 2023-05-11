@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  app:
+    image: ghcr.io/dvankley/firefly-plaid-connector-2:latest
+    restart: always
+    volumes:
+        - type: bind
+          source: "${HOST_APPLICATION_CONFIG_FILE_LOCATION}"
+          target: /opt/fpc-config/application.yml
+          read_only: true
+        - type: bind
+          source: "${HOST_PERSISTENCE_DIRECTORY_LOCATION}"
+          target: /opt/fpc-cursors
+    environment:
+      - SPRING_CONFIG_LOCATION=/opt/fpc-config/application.yml
+      - FIREFLYPLAIDCONNECTOR2_POLLED_CURSORFILEDIRECTORYPATH=/opt/fpc-cursors
+
+volumes:
+  fpc-cursors:
