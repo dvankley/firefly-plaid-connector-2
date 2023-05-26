@@ -80,7 +80,10 @@ enum class Products(val value: kotlin.String) {
     employment("employment"),
 
     @JsonProperty(value = "recurring_transactions")
-    recurringTransactions("recurring_transactions");
+    recurringTransactions("recurring_transactions"),
+
+    @JsonProperty(value = "signal")
+    signal("signal");
 
     /**
      * Override toString() to avoid using the enum variable name as the value, and instead use
