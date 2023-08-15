@@ -37,7 +37,7 @@ dependencies {
     implementation("io.ktor:ktor-serialization-jackson:$ktorVersion")
     implementation("io.ktor:ktor-client-core-jvm:2.1.3")
     implementation("io.ktor:ktor-client-cio-jvm:2.1.3")
-    implementation("io.ktor:ktor-client-logging-jvm:2.1.3")
+    implementation("io.ktor:ktor-client-logging-jvm:2.3.3")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.mockito.kotlin:mockito-kotlin:4.0.0")
     testImplementation("org.assertj:assertj-core:3.11.1")
