@@ -3,6 +3,8 @@
 build/
 persistence/
 
+*.sql
+
 # Compiled class file
 *.class
 

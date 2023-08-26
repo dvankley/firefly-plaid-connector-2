@@ -304,9 +304,13 @@ class TransactionConverter(
              */
             .filter { it.attributes.transactions.size == 1 }
             /**
-             * Also filter out transactions that are already transfers
+             * Filter out transactions that are already transfers
              */
             .filter { it.attributes.transactions.first().type != TransactionTypeProperty.transfer }
+            /**
+             * Filter out reconciliation transactions; they can't possibly be part of a transfer
+             */
+            .filter { it.attributes.transactions.first().type != TransactionTypeProperty.reconciliation }
             .map { FireflyTransactionDto(it.id, it.attributes.transactions.first()) }
 
     }
