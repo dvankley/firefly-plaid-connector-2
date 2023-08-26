@@ -51,7 +51,7 @@ jobs:
         uses: gradle/wrapper-validation-action@e6e38bacfdf1a337459f332974bb2327a31aaf4b
 
       - name: Build with Gradle
-        uses: gradle/gradle-build-action@cfc50b189af149aeb55f94103f47753382d88d33
+        uses: gradle/gradle-build-action@a4cf152f482c7ca97ef56ead29bf08bcd953284c
         with:
           arguments: bootBuildImage --imageName=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
