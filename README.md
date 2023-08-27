@@ -287,3 +287,8 @@ is to have a test covering the changes you make.
   * I initially tried firefly-plaid-connector, but I had a few issues with it, and it didn't fully support Plaid categories.
 I tried to set it up for development locally, but after about an hour trying to get the right version of the .NET SDK to work,
 I decided I was better off making my own gravy. So here we are.
+
+# Other Resources
+## Budget Notifications via Home Assistant
+Do you, like me, run Home Assistant and also want real-ish time budget notifications? Then
+check out [this Node-RED](https://github.com/dvankley/homeassistant-firefly-budget-alert) flow.
