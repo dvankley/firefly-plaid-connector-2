@@ -40,7 +40,7 @@ dependencies {
     implementation("io.ktor:ktor-client-logging-jvm:2.3.4")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.1.0")
-    testImplementation("org.assertj:assertj-core:3.11.1")
+    testImplementation("org.assertj:assertj-core:3.24.2")
     testImplementation("io.ktor:ktor-client-mock-jvm:2.3.4")
 }
 
