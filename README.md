@@ -288,6 +288,9 @@ is to have a test covering the changes you make.
 I tried to set it up for development locally, but after about an hour trying to get the right version of the .NET SDK to work,
 I decided I was better off making my own gravy. So here we are.
 
+* When setting up access to a provider from the Plaid Quick Start I'm getting a message "Something went wrong".
+   * Several institutions are restricting accesss to development access accounts. An approved paid production account will need to be setup with Plaid to gain access to these accounts. 
+
 # Other Resources
 ## Budget Notifications via Home Assistant
 Do you, like me, run Home Assistant and also want real-ish time budget notifications? Then
