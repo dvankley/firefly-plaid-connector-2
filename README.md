@@ -289,7 +289,12 @@ I tried to set it up for development locally, but after about an hour trying to 
 I decided I was better off making my own gravy. So here we are.
 
 * When setting up access to a provider from the Plaid Quick Start I'm getting a message "Something went wrong".
-   * Several institutions are restricting accesss to development access accounts. An approved paid production account will need to be setup with Plaid to gain access to these accounts. 
+   * Several institutions are restricting accesss to development access accounts. An approved paid production account will need to be setup with Plaid to gain access to these accounts.
+ 
+* I'm getting an `ITEM_LOGIN_REQUIRED` error when running the connector.
+   * This happens when the credentials for one of the institutional accounts you've linked Plaid to has changed. You can find the access token for the account in
+   question on the log line above the exception log. Go through the [Connecting Accounts](https://github.com/dvankley/firefly-plaid-connector-2#connecting-accounts)
+   workflow again for that account, replace the access token and account id in your configuration file, and restart the connector.
 
 # Other Resources
 ## Budget Notifications via Home Assistant
