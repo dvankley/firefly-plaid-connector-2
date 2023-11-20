@@ -255,12 +255,30 @@ WantedBy=multi-user.target
 ```
 
 # Troubleshooting
-## Logs
+## Known Issues
+* When setting up access to a provider from the Plaid Quick Start I'm getting a message "Something went wrong".
+   * Several institutions are restricting accesss to development access accounts. An approved paid production account will need to be setup with Plaid to gain access to these accounts.
+ 
+* I'm getting an `ITEM_LOGIN_REQUIRED` error when running the connector.
+   * This typically happens when the credentials for one of the institutional accounts you've linked Plaid to has changed. You can find the access token for the account in
+   question on the log line above the exception log.
+   I personally have not had a chance to test the [update flow](https://plaid.com/docs/link/update-mode/#using-update-mode) yet, but that should be the preferred
+   method for fixing this issue once I've had a chance to verify it.
+   My usual method for correcting this issue has been going through the [Connecting Accounts](https://github.com/dvankley/firefly-plaid-connector-2#connecting-accounts)
+   workflow again for that account, replacing the access token and account id in your configuration file, and restarting the connector, but as discussed in
+   https://github.com/dvankley/firefly-plaid-connector-2/issues/39, that method permanently chews through
+   your Item quota.
+   * If you're getting this error frequently, check if you have MFA enabled on your account with the corresponding financial institution. MFA can cause
+   high freqency invalidation of Plaid account credentials, so consider disabling it. Obviously compromising your security posture to use this connector
+   isn't great, so hopefully your institution provides limited permission accounts for service access.
+   Also note that CIBC currently has [this issue](https://github.com/dvankley/firefly-plaid-connector-2/issues/39#issuecomment-1817557063).
+## New Issues
+### Logs
 The `logging` key in the application configuration file controls the logging level of various packages and classes in
 the application. Setting `logging.level.net.djvk` to `DEBUG` or `TRACE` is recommended if you're having problems,
 as it will log additional info that should help diagnose the issue.
 
-## Reporting Issues
+### Reporting Issues
 If you have an issue, feel free to report it via the Github issue tracker. I am actively maintaining this project
 but my available time is finite, so the odds of your issue being addressed will be increased if you include relevant
 logs at the `TRACE` level with your issue report.
@@ -287,14 +305,6 @@ is to have a test covering the changes you make.
   * I initially tried firefly-plaid-connector, but I had a few issues with it, and it didn't fully support Plaid categories.
 I tried to set it up for development locally, but after about an hour trying to get the right version of the .NET SDK to work,
 I decided I was better off making my own gravy. So here we are.
-
-* When setting up access to a provider from the Plaid Quick Start I'm getting a message "Something went wrong".
-   * Several institutions are restricting accesss to development access accounts. An approved paid production account will need to be setup with Plaid to gain access to these accounts.
- 
-* I'm getting an `ITEM_LOGIN_REQUIRED` error when running the connector.
-   * This happens when the credentials for one of the institutional accounts you've linked Plaid to has changed. You can find the access token for the account in
-   question on the log line above the exception log. Go through the [Connecting Accounts](https://github.com/dvankley/firefly-plaid-connector-2#connecting-accounts)
-   workflow again for that account, replace the access token and account id in your configuration file, and restart the connector.
 
 # Other Resources
 ## Budget Notifications via Home Assistant
