@@ -253,6 +253,33 @@ Environment=“SPRING_CONFIG_LOCATION=/opt/firefly-plaid-connector/application-p
 WantedBy=multi-user.target
 
 ```
+# Credential Updates
+   On occasion you will get an `ITEM_LOGIN_REQUIRED` error in the connector logs. This typically happens when the credentials
+   for one of the institutional accounts you've linked Plaid to have changed. You can find the access token for the account in question on the log line above the exception log.
+   There are two methods for resolving the error, described below.
+## Update Mode
+This is the recommended method of resolving this issue, although it's a bit more complex than create mode.
+1. Check out https://github.com/dvankley/quickstart
+2. Start the frontend and the java backend per the instructions in the README and verify that the frontend loads correctly at `https://localhost:3000`.
+3. Find the access token value for the account with the `ITEM_LOGIN_REQUIRED` error (it should be in the connector logs just above the exception).
+4. Navigate to `https://localhost:3000?input_access_token=$yourAccessTokenHere` in your browser.
+5. Complete the Link flow in the UI.
+
+After completing these steps, your account credentials should be fixed and the connector should resolve itself on its next run (assuming you're running in polled mode).
+
+## Create Mode
+This is basically just going through the [Connecting Accounts](https://github.com/dvankley/firefly-plaid-connector-2#connecting-accounts)
+   workflow again for that account, replacing the access token and account id in your configuration file, and restarting the connector.
+   Unfortunately, as discussed in
+   https://github.com/dvankley/firefly-plaid-connector-2/issues/39, this method permanently chews through your Item quota and is _NOT RECOMMENDED_ for that reason.
+   At this point it does have the advantage of being simpler than update mode, which is why it's listed here as an option.
+
+## Possible Causes of Frequent Occurrence
+If you're getting this error frequently, check if you have MFA enabled on your account with the corresponding financial institution. MFA can cause
+   high freqency invalidation of Plaid account credentials, so consider disabling it. Obviously compromising your security posture to use this connector
+   isn't great, so hopefully your institution provides limited permission accounts for service access.
+   
+   Also note that CIBC currently has [this issue](https://github.com/dvankley/firefly-plaid-connector-2/issues/39#issuecomment-1817557063).
 
 # Troubleshooting
 ## Known Issues
@@ -260,18 +287,8 @@ WantedBy=multi-user.target
    * Several institutions are restricting accesss to development access accounts. An approved paid production account will need to be setup with Plaid to gain access to these accounts.
  
 * I'm getting an `ITEM_LOGIN_REQUIRED` error when running the connector.
-   * This typically happens when the credentials for one of the institutional accounts you've linked Plaid to has changed. You can find the access token for the account in
-   question on the log line above the exception log.
-   I personally have not had a chance to test the [update flow](https://plaid.com/docs/link/update-mode/#using-update-mode) yet, but that should be the preferred
-   method for fixing this issue once I've had a chance to verify it.
-   My usual method for correcting this issue has been going through the [Connecting Accounts](https://github.com/dvankley/firefly-plaid-connector-2#connecting-accounts)
-   workflow again for that account, replacing the access token and account id in your configuration file, and restarting the connector, but as discussed in
-   https://github.com/dvankley/firefly-plaid-connector-2/issues/39, that method permanently chews through
-   your Item quota.
-   * If you're getting this error frequently, check if you have MFA enabled on your account with the corresponding financial institution. MFA can cause
-   high freqency invalidation of Plaid account credentials, so consider disabling it. Obviously compromising your security posture to use this connector
-   isn't great, so hopefully your institution provides limited permission accounts for service access.
-   Also note that CIBC currently has [this issue](https://github.com/dvankley/firefly-plaid-connector-2/issues/39#issuecomment-1817557063).
+   * See https://github.com/dvankley/firefly-plaid-connector-2#credential-updates 
+
 ## New Issues
 ### Logs
 The `logging` key in the application configuration file controls the logging level of various packages and classes in
