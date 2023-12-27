@@ -35,7 +35,7 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.43.2.2")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
     implementation("io.ktor:ktor-serialization-jackson:$ktorVersion")
-    implementation("io.ktor:ktor-client-core-jvm:2.3.5")
+    implementation("io.ktor:ktor-client-core-jvm:2.3.6")
     implementation("io.ktor:ktor-client-cio-jvm:2.3.4")
     implementation("io.ktor:ktor-client-logging-jvm:2.3.4")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
