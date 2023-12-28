@@ -44,6 +44,14 @@ internal class TransactionConverterTest {
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf(
                         TransactionRead(
+                            "thing", "wrongTypeFireflyTransactionId",
+                            FireflyFixtures.getTransaction(
+                                type = TransactionTypeProperty.openingBalance,
+                                amount = "2222.33",
+                                sourceId = "3",
+                            ), ObjectLink()
+                        ),
+                        TransactionRead(
                             "thing", "fireflyTransactionId",
                             FireflyFixtures.getTransaction(
                                 type = TransactionTypeProperty.withdrawal,

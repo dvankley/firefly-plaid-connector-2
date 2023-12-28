@@ -19,6 +19,15 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTran
 typealias PlaidAccountId = String
 typealias FireflyAccountId = Int
 
+/**
+ * These are the only Firefly transaction types that are eligible to be converted into transfers.
+ * All other transaction types will not be considered for conversion.
+ */
+val fireflyTxTypesEligibleForConversion = hashSetOf(
+    TransactionTypeProperty.deposit,
+    TransactionTypeProperty.withdrawal,
+)
+
 @Component
 class TransactionConverter(
     @Value("\${fireflyPlaidConnector2.useNameForDestination:true}")
@@ -304,13 +313,11 @@ class TransactionConverter(
              */
             .filter { it.attributes.transactions.size == 1 }
             /**
-             * Filter out transactions that are already transfers
+             * Filter out transactions of ineligible types
              */
-            .filter { it.attributes.transactions.first().type != TransactionTypeProperty.transfer }
-            /**
-             * Filter out reconciliation transactions; they can't possibly be part of a transfer
-             */
-            .filter { it.attributes.transactions.first().type != TransactionTypeProperty.reconciliation }
+            .filter { fireflyTxTypesEligibleForConversion.contains(
+                it.attributes.transactions.first().type
+            ) }
             .map { FireflyTransactionDto(it.id, it.attributes.transactions.first()) }
 
     }
