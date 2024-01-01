@@ -36,7 +36,7 @@ dependencies {
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
     implementation("io.ktor:ktor-serialization-jackson:$ktorVersion")
     implementation("io.ktor:ktor-client-core-jvm:2.3.6")
-    implementation("io.ktor:ktor-client-cio-jvm:2.3.4")
+    implementation("io.ktor:ktor-client-cio-jvm:2.3.7")
     implementation("io.ktor:ktor-client-logging-jvm:2.3.4")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
