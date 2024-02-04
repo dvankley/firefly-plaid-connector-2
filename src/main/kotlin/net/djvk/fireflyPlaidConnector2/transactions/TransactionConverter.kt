@@ -608,8 +608,6 @@ class TransactionConverter(
             externalId = FireflyTransactionExternalIdIndexer.getExternalId(tx.transactionId),
             order = 0,
             reconciled = false,
-            // Why the eff does the Firefly API require this
-            foreignAmount = "0",
             // These are all explicitly required, but only for updates
             currencyId = fireflyTx?.tx?.currencyId,
             currencyCode = fireflyTx?.tx?.currencyCode,

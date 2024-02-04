@@ -231,8 +231,6 @@ class BatchSyncRunner(
                                 destinationId = if (initialBalance < 0) null else fireflyAccountId.toString(),
                                 order = 0,
                                 reconciled = false,
-                                // Why the eff does the Firefly API require this
-                                foreignAmount = "0",
                             )
                         )
                     )
