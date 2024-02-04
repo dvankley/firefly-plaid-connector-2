@@ -64,7 +64,7 @@ data class RecurrenceTransaction(
 
     /* Foreign amount of the transaction. */
     @field:JsonProperty("foreign_amount")
-    val foreignAmount: kotlin.String? = null,
+    val foreignAmount: kotlin.Int? = null,
 
     /* Submit either a currency_id or a currency_code. */
     @field:JsonProperty("currency_id")

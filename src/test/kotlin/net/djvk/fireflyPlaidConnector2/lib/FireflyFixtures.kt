@@ -29,7 +29,7 @@ object FireflyFixtures {
         foreignCurrencyCode: String? = null,
         foreignCurrencySymbol: String? = null,
         foreignCurrencyDecimalPlaces: Int? = null,
-        foreignAmount: String? = "0",
+        foreignAmount: Int? = null,
         sourceName: String? = null,
         sourceIban: String? = null,
         sourceType: AccountTypeProperty? = null,

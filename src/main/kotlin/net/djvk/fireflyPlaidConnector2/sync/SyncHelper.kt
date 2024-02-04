@@ -4,6 +4,7 @@ import io.ktor.client.call.*
 import io.ktor.client.network.sockets.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AboutApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AccountsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
@@ -11,6 +12,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.FireflyApiError
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
+import net.djvk.fireflyPlaidConnector2.versionManagement.VersionComparison
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -18,22 +20,35 @@ import org.springframework.stereotype.Component
 typealias PlaidAccessToken = String
 typealias PlaidAccountId = String
 
+const val MINIMUM_FIREFLY_VERSION = "6.1.2"
+
 @Component
 class SyncHelper(
     private val plaidAccountsConfig: AccountConfigs,
 
     @Value("\${fireflyPlaidConnector2.firefly.personalAccessToken}")
     private val fireflyAccessToken: String,
+    private val fireflyAboutApi: AboutApi,
     private val fireflyTxApi: TransactionsApi,
     private val fireflyAccountsApi: AccountsApi,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
-    fun setApiCreds() {
+    suspend fun setApiCreds() {
         // Spring components are singletons by default, so this should set these credentials for any other
         //  component that also uses these components
         fireflyTxApi.setAccessToken(fireflyAccessToken)
         fireflyAccountsApi.setAccessToken(fireflyAccessToken)
+        fireflyAboutApi.setAccessToken(fireflyAccessToken)
+        validateFireflyApiVersion()
+    }
+
+    protected suspend fun validateFireflyApiVersion() {
+        val fireflyVersion = fireflyAboutApi.getAbout().body().data.version
+        if (!VersionComparison.isVersionSufficient(MINIMUM_FIREFLY_VERSION, fireflyVersion)) {
+            throw RuntimeException("This version of the connector requires at least version $MINIMUM_FIREFLY_VERSION " +
+                "of Firefly; version $fireflyVersion found")
+        }
     }
 
     fun getAllPlaidAccessTokenAccountIdSets():
