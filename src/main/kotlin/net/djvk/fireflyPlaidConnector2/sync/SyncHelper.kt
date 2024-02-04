@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component
 typealias PlaidAccessToken = String
 typealias PlaidAccountId = String
 
-const val MINIMUM_FIREFLY_VERSION = "v6.1.2"
+const val MINIMUM_FIREFLY_VERSION = "6.1.2"
 
 @Component
 class SyncHelper(
@@ -39,6 +39,7 @@ class SyncHelper(
         //  component that also uses these components
         fireflyTxApi.setAccessToken(fireflyAccessToken)
         fireflyAccountsApi.setAccessToken(fireflyAccessToken)
+        fireflyAboutApi.setAccessToken(fireflyAccessToken)
         validateFireflyApiVersion()
     }
 
