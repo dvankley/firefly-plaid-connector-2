@@ -14,7 +14,7 @@ plugins {
 }
 
 group = "net.djvk"
-version = "1.0.9"
+version = "1.1.0"
 java.sourceCompatibility = JavaVersion.VERSION_17
 
 repositories {
