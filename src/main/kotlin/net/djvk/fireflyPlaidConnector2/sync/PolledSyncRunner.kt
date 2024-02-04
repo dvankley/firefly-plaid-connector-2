@@ -57,9 +57,9 @@ class PolledSyncRunner(
     private lateinit var mainJob: Job
 
     override fun run() {
-        syncHelper.setApiCreds()
-
         runBlocking {
+            syncHelper.setApiCreds()
+
             mainJob = launch {
                 val cursorMap = readCursorMap()
                 val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()

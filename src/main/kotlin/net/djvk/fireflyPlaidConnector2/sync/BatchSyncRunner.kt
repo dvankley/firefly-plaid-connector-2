@@ -1,8 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
-import io.ktor.client.call.*
 import io.ktor.client.plugins.*
-import io.ktor.http.*
 import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AccountsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.AccountRead
@@ -49,14 +47,13 @@ class BatchSyncRunner(
     private val timeZone = TimeZone.getTimeZone(timeZoneString)
 
     override fun run() {
-        syncHelper.setApiCreds()
-
         val allPlaidTxs = mutableMapOf<PlaidAccessToken, MutableList<Transaction>>()
 
         val startDate = LocalDate.now().minusDays(syncDays.toLong())
         val endDate = LocalDate.now()
 
         runBlocking {
+            syncHelper.setApiCreds()
             val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
             for ((accessToken, accountIds) in accountAccessTokenSequence) {
                 logger.debug("Fetching Plaid data for access token $accessToken and account ids ${accountIds.joinToString()}")

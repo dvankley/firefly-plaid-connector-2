@@ -1,6 +1,5 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
-import io.ktor.client.engine.mock.*
 import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
@@ -10,7 +9,7 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments

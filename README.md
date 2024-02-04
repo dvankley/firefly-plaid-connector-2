@@ -4,6 +4,8 @@ Connector to pull Plaid financial data into the Firefly finance tool.
 Inspired by [firefly-plaid-connector](https://gitlab.com/GeorgeHahn/firefly-plaid-connector/).
 
 # Running
+Please note this version of the connector requires at least version v6.1.2 of Firefly.
+
 These are basic instructions for installing and running the connector. See further topics below for more details.
 
 ## Running the JAR Directly 

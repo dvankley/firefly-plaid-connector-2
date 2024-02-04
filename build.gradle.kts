@@ -39,6 +39,7 @@ dependencies {
     implementation("io.ktor:ktor-client-cio-jvm:2.3.4")
     implementation("io.ktor:ktor-client-logging-jvm:2.3.4")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+    implementation("org.semver4j:semver4j:5.2.2")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.1.0")
     testImplementation("org.assertj:assertj-core:3.24.2")
