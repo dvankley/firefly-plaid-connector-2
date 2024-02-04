@@ -43,7 +43,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.1.0")
     testImplementation("org.assertj:assertj-core:3.24.2")
-    testImplementation("io.ktor:ktor-client-mock-jvm:2.3.4")
+    testImplementation("io.ktor:ktor-client-mock-jvm:2.3.8")
 }
 
 tasks.withType<KotlinCompile> {
