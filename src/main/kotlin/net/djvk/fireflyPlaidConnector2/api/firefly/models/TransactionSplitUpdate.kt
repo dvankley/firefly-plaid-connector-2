@@ -136,7 +136,7 @@ data class TransactionSplitUpdate(
 
     /* The amount in a foreign currency. */
     @field:JsonProperty("foreign_amount")
-    val foreignAmount: kotlin.Int? = null,
+    val foreignAmount: kotlin.String? = null,
 
     /* Name of the source account. For a withdrawal or a transfer, this must always be an asset account. For deposits, this must be a revenue account. Can be used instead of the source_id. If the transaction is a deposit, the source_name can be filled in freely: the account will be created based on the name. */
     @field:JsonProperty("source_name")

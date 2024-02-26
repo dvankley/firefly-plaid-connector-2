@@ -101,7 +101,7 @@ data class TransactionSplitStore(
 
     /* The amount in a foreign currency. */
     @field:JsonProperty("foreign_amount")
-    val foreignAmount: kotlin.Int? = null,
+    val foreignAmount: kotlin.String? = null,
 
     /* Currency ID of the foreign currency. Default is null. Is required when you submit a foreign amount. */
     @field:JsonProperty("foreign_currency_id")
