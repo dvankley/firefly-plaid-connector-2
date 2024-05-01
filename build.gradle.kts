@@ -7,10 +7,10 @@ val ktorVersion: String by project
 val jacksonVersion: String by project
 
 plugins {
-    id("org.springframework.boot") version "3.2.3"
+    id("org.springframework.boot") version "3.2.5"
     id("io.spring.dependency-management") version "1.1.4"
-    kotlin("jvm") version "1.9.22"
-    kotlin("plugin.spring") version "1.9.22"
+    kotlin("jvm") version "1.9.23"
+    kotlin("plugin.spring") version "1.9.23"
 }
 
 group = "net.djvk"
@@ -32,18 +32,18 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
-    implementation("org.xerial:sqlite-jdbc:3.44.1.0")
+    implementation("org.xerial:sqlite-jdbc:3.45.3.0")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
     implementation("io.ktor:ktor-serialization-jackson:$ktorVersion")
-    implementation("io.ktor:ktor-client-core-jvm:2.3.8")
-    implementation("io.ktor:ktor-client-cio-jvm:2.3.8")
-    implementation("io.ktor:ktor-client-logging-jvm:2.3.4")
+    implementation("io.ktor:ktor-client-core-jvm:2.3.10")
+    implementation("io.ktor:ktor-client-cio-jvm:2.3.10")
+    implementation("io.ktor:ktor-client-logging-jvm:2.3.10")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-    implementation("org.semver4j:semver4j:5.2.2")
+    implementation("org.semver4j:semver4j:5.3.0")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.3.1")
     testImplementation("org.assertj:assertj-core:3.25.3")
-    testImplementation("io.ktor:ktor-client-mock-jvm:2.3.8")
+    testImplementation("io.ktor:ktor-client-mock-jvm:2.3.10")
 }
 
 tasks.withType<KotlinCompile> {
