@@ -3,6 +3,7 @@ version: '3.8'
 services:
   app:
     image: ghcr.io/dvankley/firefly-plaid-connector-2:latest
+    hostname: plaidconnector
     volumes:
         - type: bind
           source: "${HOST_APPLICATION_CONFIG_FILE_LOCATION}"
