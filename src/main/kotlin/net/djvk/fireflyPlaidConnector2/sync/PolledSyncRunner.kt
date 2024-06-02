@@ -40,6 +40,8 @@ class PolledSyncRunner(
     private val cursorFileDirectoryPath: String,
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
+    @Value("false")
+    private val allowItemToFail: Boolean,
 
     private val plaidApiWrapper: PlaidApiWrapper,
     private val fireflyTxApi: TransactionsApi,
@@ -152,11 +154,20 @@ class PolledSyncRunner(
                              *
                              * In sync mode we fetch and retain all Plaid transactions that have changed since the last poll.
                              */
-                            val response = executeTransactionSyncRequest(
-                                accessToken,
-                                cursorMap[accessToken],
-                                plaidBatchSize
-                            )
+                            var response: TransactionsSyncResponse? = null;
+                            try {
+                                response = executeTransactionSyncRequest(
+                                    accessToken,
+                                    cursorMap[accessToken],
+                                    plaidBatchSize
+                                )
+                            } catch (cre: ClientRequestException) {
+                                if (allowItemToFail) {
+                                    logger.warn("Querying transactions for access token $accessToken failed, continuing on to the next access token")
+                                    continue;
+                                } else throw cre
+                            }
+
                             cursorMap[accessToken] = response.nextCursor
                             logger.debug(
                                 "Received batch of sync updates for access token $accessToken: " +
@@ -172,7 +183,7 @@ class PolledSyncRunner(
                             plaidDeletedTxs.addAll(response.removed.mapNotNull { it.transactionId })
 
                             // Keep going until we get all the transactions
-                        } while (response.hasMore)
+                        } while (response?.hasMore == true)
                     }
                     /**
                      * Don't write the cursor map here, wait until after we've successfully committed the transactions

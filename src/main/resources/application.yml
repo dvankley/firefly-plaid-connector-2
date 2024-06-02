@@ -33,6 +33,9 @@ fireflyPlaidConnector2:
     # This path needs to be writeable by the application's user and needs to be persistent. If you're using Docker,
     #   you may want to use a volume or bind mount for this so that cursor state is persisted between runs.
     cursorFileDirectoryPath: persistence/
+    # Configuration element specifying whether the remainder of the poll sync session should continue if one item
+    # has failed to fetch from PLaid for any reason.
+    allowItemToFail: false
   batch:
     # The number of days in the past to pull data for.
     maxSyncDays: 5
