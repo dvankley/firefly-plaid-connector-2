@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
 import java.time.LocalDate
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.Path
 import kotlin.time.Duration.Companion.minutes
@@ -40,7 +41,7 @@ class PolledSyncRunner(
     private val cursorFileDirectoryPath: String,
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
-    @Value("false")
+    @Value("\${fireflyPlaidConnector2.polled.allowItemToFail}")
     private val allowItemToFail: Boolean,
 
     private val plaidApiWrapper: PlaidApiWrapper,
@@ -154,19 +155,11 @@ class PolledSyncRunner(
                              *
                              * In sync mode we fetch and retain all Plaid transactions that have changed since the last poll.
                              */
-                            var response: TransactionsSyncResponse? = null;
-                            try {
-                                response = executeTransactionSyncRequest(
-                                    accessToken,
-                                    cursorMap[accessToken],
-                                    plaidBatchSize
-                                )
-                            } catch (cre: ClientRequestException) {
-                                if (allowItemToFail) {
-                                    logger.warn("Querying transactions for access token $accessToken failed, continuing on to the next access token")
-                                    continue;
-                                } else throw cre
-                            }
+                            val response = executeTransactionSyncRequest(
+                                accessToken,
+                                cursorMap[accessToken],
+                                plaidBatchSize
+                            )
 
                             cursorMap[accessToken] = response.nextCursor
                             logger.debug(
@@ -183,7 +176,7 @@ class PolledSyncRunner(
                             plaidDeletedTxs.addAll(response.removed.mapNotNull { it.transactionId })
 
                             // Keep going until we get all the transactions
-                        } while (response?.hasMore == true)
+                        } while (response.hasMore)
                     }
                     /**
                      * Don't write the cursor map here, wait until after we've successfully committed the transactions
@@ -335,7 +328,10 @@ class PolledSyncRunner(
             ).body()
         } catch (cre: ClientRequestException) {
             logger.error("Error requesting Plaid transactions. Request: $request; ")
-            throw cre
+            if (allowItemToFail) {
+                logger.warn("Querying transactions for access token $accessToken failed, allowing failure and continuing on to the next access token")
+                return emptyPlaidResponse()
+            } else throw cre
         }
     }
 
@@ -343,5 +339,17 @@ class PolledSyncRunner(
         logger.info("Shutting down ${this::class}")
         terminated.set(true)
         mainJob.cancel()
+    }
+
+    companion object {
+        fun emptyPlaidResponse(): TransactionsSyncResponse =
+            TransactionsSyncResponse(
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                "",
+                false,
+                ""
+            )
     }
 }
