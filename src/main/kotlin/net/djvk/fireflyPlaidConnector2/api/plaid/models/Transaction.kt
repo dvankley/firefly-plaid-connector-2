@@ -21,7 +21,6 @@
 package net.djvk.fireflyPlaidConnector2.api.plaid.models
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import net.djvk.fireflyPlaidConnector2.constants.Direction
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.PlaidAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.SortableTransaction
@@ -171,14 +170,6 @@ data class Transaction(
         special("special"),
         @JsonProperty(value = "unresolved")
         unresolved("unresolved");
-    }
-
-    fun getDirection(): Direction {
-        return if (amount > 0) {
-            Direction.OUT
-        } else {
-            Direction.IN
-        }
     }
 
     override fun getTimestamp(zoneId: ZoneId): OffsetDateTime {

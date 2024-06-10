@@ -73,6 +73,14 @@ class TransactionConverter(
                 else -> throw IllegalArgumentException("Can't get Plaid amount for a Firefly transaction of type ${tx.tx.type}")
             }
         }
+
+        fun getTransactionDirection(tx: PlaidTransaction): Direction {
+            return if (tx.amount > 0) {
+                Direction.OUT
+            } else {
+                Direction.IN
+            }
+        }
     }
 
     fun getTxTimestamp(tx: PlaidTransaction): OffsetDateTime {
@@ -470,7 +478,7 @@ class TransactionConverter(
         val sourceName: String?
         val destinationId: String?
         val destinationName: String?
-        if (tx.getDirection() == Direction.IN) {
+        if (getTransactionDirection(tx) == Direction.IN) {
             destinationId = fireflyAccountId
             destinationName = null
 
