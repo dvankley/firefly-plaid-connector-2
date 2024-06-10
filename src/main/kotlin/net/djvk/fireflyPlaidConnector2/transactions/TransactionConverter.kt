@@ -4,10 +4,9 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategoryEnum.Primary.*
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.constants.Direction
+import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum.Primary.*
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -91,12 +90,11 @@ class TransactionConverter(
             ?: if (useNameForDestination) {
                 tx.name.take(255)
             } else {
-                val cat = tx.personalFinanceCategory?.toEnum()
-                if (cat == null) {
+                if (tx.personalFinanceCategory == null) {
                     return "Unknown"
-                } else {
-                    getUnknownSourceOrDestinationName(cat, isSource)
                 }
+                val cat = PersonalFinanceCategoryEnum.from(tx.personalFinanceCategory)
+                getUnknownSourceOrDestinationName(cat, isSource)
             }
     }
 
@@ -294,7 +292,7 @@ class TransactionConverter(
     ): SortByPairsBatchedResult {
         // Split Plaid transactions based on whether they are transfers or not
         val (transfers, nonTransfers) = txs.partition {
-            transferTypes.contains(it.personalFinanceCategory?.toEnum()?.primary)
+            it.personalFinanceCategory != null && transferTypes.contains(PersonalFinanceCategoryEnum.from(it.personalFinanceCategory).primary)
         }
         val (singles, pairs) = sortByPairs(transfers, accountMap)
 
@@ -625,17 +623,16 @@ class TransactionConverter(
      */
     protected suspend fun getFireflyCategoryTags(tx: PlaidTransaction): List<String> {
         val tagz = mutableListOf<String>()
+        if (tx.personalFinanceCategory == null) {
+            return tagz
+        }
         if (enablePrimaryCategorization) {
-            val primaryCat = tx.personalFinanceCategory?.primary
-            if (primaryCat != null) {
-                tagz.add(primaryCategoryPrefix + convertScreamingSnakeCaseToKebabCase(primaryCat))
-            }
+            val primaryCat = tx.personalFinanceCategory.primary
+            tagz.add(primaryCategoryPrefix + convertScreamingSnakeCaseToKebabCase(primaryCat))
         }
         if (enableDetailedCategorization) {
-            val detailedCat = tx.personalFinanceCategory?.toEnum()?.detailed?.name
-            if (detailedCat != null) {
-                tagz.add(detailedCategoryPrefix + convertScreamingSnakeCaseToKebabCase(detailedCat))
-            }
+            val detailedCat = PersonalFinanceCategoryEnum.from(tx.personalFinanceCategory).detailed.name
+            tagz.add(detailedCategoryPrefix + convertScreamingSnakeCaseToKebabCase(detailedCat))
         }
         return tagz
     }

@@ -2,6 +2,7 @@ package net.djvk.fireflyPlaidConnector2.lib
 
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
+import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum
 import net.djvk.fireflyPlaidConnector2.transactions.PlaidAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import net.djvk.fireflyPlaidConnector2.util.Utilities
@@ -56,7 +57,7 @@ object PlaidFixtures {
         originalDescription: String? = null,
         merchantName: String? = null,
         checkNumber: String? = null,
-        personalFinanceCategory: PersonalFinanceCategory = PersonalFinanceCategory(PersonalFinanceCategoryEnum.TRANSFER_OUT_ACCOUNT_TRANSFER)
+        personalFinanceCategory: PersonalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_OUT_ACCOUNT_TRANSFER.toPersonalFinanceCategory()
     ): Transaction {
         return Transaction(
             pendingTransactionId = pendingTransactionId,
@@ -154,7 +155,7 @@ object PlaidFixtures {
             originalDescription = originalDescription,
             merchantName = merchantName,
             checkNumber = checkNumber,
-            personalFinanceCategory = PersonalFinanceCategory(personalFinanceCategory),
+            personalFinanceCategory = personalFinanceCategory.toPersonalFinanceCategory(),
         )
     }
 
