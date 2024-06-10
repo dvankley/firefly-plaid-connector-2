@@ -1,16 +1,18 @@
 package net.djvk.fireflyPlaidConnector2.api.plaid
 
-import io.ktor.client.call.*
+import io.ktor.client.HttpClientConfig
+import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.plugins.*
 import io.ktor.http.*
 import kotlinx.coroutines.delay
 import net.djvk.fireflyPlaidConnector2.api.plaid.apis.PlaidApi
-import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.clientIdHeader
-import net.djvk.fireflyPlaidConnector2.api.plaid.infrastructure.secretHeader
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import kotlin.time.Duration.Companion.minutes
+
+const val clientIdHeader = "PLAID-CLIENT-ID"
+const val secretHeader = "PLAID-SECRET"
 
 /**
  * A wrapper for Plaid API calls that provides additional services:
@@ -20,14 +22,18 @@ import kotlin.time.Duration.Companion.minutes
  */
 @Component
 class PlaidApiWrapper(
-    private val plaidApi: PlaidApi,
+    @Value("\${fireflyPlaidConnector2.plaid.url}")
+    private val baseUrl: String,
     @Value("\${fireflyPlaidConnector2.plaid.maxRetries:3}")
     private val maxRetries: Int,
     @Value("\${fireflyPlaidConnector2.plaid.clientId}")
     private val plaidClientId: String,
     @Value("\${fireflyPlaidConnector2.plaid.secret}")
     private val plaidSecret: String,
+    httpClientEngine: HttpClientEngine? = null,
+    httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,
 ) {
+    private val plaidApi = PlaidApi(baseUrl, httpClientEngine, httpClientConfig)
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     init {
