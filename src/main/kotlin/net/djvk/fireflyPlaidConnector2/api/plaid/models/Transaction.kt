@@ -156,6 +156,21 @@ data class Transaction(
     @field:JsonProperty("personal_finance_category")
     val personalFinanceCategory: PersonalFinanceCategory?
 ) : SortableTransaction {
+
+    /**
+     * The channel used to make a payment. `online:` transactions that took place online.  `in store:` transactions that were made at a physical location.  `other:` transactions that relate to banks, e.g. fees or deposits.  This field replaces the `transaction_type` field.
+     *
+     * Values: online,inStore,other
+     */
+    enum class PaymentChannel(val value: kotlin.String) {
+        @JsonProperty(value = "online")
+        online("online"),
+        @JsonProperty(value = "in store")
+        inStore("in store"),
+        @JsonProperty(value = "other")
+        other("other");
+    }
+
     /**
      * Please use the `payment_channel` field, `transaction_type` will be deprecated in the future.  `digital:` transactions that took place online.  `place:` transactions that were made at a physical location.  `special:` transactions that relate to banks, e.g. fees or deposits.  `unresolved:` transactions that do not fit into the other three types.
      *
