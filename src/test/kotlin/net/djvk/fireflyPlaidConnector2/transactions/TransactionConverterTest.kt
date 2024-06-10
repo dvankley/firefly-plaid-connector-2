@@ -4,7 +4,6 @@ import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
@@ -37,8 +36,8 @@ internal class TransactionConverterTest {
                     ),
 //                    plaidUpdatedTxs: List<PlaidTransaction>,
                     listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(),
+//                    plaidDeletedTxs: List<String>,
+                    listOf<String>(),
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf(
                         TransactionRead(
@@ -91,8 +90,8 @@ internal class TransactionConverterTest {
                     ),
 //                    plaidUpdatedTxs: List<PlaidTransaction>,
                     listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(),
+//                    plaidDeletedTxs: List<String>,
+                    listOf<String>(),
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf(
                         TransactionRead(
@@ -244,7 +243,7 @@ internal class TransactionConverterTest {
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
         plaidCreatedTxs: List<PlaidTransaction>,
         plaidUpdatedTxs: List<PlaidTransaction>,
-        plaidDeletedTxs: List<PlaidTransactionId>,
+        plaidDeletedTxs: List<String>,
         existingFireflyTxs: List<TransactionRead>,
         expectedResult: TransactionConverter.ConvertPollSyncResult,
     ) {

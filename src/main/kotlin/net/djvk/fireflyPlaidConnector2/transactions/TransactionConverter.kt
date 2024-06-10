@@ -4,7 +4,6 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.constants.Direction
 import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum.Primary.*
 import org.slf4j.LoggerFactory
@@ -163,7 +162,7 @@ class TransactionConverter(
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
         plaidCreatedTxs: List<PlaidTransaction>,
         plaidUpdatedTxs: List<PlaidTransaction>,
-        plaidDeletedTxs: List<PlaidTransactionId>,
+        plaidDeletedTxs: List<String>,
         existingFireflyTxs: List<TransactionRead>,
     ): ConvertPollSyncResult {
         logger.trace("Starting ${::convertPollSync.name}")
@@ -403,8 +402,8 @@ class TransactionConverter(
              * This is an issue because the [CandidatePair] array we make matches every A transaction to every B
              *  transaction, so each transaction appears more than once in the array.
              */
-            val usedATxIds = mutableSetOf<PlaidTransactionId>()
-            val usedBTxIds = mutableSetOf<PlaidTransactionId>()
+            val usedATxIds = mutableSetOf<String>()
+            val usedBTxIds = mutableSetOf<String>()
 
             for ((_, aTx, bTx) in sortedPairs) {
                 // If we don't have any remaining possible transactions in the input sets, then we're done here

@@ -136,7 +136,7 @@ class PolledSyncRunner(
 
                     val plaidCreatedTxs = mutableListOf<PlaidTransaction>()
                     val plaidUpdatedTxs = mutableListOf<PlaidTransaction>()
-                    val plaidDeletedTxs = mutableListOf<PlaidTransactionId>()
+                    val plaidDeletedTxs = mutableListOf<String>()
 
                     accessTokenLoop@ for ((accessToken, accountIds) in accountAccessTokenSequence) {
                         logger.debug(
