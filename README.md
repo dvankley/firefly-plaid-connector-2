@@ -11,12 +11,12 @@ These are basic instructions for installing and running the connector. See furth
 ## Running the JAR Directly 
 1. Ensure you have a JRE or JDK for at least Java 17.
 2. Download the latest JAR from the [releases page](https://github.com/dvankley/firefly-plaid-connector-2/releases).
-2. Move the JAR to your desired working directory. 
-3. Make a `persistence/` subdirectory in your working directory for the connector to persist data to that's writeable 
+3. Move the JAR to your desired working directory. 
+4. Make a `persistence/` subdirectory in your working directory for the connector to persist data to that's writeable 
 by the user running the connector.
-4. Set up a configuration file. I suggest copying the existing `application.yml` and modifying as needed.
+5. Set up a configuration file. I suggest copying the existing `application.yml` and modifying as needed.
 See [below](#config) for details on configuration.
-5. Run the connector, for instance with `java -jar connector.jar --spring.config.location=application.yml`
+6. Run the connector, for instance with `java -jar connector.jar --spring.config.location=application.yml`
 
 ## Running via Docker
 New versions of the Docker image are pushed to GHCR with each release.
@@ -36,16 +36,16 @@ that is writable by anyone, then pass its location in as `HOST_PERSISTENCE_DIREC
    1. This directory will store the polled mode cursor file, which is basically the polled mode's last synced state.
    2. Using a bind mount for this is kind of crappy, but I couldn't find a good way to make the Spring Boot Gradle
    bootBuildImage plugin set perms on a named volume cleanly. Suggestions welcome.
-3. Run `docker compose up`.
+4. Run `docker compose up`.
 ### Docker CLI
 #### Requirements
 The application container requires the following:
 1. An application configuration file to read from.
-   2. See [below](#configuration) for details on configuration.
+   1. See [below](#configuration) for details on configuration.
    2. The `SPRING_CONFIG_LOCATION` environment variable can be 
    used to set the location (in the container) of the application configuration file.
 2. A directory to write the sync cursor file to (if run in polled mode).
-   3. The `FIREFLYPLAIDCONNECTOR2_POLLED_CURSORFILEDIRECTORYPATH` environment variable can be
+   1. The `FIREFLYPLAIDCONNECTOR2_POLLED_CURSORFILEDIRECTORYPATH` environment variable can be
       used to set the location (in the container) of the directory that will contain the sync cursor file.
 
 The example below uses bind mounts for these purposes for
@@ -213,6 +213,8 @@ application configuration file as described in [Configuration](#configuration).
          4. Rule Triggers: "Any tag is...": `plaid-detailed-cat-coffee` etc.
             1. Add additional tag triggers if multiple Plaid categories are assigned to a single Firefly budget or category
          5. Action: "Set Budget (or Category) to...": corresponding Firefly budget or category name
+      3. Consider using [@514amir's] [automated rule setup script](https://github.com/dvankley/firefly-plaid-connector-2/blob/main/plaidfireflyrulecreator.sh)
+      to simplify this step.
 4. Save a snapshot of your Firefly database state in case the next steps don't do what you want
    1. This step is optional but recommended.
    2. If Firefly's using a Sqlite database, all you have to do is copy the database file. If using Mysql or Postgres,
