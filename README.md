@@ -329,7 +329,7 @@ a checklist of the steps I followed to perform this migration that might be help
 7. Update your application config file.
    1. `plaid.url` should be https://production.plaid.com
    2. `plaid.secret` needs to be updated to your new secret.
-      1. Each account should be updated with the new access token and plaid account id. Keep the same firefly account ids if you want to migrate in place.
+   3. Each account should be updated with the new access token and plaid account id. Keep the same firefly account ids if you want to migrate in place.
 8. If (like me) your connector's been down for a while, run the connector in batch mode to cover the time range from your last successful sync from Plaid.
 9. Delete the cursor file in your persistence directory
    1. I had thought maybe I could update the access tokens in my cursor file and things would just work, but turns out
