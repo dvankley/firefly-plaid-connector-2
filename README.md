@@ -15,7 +15,7 @@ These are basic instructions for installing and running the connector. See furth
 4. Make a `persistence/` subdirectory in your working directory for the connector to persist data to that's writeable 
 by the user running the connector.
 5. Set up a configuration file. I suggest copying the existing `application.yml` and modifying as needed.
-See [below](#config) for details on configuration.
+See [below](#configuration) for details on configuration.
 6. Run the connector, for instance with `java -jar connector.jar --spring.config.location=application.yml`
 
 ## Running via Docker
@@ -109,6 +109,8 @@ transaction to a Firefly transfer, the existing Firefly transaction will be dele
 transaction will be created because the Firefly API does not support converting existing transaction types.
 
 ## Initial Balances
+**Note**: Given that the balance endpoint is now $0.10 per call, this feature isn't really worth using anymore.
+
 If `fireflyPlaidConnector2.batch.setInitialBalance` is set to `true`, the connector will try to create "initial balance"
 transactions for each Firefly account that result in the current Firefly balance for each account equalling the
 current balance that [Plaid reports](https://plaid.com/docs/api/products/balance/#accountsbalanceget) for that account.
@@ -141,8 +143,33 @@ to account for this, but it still fails with surprising regularity.
 # Configuration
 ## Plaid
 As you have probably guessed from the name, Plaid is an important part of using this connector.
-To use Plaid, you will need an account. As of this writing, you can sign up for a developer account for free, which
-should be sufficient for the purposes of this connector.
+To use Plaid, you will need an account.
+
+### Environments
+Once upon a time, you could use up to 100 items in the Plaid development environment for free, but that is no longer the case.
+
+If you're a new user, you will need to sign up for production environment access. This is a relatively painless process
+to go through, but of course the main downside is that you have to pay for it. Plaid bills $0.30/institution/month for
+the `transactions` product, which is all you need for the connector to work (unless you enable [initial balances](#initial-balances),
+which I feel like doesn't make sense anymore given the billing model).
+Note that this is per institution, not per account. For instance if you have 2 accounts on one institution, you will
+only be billed $0.30 a month.
+
+If you're an existing user of the development environment, you _may_ be able to get away with "free limited Production access"
+per [this comment](https://github.com/dvankley/firefly-plaid-connector-2/issues/67#issuecomment-2077358653), but I
+wouldn't recommend planning on that.
+
+If you're an existing user of the development environment and looking to migrate to the production environment, see
+the [section on migration](#migrating-from-development-to-production).
+
+### Oauth Registration
+If you want access to US Oauth institutions, you need to jump through [some additional hoops](https://dashboard.plaid.com/settings/compliance/us-oauth-institutions).
+Based on my brief conversation with Plaid support and my personal experience, you can skim through the company info
+and security questionnaire pretty quickly, using dummy names, logos, and answering "I'm a hobbyist using this for personal use"
+for all the security questions.
+
+Once you've completed all the requirements for Oauth access, the applicable institutions should just work in Quickstart
+(see below).
 
 ### Basic Credentials
 Once you've signed up for Plaid, you should be provided a client id and secret, which go in the application config
@@ -152,7 +179,10 @@ file where you'd expect (`fireflyPlaidConnector2.plaid.clientId` and `fireflyPla
 Next up, you need to connect Plaid to your various financial institutions. The easiest way to do this is to run
 [Plaid Quickstart](https://plaid.com/docs/quickstart/) locally. I found the Docker experience to be fairly painless.
 I recommend copying the `.env.example` file to a new `.env` file, filling in your credentials, setting `PLAID_ENV` to
-`development` (unless you're using `production` for some reason), and setting `PLAID_PRODUCTS` to `transactions`. Note that
+`development` or `production`, and setting `PLAID_PRODUCTS` to `transactions`.
+Note that you will need to add `balances` to use the [initial balances](#initial-balances) feature, but given that
+there's an additional cost for that in production, it's not really worth it.
+Note that
 if you leave `PLAID_PRODUCTS` set to the default `auth,transactions`, you won't be able to connect to some of the
 financial institutions you might expect because they don't support the `auth` product.
 
@@ -161,10 +191,10 @@ For each institution you connect to, Plaid should give you an `item_id` and an `
 Each institution can contain multiple accounts (i.e. your bank has both your savings and checking account), so you
 will need to make an additional call to the Plaid API to get individual account ids. Example callout using `httpie`:
 ```
-http POST https://development.plaid.com/accounts/get \
+http POST https://production.plaid.com/accounts/get \
     client_id=yourclientid \
     secret=yoursecret \
-    access_token=access-development-your-items-access-token
+    access_token=access-production-your-items-access-token
 ```
 This will give you a list of account ids that belong to that item/financial institution. Make a note of these, as
 you will need to enter them into the connector's configuration file.
@@ -258,7 +288,7 @@ WantedBy=multi-user.target
 
 ```
 # Credential Updates
-   On occasion you will get an `ITEM_LOGIN_REQUIRED` error in the connector logs. This typically happens when the credentials
+   On occasion, you will get an `ITEM_LOGIN_REQUIRED` error in the connector logs. This typically happens when the credentials
    for one of the institutional accounts you've linked Plaid to have changed. You can find the access token for the account in question on the log line above the exception log.
    There are two methods for resolving the error, described below.
 ## Update Mode
@@ -280,15 +310,42 @@ This is basically just going through the [Connecting Accounts](https://github.co
 
 ## Possible Causes of Frequent Occurrence
 If you're getting this error frequently, check if you have MFA enabled on your account with the corresponding financial institution. MFA can cause
-   high freqency invalidation of Plaid account credentials, so consider disabling it. Obviously compromising your security posture to use this connector
+   high frequency invalidation of Plaid account credentials, so consider disabling it. Obviously compromising your security posture to use this connector
    isn't great, so hopefully your institution provides limited permission accounts for service access.
    
    Also note that CIBC currently has [this issue](https://github.com/dvankley/firefly-plaid-connector-2/issues/39#issuecomment-1817557063).
 
+# Migrating from Development to Production
+If you've been using the `development` environment for a while and are now being compelled to move to `production`, here's
+a checklist of the steps I followed to perform this migration that might be helpful.
+
+1. Submit Plaid request for production access and wait for approval.
+2. If you're in the US and want to use OAuth institutions, work through the list required for OAuth institutions.
+   1. You can basically put "I'm just a hobbyist" for all the security etc. questions and they'll approve you.
+3. Change your quickstart .env file to point to the production environment and update it with your new secret (your client id is probably the same).
+4. Run the link flow through quickstart for all items you want to migrate, the same as you did initially for the development environment.
+5. Stop the connector process if you're running it in polling mode somewhere.
+6. Back up your production Firefly database.
+7. Update your application config file.
+   1. `plaid.url` should be https://production.plaid.com
+   2. `plaid.secret` needs to be updated to your new secret.
+      1. Each account should be updated with the new access token and plaid account id. Keep the same firefly account ids if you want to migrate in place.
+8. If (like me) your connector's been down for a while, run the connector in batch mode to cover the time range from your last successful sync from Plaid.
+9. Delete the cursor file in your persistence directory
+   1. I had thought maybe I could update the access tokens in my cursor file and things would just work, but turns out
+   Plaid couples the cursors values to their access tokens, so they don't cross over between environments.
+10. Run the connector in polled mode per usual.
+11. Take a close look at the time range when you switched from development to production and clean up any duplicates you find.
+    1. The connector's update functionality won't properly bridge environments because the ids are different, so you may see some transactions around
+    that time that should have been updated end up being duplicated. Just delete the old ones and hopefully you should be good going forward.
+12. Profit
+
 # Troubleshooting
 ## Known Issues
 * When setting up access to a provider from the Plaid Quick Start I'm getting a message "Something went wrong".
-   * Several institutions are restricting accesss to development access accounts. An approved paid production account will need to be setup with Plaid to gain access to these accounts.
+   * Several institutions are restricting access to development access accounts.
+   An approved paid production account will need to be setup with Plaid to gain access to these accounts.
+   * This can also surface as `INSTITUTION_NO_LONGER_SUPPORTED` or `UNAUTHORIZED_INSTITUTION` errors.
  
 * I'm getting an `ITEM_LOGIN_REQUIRED` error when running the connector.
    * See https://github.com/dvankley/firefly-plaid-connector-2#credential-updates 
@@ -313,7 +370,6 @@ Setup should be identical to any other Spring Boot/Gradle application.
 I recommend adding an additional configuration file (i.e. `application-dev.yml`) and enabling the corresponding Spring
 profile (i.e. `dev`) to allow you to persist and iterate on your local configuration.
 
-Connecting to the Plaid `development` environment as usual should be fine for development.
 I recommend setting up a local copy of Firefly for development purposes, especially one that you can easily backup
 and restore the database for to minimize your feedback loop on testing things.
 
