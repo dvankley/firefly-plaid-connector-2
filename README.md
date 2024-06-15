@@ -22,6 +22,8 @@ See [below](#configuration) for details on configuration.
 New versions of the Docker image are pushed to GHCR with each release.
 The latest version is available at `ghcr.io/dvankley/firefly-plaid-connector-2:latest`.
 
+You can also build your own with `./gradlew bootBuildImage --imageName=your-docker-registry/firefly-plaid-connector-2`.
+
 ### Docker Compose
 1. Pull down the [docker-compose-polled.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose-polled.yml) and/or
 [docker-compose-batch.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose-batch.yml) files.
