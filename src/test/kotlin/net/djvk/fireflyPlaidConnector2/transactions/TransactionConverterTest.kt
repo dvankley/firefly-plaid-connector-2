@@ -48,12 +48,47 @@ internal class TransactionConverterTest {
                                 sourceId = "3",
                             ), ObjectLink()
                         ),
+                        // This is identical to the expected matching transaction, except for the amount.
+                        TransactionRead(
+                            "thing", "wrongAmountFireflyTransactionId",
+                            FireflyFixtures.getTransaction(
+                                type = TransactionTypeProperty.withdrawal,
+                                amount = "1234.56",
+                                sourceId = "2",
+                            ), ObjectLink()
+                        ),
+                        // This is identical to the expected matching transaction, except that it's the same account
+                        // as the Plaid transaction.
+                        TransactionRead(
+                            "thing", "wrongAccountfireflyTransactionId",
+                            FireflyFixtures.getTransaction(
+                                type = TransactionTypeProperty.withdrawal,
+                                amount = "1111.22",
+                                sourceId = "1",
+                            ), ObjectLink()
+                        ),
+                        // This is identical to the expected matching transaction, except that it's a deposit.
+                        TransactionRead(
+                            "thing", "wrongTypeFireflyDepositTransactionId",
+                            FireflyFixtures.getTransaction(
+                                type = TransactionTypeProperty.deposit,
+                                amount = "1111.22",
+                                destinationId = "2",
+                            ), ObjectLink()
+                        ),
+                        // This is the transaction that we expect to match with the Plaid transaction to be converted
+                        // into a transfer.
                         TransactionRead(
                             "thing", "fireflyTransactionId",
                             FireflyFixtures.getTransaction(
                                 type = TransactionTypeProperty.withdrawal,
                                 amount = "1111.22",
                                 sourceId = "2",
+                                // The transfer matching logic attempts to find the closest (by date) matching
+                                // transaction. Offset this date compared to the other Firefly transactions above so
+                                // that when this one "wins" we know it's not incidental just because this one was
+                                // processed first.
+                                dateSubtractHours = 12
                             ), ObjectLink()
                         ),
                     ),
