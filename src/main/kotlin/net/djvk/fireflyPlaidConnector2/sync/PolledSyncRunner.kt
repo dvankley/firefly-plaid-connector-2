@@ -84,12 +84,14 @@ class PolledSyncRunner(
                             executeTransactionSyncRequest(accessToken, cursorMap[accessToken], plaidBatchSize)
                         logger.debug(
                             "Received initial batch of sync updates for access token $accessToken. " +
-                                    "Updating cursor map to next cursor: ${response.nextCursor}"
+                                    "Updating cursor map to next cursor: ${response?.nextCursor}"
                         )
-                        if (response.nextCursor.isNotBlank()) {
-                            cursorMap[accessToken] = response.nextCursor
+                        response?.nextCursor?.let {
+                            if (it.isNotEmpty()) {
+                                cursorMap[accessToken] = it
+                            }
                         }
-                    } while (response.hasMore)
+                    } while (response?.hasMore == true)
                 }
                 writeCursorMap(cursorMap)
 
@@ -161,22 +163,27 @@ class PolledSyncRunner(
                                 plaidBatchSize
                             )
 
-                            cursorMap[accessToken] = response.nextCursor
+                            response?.nextCursor?.let {
+                                cursorMap[accessToken] = it
+                            }
+
                             logger.debug(
                                 "Received batch of sync updates for access token $accessToken: " +
-                                        "${response.added.size} created; ${response.modified.size} updated; " +
-                                        "${response.removed.size} deleted; next cursor ${response.nextCursor}"
+                                        "${response?.added?.size} created; ${response?.modified?.size} updated; " +
+                                        "${response?.removed?.size} deleted; next cursor ${response?.nextCursor}"
                             )
 
                             /**
                              * The transaction sync endpoint doesn't take accountId as a parameter, so do that filtering here
                              */
-                            plaidCreatedTxs.addAll(response.added.filter { accountIdSet.contains(it.accountId) })
-                            plaidUpdatedTxs.addAll(response.modified.filter { accountIdSet.contains(it.accountId) })
-                            plaidDeletedTxs.addAll(response.removed.mapNotNull { it.transactionId })
+                            response?.added?.filter { accountIdSet.contains(it.accountId) }
+                                ?.let { plaidCreatedTxs.addAll(it) }
+                            response?.modified?.filter { accountIdSet.contains(it.accountId) }
+                                ?.let { plaidUpdatedTxs.addAll(it) }
+                            response?.removed?.mapNotNull { it.transactionId }?.let { plaidDeletedTxs.addAll(it) }
 
                             // Keep going until we get all the transactions
-                        } while (response.hasMore)
+                        } while (response?.hasMore == true)
                     }
                     /**
                      * Don't write the cursor map here, wait until after we've successfully committed the transactions
@@ -319,7 +326,7 @@ class PolledSyncRunner(
         accessToken: PlaidAccessToken,
         cursor: PlaidSyncCursor?,
         plaidBatchSize: Int
-    ): TransactionsSyncResponse {
+    ): TransactionsSyncResponse? {
         val request = getTransactionSyncRequest(accessToken, cursor, plaidBatchSize)
         try {
             return plaidApiWrapper.executeRequest(
@@ -330,7 +337,7 @@ class PolledSyncRunner(
             logger.error("Error requesting Plaid transactions. Request: $request; ")
             if (allowItemToFail) {
                 logger.warn("Querying transactions for access token $accessToken failed, allowing failure and continuing on to the next access token")
-                return emptyPlaidResponse()
+                return null
             } else throw cre
         }
     }
@@ -339,17 +346,5 @@ class PolledSyncRunner(
         logger.info("Shutting down ${this::class}")
         terminated.set(true)
         mainJob.cancel()
-    }
-
-    companion object {
-        fun emptyPlaidResponse(): TransactionsSyncResponse =
-            TransactionsSyncResponse(
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                "",
-                false,
-                ""
-            )
     }
 }
