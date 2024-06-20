@@ -34,7 +34,7 @@ fireflyPlaidConnector2:
     #   you may want to use a volume or bind mount for this so that cursor state is persisted between runs.
     cursorFileDirectoryPath: persistence/
     # Configuration element specifying whether the remainder of the poll sync session should continue if one item
-    # has failed to fetch from PLaid for any reason.
+    # has failed to fetch from Plaid for any reason.
     allowItemToFail: false
   batch:
     # The number of days in the past to pull data for.

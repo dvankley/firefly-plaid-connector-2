@@ -67,7 +67,7 @@ class PolledSyncRunner(
                 val cursorMap = readCursorMap()
                 val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
                 logger.debug("Beginning Plaid sync endpoint cursor initialization")
-                for ((accessToken, _) in accountAccessTokenSequence) {
+                cursorCatchupLoop@ for ((accessToken, _) in accountAccessTokenSequence) {
                     /**
                      * If we already have a cursor for this access token, then move on
                      */
@@ -82,16 +82,17 @@ class PolledSyncRunner(
                     do {
                         val response =
                             executeTransactionSyncRequest(accessToken, cursorMap[accessToken], plaidBatchSize)
+                                ?: continue@cursorCatchupLoop
                         logger.debug(
                             "Received initial batch of sync updates for access token $accessToken. " +
                                     "Updating cursor map to next cursor: ${response?.nextCursor}"
                         )
-                        response?.nextCursor?.let {
-                            if (it.isNotEmpty()) {
-                                cursorMap[accessToken] = it
-                            }
+
+                        if (response.nextCursor.isNotEmpty()) {
+                            cursorMap[accessToken] = response.nextCursor
                         }
-                    } while (response?.hasMore == true)
+
+                    } while (response.hasMore)
                 }
                 writeCursorMap(cursorMap)
 
@@ -142,7 +143,7 @@ class PolledSyncRunner(
                     val plaidUpdatedTxs = mutableListOf<PlaidTransaction>()
                     val plaidDeletedTxs = mutableListOf<PlaidTransactionId>()
 
-                    for ((accessToken, accountIds) in accountAccessTokenSequence) {
+                    accessTokenLoop@ for ((accessToken, accountIds) in accountAccessTokenSequence) {
                         logger.debug(
                             "Querying Plaid transaction sync endpoint for access token $accessToken " +
                                     " and account ids ${accountIds.joinToString("; ")}"
@@ -161,29 +162,25 @@ class PolledSyncRunner(
                                 accessToken,
                                 cursorMap[accessToken],
                                 plaidBatchSize
-                            )
+                            ) ?: continue@accessTokenLoop
 
-                            response?.nextCursor?.let {
-                                cursorMap[accessToken] = it
-                            }
+                            cursorMap[accessToken] = response.nextCursor
 
                             logger.debug(
                                 "Received batch of sync updates for access token $accessToken: " +
-                                        "${response?.added?.size} created; ${response?.modified?.size} updated; " +
-                                        "${response?.removed?.size} deleted; next cursor ${response?.nextCursor}"
+                                        "${response.added.size} created; ${response.modified.size} updated; " +
+                                        "${response.removed.size} deleted; next cursor ${response.nextCursor}"
                             )
 
                             /**
                              * The transaction sync endpoint doesn't take accountId as a parameter, so do that filtering here
                              */
-                            response?.added?.filter { accountIdSet.contains(it.accountId) }
-                                ?.let { plaidCreatedTxs.addAll(it) }
-                            response?.modified?.filter { accountIdSet.contains(it.accountId) }
-                                ?.let { plaidUpdatedTxs.addAll(it) }
-                            response?.removed?.mapNotNull { it.transactionId }?.let { plaidDeletedTxs.addAll(it) }
+                            plaidCreatedTxs.addAll(response.added.filter { accountIdSet.contains(it.accountId) })
+                            plaidUpdatedTxs.addAll(response.modified.filter { accountIdSet.contains(it.accountId) })
+                            plaidDeletedTxs.addAll(response.removed.mapNotNull { it.transactionId })
 
                             // Keep going until we get all the transactions
-                        } while (response?.hasMore == true)
+                        } while (response.hasMore)
                     }
                     /**
                      * Don't write the cursor map here, wait until after we've successfully committed the transactions
