@@ -1,8 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
-import io.ktor.client.call.*
 import io.ktor.client.plugins.*
-import io.ktor.http.*
 import kotlinx.coroutines.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
@@ -16,7 +14,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
 import java.time.LocalDate
-import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.Path
 import kotlin.time.Duration.Companion.minutes
@@ -85,13 +82,11 @@ class PolledSyncRunner(
                                 ?: continue@cursorCatchupLoop
                         logger.debug(
                             "Received initial batch of sync updates for access token $accessToken. " +
-                                    "Updating cursor map to next cursor: ${response?.nextCursor}"
+                                    "Updating cursor map to next cursor: ${response.nextCursor}"
                         )
-
-                        if (response.nextCursor.isNotEmpty()) {
+                        if (response.nextCursor.isNotBlank()) {
                             cursorMap[accessToken] = response.nextCursor
                         }
-
                     } while (response.hasMore)
                 }
                 writeCursorMap(cursorMap)
@@ -163,9 +158,7 @@ class PolledSyncRunner(
                                 cursorMap[accessToken],
                                 plaidBatchSize
                             ) ?: continue@accessTokenLoop
-
                             cursorMap[accessToken] = response.nextCursor
-
                             logger.debug(
                                 "Received batch of sync updates for access token $accessToken: " +
                                         "${response.added.size} created; ${response.modified.size} updated; " +
