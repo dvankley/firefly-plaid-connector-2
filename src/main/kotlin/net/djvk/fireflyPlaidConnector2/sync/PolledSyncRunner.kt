@@ -1,8 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
-import io.ktor.client.call.*
 import io.ktor.client.plugins.*
-import io.ktor.http.*
 import kotlinx.coroutines.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
@@ -40,6 +38,8 @@ class PolledSyncRunner(
     private val cursorFileDirectoryPath: String,
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
+    @Value("\${fireflyPlaidConnector2.polled.allowItemToFail:false}")
+    private val allowItemToFail: Boolean,
 
     private val plaidApiWrapper: PlaidApiWrapper,
     private val fireflyTxApi: TransactionsApi,
@@ -64,7 +64,7 @@ class PolledSyncRunner(
                 val cursorMap = readCursorMap()
                 val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
                 logger.debug("Beginning Plaid sync endpoint cursor initialization")
-                for ((accessToken, _) in accountAccessTokenSequence) {
+                cursorCatchupLoop@ for ((accessToken, _) in accountAccessTokenSequence) {
                     /**
                      * If we already have a cursor for this access token, then move on
                      */
@@ -79,6 +79,7 @@ class PolledSyncRunner(
                     do {
                         val response =
                             executeTransactionSyncRequest(accessToken, cursorMap[accessToken], plaidBatchSize)
+                                ?: continue@cursorCatchupLoop
                         logger.debug(
                             "Received initial batch of sync updates for access token $accessToken. " +
                                     "Updating cursor map to next cursor: ${response.nextCursor}"
@@ -137,7 +138,7 @@ class PolledSyncRunner(
                     val plaidUpdatedTxs = mutableListOf<PlaidTransaction>()
                     val plaidDeletedTxs = mutableListOf<PlaidTransactionId>()
 
-                    for ((accessToken, accountIds) in accountAccessTokenSequence) {
+                    accessTokenLoop@ for ((accessToken, accountIds) in accountAccessTokenSequence) {
                         logger.debug(
                             "Querying Plaid transaction sync endpoint for access token $accessToken " +
                                     " and account ids ${accountIds.joinToString("; ")}"
@@ -156,7 +157,7 @@ class PolledSyncRunner(
                                 accessToken,
                                 cursorMap[accessToken],
                                 plaidBatchSize
-                            )
+                            ) ?: continue@accessTokenLoop
                             cursorMap[accessToken] = response.nextCursor
                             logger.debug(
                                 "Received batch of sync updates for access token $accessToken: " +
@@ -315,7 +316,7 @@ class PolledSyncRunner(
         accessToken: PlaidAccessToken,
         cursor: PlaidSyncCursor?,
         plaidBatchSize: Int
-    ): TransactionsSyncResponse {
+    ): TransactionsSyncResponse? {
         val request = getTransactionSyncRequest(accessToken, cursor, plaidBatchSize)
         try {
             return plaidApiWrapper.executeRequest(
@@ -324,7 +325,10 @@ class PolledSyncRunner(
             ).body()
         } catch (cre: ClientRequestException) {
             logger.error("Error requesting Plaid transactions. Request: $request; ")
-            throw cre
+            if (allowItemToFail) {
+                logger.warn("Querying transactions for access token $accessToken failed, allowing failure and continuing on to the next access token")
+                return null
+            } else throw cre
         }
     }
 
