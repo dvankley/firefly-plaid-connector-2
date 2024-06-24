@@ -48,7 +48,7 @@ class TransactionConverter(
     private val logger = LoggerFactory.getLogger(this::class.java)
     private val timeZone = TimeZone.getTimeZone(timeZoneString)
     private val zoneId = timeZone.toZoneId()
-    private val transferMatchWindowSeconds = transferMatchWindowDays * 24 * 60 * 60
+    private val transferMatcher = TransferMatcher(timeZoneString, transferMatchWindowDays)
 
     companion object {
         fun convertScreamingSnakeCaseToKebabCase(input: String): String {
@@ -80,6 +80,14 @@ class TransactionConverter(
             } else {
                 Direction.IN
             }
+        }
+
+        private fun requirePlaidTransaction(tx: PlaidFireflyTransaction?): PlaidTransaction {
+            return tx?.plaidTransaction ?: throw RuntimeException("Transaction missing required Plaid information")
+        }
+
+        private fun requireFireflyTransaction(tx: PlaidFireflyTransaction?): FireflyTransactionDto {
+            return tx?.fireflyTransaction ?: throw RuntimeException("Transaction missing required Firefly information")
         }
     }
 
@@ -139,15 +147,21 @@ class TransactionConverter(
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): List<FireflyTransactionDto> {
         logger.debug("Batch sync converting Plaid transactions to Firefly transactions")
-        val (singles, pairs) = sortByPairsBatched(txs, accountMap)
+        val (singles, pairs) = transferMatcher.match(PlaidFireflyTransaction.match(txs, listOf(), accountMap))
         val out = mutableListOf<FireflyTransactionDto>()
 
         for (single in singles) {
-            out.add(convertSingle(single, accountMap))
+            out.add(convertSingle(requirePlaidTransaction(single), accountMap))
         }
 
         for (pair in pairs) {
-            out.add(convertDoublePlaid(pair.first, pair.second, accountMap))
+            out.add(
+                convertDoublePlaid(
+                    requirePlaidTransaction(pair.first),
+                    requirePlaidTransaction(pair.second),
+                    accountMap
+                )
+            )
         }
 
         return out
@@ -186,17 +200,29 @@ class TransactionConverter(
          * Don't pass in [plaidUpdatedTxs] here because we're not going to try to update transfers for now
          *  because it's more complexity than I want to deal with, and I haven't seen any Plaid updates in the wild yet
          */
-        val (singles, pairs) = sortByPairs(plaidCreatedTxs + transferCandidateExistingFireflyTxs, accountMap)
-        logger.debug("${::convertPollSync.name} call to ${::sortByPairs.name} received ${singles.size} singles and ${pairs.size} pairs")
+        val (singles, pairs) = transferMatcher.match(
+            PlaidFireflyTransaction.match(plaidCreatedTxs, transferCandidateExistingFireflyTxs, accountMap)
+        )
+        logger.debug("${::convertPollSync.name} call to transferMatcher returned ${singles.size} singles and ${pairs.size} pairs")
 
         /**
          * Handle singles, which are transactions that didn't have any transfer pair matches
          */
         for (single in singles) {
             val convertedSingle = when (single) {
-                is PlaidTransaction -> convertSingle(single, accountMap)
-                is FireflyTransactionDto -> single
-                else -> throw RuntimeException("Failed to convert transaction of type ${single::class} in poll sync")
+                is PlaidFireflyTransaction.PlaidTransaction -> convertSingle(single.plaidTransaction, accountMap)
+
+                // In both of these cases a Firefly transaction already exists. We don't need to do anything to it.
+                // If we have an associated Plaid transaction, log a message. Otherwise, silently ignore it.
+                is PlaidFireflyTransaction.FireflyTransaction -> continue
+                is PlaidFireflyTransaction.MatchedTransaction -> {
+                    logger.debug(
+                        "Ignoring Plaid transaction id {} because it already has a corresponding Firefly transaction {}",
+                        single.plaidTransaction.transactionId,
+                        single.fireflyTransaction.id,
+                    )
+                    continue
+                }
             }
 
             if (convertedSingle.id == null) {
@@ -210,37 +236,31 @@ class TransactionConverter(
          * Handle pairs that we think should become Firefly transfers
          */
         for (pair in pairs) {
-            val out = when {
-                pair.first is FireflyTransactionDto && pair.second is FireflyTransactionDto ->
-                    throw IllegalArgumentException("Sorted pair illegally has two Firefly transactions: $pair")
-
-                pair.first is FireflyTransactionDto || pair.second is FireflyTransactionDto -> {
-                    val (plaid, firefly) = if (pair.first is FireflyTransactionDto) Pair(
-                        pair.second,
-                        pair.first
-                    ) else pair
-                    convertDoubleFirefly(
-                        plaid as PlaidTransaction,
-                        firefly as FireflyTransactionDto,
-                        accountMap,
-                    )
-                }
-
-                pair.first is PlaidTransaction && pair.second is PlaidTransaction -> {
-                    convertDoublePlaid(
-                        pair.first as PlaidTransaction,
-                        pair.second as PlaidTransaction,
-                        accountMap,
-                    )
-                }
-
-                else -> throw IllegalArgumentException("Unexpected sorted pair state: $pair")
+            val (hasFireflyTx, noFireflyTx) = pair.toList().partition { it.fireflyTransaction != null }
+            if (hasFireflyTx.size > 1) {
+                logger.debug("TransferMatcher found multiple existing Firefly transactions that appear to "
+                        + "be a transfer. Converting multiple existing Firefly transactions to a transfer is not "
+                        + "supported. Skipping: {}", pair)
+                continue
             }
-            val plaidComponent = when {
-                pair.first is PlaidTransaction -> pair.first
-                pair.second is PlaidTransaction -> pair.second
-                else -> throw IllegalArgumentException("Sorted pair illegally has two Firefly transactions: $pair")
-            } as PlaidTransaction
+
+            val plaidComponent = requirePlaidTransaction(noFireflyTx.getOrNull(0))
+
+            val out = when {
+                hasFireflyTx.isNotEmpty() ->
+                    convertDoubleFirefly(
+                        plaidComponent,
+                        requireFireflyTransaction(hasFireflyTx.getOrNull(0)),
+                        accountMap,
+                    )
+
+                else ->
+                    convertDoublePlaid(
+                        plaidComponent,
+                        requirePlaidTransaction(noFireflyTx.getOrNull(1)),
+                        accountMap,
+                    )
+            }
 
             if (out.id != null) {
                 updates.add(out)
@@ -293,19 +313,20 @@ class TransactionConverter(
         val pairs: List<Pair<PlaidTransaction, PlaidTransaction>>,
     )
 
+    // This function is no longer used. It is only retained here in this commit to demonstrate that the existing
+    // unit test ("sortByPairs") still passes when transferMatcher subbed-in for the old code. This function to
+    // be removed in the following commit.
     suspend fun sortByPairsBatched(
         txs: List<PlaidTransaction>,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): SortByPairsBatchedResult {
-        // Split Plaid transactions based on whether they are transfers or not
-        val (transfers, nonTransfers) = txs.partition {
-            it.personalFinanceCategory != null && transferTypes.contains(PersonalFinanceCategoryEnum.from(it.personalFinanceCategory).primary)
-        }
-        val (singles, pairs) = sortByPairs(transfers, accountMap)
+        val (singles, pairs) = transferMatcher.match(PlaidFireflyTransaction.match(txs, listOf(), accountMap))
 
         return SortByPairsBatchedResult(
-            singles as List<PlaidTransaction> + nonTransfers,
-            pairs as List<Pair<PlaidTransaction, PlaidTransaction>>,
+            (singles as List<PlaidFireflyTransaction.PlaidTransaction>)
+                .map { it.plaidTransaction },
+            (pairs as List<Pair<PlaidFireflyTransaction.PlaidTransaction, PlaidFireflyTransaction.PlaidTransaction>>)
+                .map { Pair(it.first.plaidTransaction, it.second.plaidTransaction) },
         )
     }
 
@@ -327,150 +348,11 @@ class TransactionConverter(
 
     }
 
-    data class CandidatePair(
-        val secondsDiff: Long,
-        val aTx: SortableTransaction,
-        val bTx: SortableTransaction,
-    )
-
-    val transferTypes =
-        setOf(
-            PersonalFinanceCategoryEnum.Primary.TRANSFER_IN,
-            PersonalFinanceCategoryEnum.Primary.TRANSFER_OUT,
-            PersonalFinanceCategoryEnum.Primary.LOAN_PAYMENTS,
-            PersonalFinanceCategoryEnum.Primary.BANK_FEES,
-        )
-
-    data class SortByPairsResult(
-        val singles: List<SortableTransaction>,
-        val pairs: List<Pair<SortableTransaction, SortableTransaction>>,
-    )
-
-    /**
-     * Attempt to find pairs of Plaid and/or Firefly transactions that make up one actual transfer transaction
-     *
-     * Only visible for testing
-     */
-    protected suspend fun sortByPairs(
-        txs: List<SortableTransaction>,
-        accountMap: Map<PlaidAccountId, FireflyAccountId>,
-    ): SortByPairsResult {
-        logger.trace("Starting ${::sortByPairs.name}")
-        val pairsOut = mutableListOf<Pair<SortableTransaction, SortableTransaction>>()
-        val singlesOut = mutableListOf<SortableTransaction>()
-
-        val amountIndexedTxs = txs.groupBy { it.amount }
-        // The loop below will process an amount value and its inverse, so we use this to mark the inverse
-        //  as processed so we don't double process amount sets
-        val processedAmounts = mutableSetOf<Double>()
-
-        for ((amount, groupTxs) in amountIndexedTxs) {
-            logger.trace("${::sortByPairs.name} processing amount $amount with ${groupTxs.size} transactions")
-            if (processedAmounts.contains(amount)) {
-                continue
-            }
-            // Get all transfer txs that all have a currency amount inverse to groupTxs, which should theoretically be matching txs
-            val matchingGroupTxs = amountIndexedTxs[-amount]
-            processedAmounts.add(-amount)
-
-            // If there are no matching txs, then this group has no soulmates and we should move on
-            if (matchingGroupTxs == null) {
-                singlesOut.addAll(groupTxs)
-                continue
-            }
-            val aTxs = groupTxs
-            val bTxs = matchingGroupTxs
-            val aTxIds = aTxs.map { it.transactionId }.toHashSet()
-            val bTxIds = bTxs.map { it.transactionId }.toHashSet()
-            val txsSecondsDiff = mutableListOf<CandidatePair>()
-
-            // Index txs by their temporal difference from each other so we can match up the closest pairs
-            logger.trace("${::sortByPairs.name} indexing transactions by time diff for amount $amount")
-            for (aTx in aTxs) {
-                for (bTx in bTxs) {
-                    txsSecondsDiff.add(
-                        CandidatePair(
-                            abs(
-                                aTx.getTimestamp(zoneId).toEpochSecond() -
-                                        bTx.getTimestamp(zoneId).toEpochSecond()
-                            ),
-                            aTx,
-                            bTx
-                        )
-                    )
-                }
-            }
-
-            val sortedPairs = txsSecondsDiff
-                .filter { it.secondsDiff < transferMatchWindowSeconds }
-                .sortedBy { it.secondsDiff }
-
-            /**
-             * Ids of transactions we've already used from either group so we don't use them again.
-             * This is an issue because the [CandidatePair] array we make matches every A transaction to every B
-             *  transaction, so each transaction appears more than once in the array.
-             */
-            val usedATxIds = mutableSetOf<String>()
-            val usedBTxIds = mutableSetOf<String>()
-
-            for ((_, aTx, bTx) in sortedPairs) {
-                // If we don't have any remaining possible transactions in the input sets, then we're done here
-                if ((aTxIds.size - usedATxIds.size) < 1 ||
-                    (bTxIds.size - usedBTxIds.size) < 1
-                ) {
-                    break
-                }
-                // If we already used either transaction A or B, then move on to the next candidate
-                if (usedATxIds.contains(aTx.transactionId) || usedBTxIds.contains(bTx.transactionId)) {
-                    continue
-                }
-
-                // If either transaction is "on" the same account, they're not a valid transfer candidate and we should move on
-                if (aTx.getFireflyAccountId(accountMap) == bTx.getFireflyAccountId(accountMap)) {
-                    continue
-                }
-
-                /**
-                 * Check if one and only one tx is Firefly
-                 * If one and only one tx is Firefly, this is a candidate for updating the existing Firefly transaction
-                 *  to a transfer.
-                 */
-                val (fireflyTx, plaidTx) = if (aTx is FireflyTransactionDto && bTx is PlaidTransaction) {
-                    Pair(aTx, bTx)
-                } else if (aTx is PlaidTransaction && bTx is FireflyTransactionDto) {
-                    Pair(bTx, aTx)
-                } else if (aTx is FireflyTransactionDto && bTx is FireflyTransactionDto) {
-                    // Transfer can't be composed of two Firefly transactions
-                    continue
-                } else {
-                    // Two Plaid transactions, which is fine
-                    Pair(null, null)
-                }
-
-                // Otherwise let's peel off the next pair of transactions
-                logger.trace("${::sortByPairs.name} found valid pair with timestamps ${aTx.getTimestamp(zoneId)};" +
-                        "${bTx.getTimestamp(zoneId)} and amount $amount")
-                pairsOut.add(Pair(aTx, bTx))
-                usedATxIds.add(aTx.transactionId)
-                usedBTxIds.add(bTx.transactionId)
-            }
-            // Output all leftover transactions as singles
-            singlesOut.addAll(aTxs.filter { !usedATxIds.contains(it.transactionId) })
-            singlesOut.addAll(bTxs.filter { !usedBTxIds.contains(it.transactionId) })
-        }
-
-        /**
-         * Existing Firefly transactions are only used here to create transfers, so filter them out
-         *  of the output
-         */
-        return SortByPairsResult(singlesOut.filter { it !is FireflyTransactionDto }, pairsOut)
-    }
-
     protected suspend fun convertSingle(
         tx: PlaidTransaction,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): FireflyTransactionDto {
-        logger.trace("Starting ${::sortByPairs.name}")
+        logger.trace("Starting ${::convertSingle.name}")
         val fireflyAccountId = accountMap[tx.accountId]?.toString()
             ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${tx.accountId}")
 
