@@ -4,7 +4,6 @@ import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -12,8 +11,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 
 internal class TransactionConverterTest {
@@ -182,93 +179,6 @@ internal class TransactionConverterTest {
                 )
             )
         }
-
-        @JvmStatic
-        fun provideSortByPairs(): List<Arguments> {
-            val baseDateTime = OffsetDateTime.of(2022, 10, 1, 0, 0, 0, 0, ZoneOffset.ofHours(4))
-            // Single because not a transfer
-            val z = PlaidFixtures.getTransferTestTransaction(
-                datetime = baseDateTime.minusHours(18),
-                personalFinanceCategory = PersonalFinanceCategoryEnum.BANK_FEES_ATM_FEES,
-                accountId = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
-                amount = -100.0,
-            )
-            // Single because not a transfer, even though it has a matching amount
-            val y = PlaidFixtures.getTransferTestTransaction(
-                datetime = baseDateTime.minusHours(19),
-                personalFinanceCategory = PersonalFinanceCategoryEnum.INCOME_WAGES,
-                accountId = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
-                amount = -100.0,
-            )
-            // Single because no matching amount
-            val x = PlaidFixtures.getTransferTestTransaction(
-                datetime = baseDateTime.minusHours(19),
-                personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_IN_ACCOUNT_TRANSFER,
-                accountId = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-                amount = 19.0,
-            )
-            // Single because while it's a transfer and has a matching amount, it's on the same account as
-            //  the matching transaction
-            val bSingle = PlaidFixtures.getTransferTestTransaction(
-                datetime = baseDateTime.minusHours(5),
-                personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_IN_ACCOUNT_TRANSFER,
-                accountId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                amount = -100.0,
-            )
-            // Single because while it's a transfer and has a matching amount, its timestamp is farther away than
-            //  all the other candidates
-            val w = PlaidFixtures.getTransferTestTransaction(
-                datetime = baseDateTime.minusHours(20),
-                personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_IN_ACCOUNT_TRANSFER,
-                accountId = "wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww",
-                amount = -100.0,
-            )
-
-            val singles = listOf(z, y, x, bSingle, w)
-
-            val a = PlaidFixtures.getTransferTestTransaction(
-                datetime = baseDateTime.minusHours(4),
-                personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_IN_ACCOUNT_TRANSFER,
-                accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                amount = -100.0,
-            )
-            val b = PlaidFixtures.getTransferTestTransaction(
-                datetime = baseDateTime.minusHours(5),
-                personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_OUT_ACCOUNT_TRANSFER,
-                accountId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                amount = 100.0,
-            )
-            val c = PlaidFixtures.getTransferTestTransaction(
-                datetime = baseDateTime.minusHours(6),
-                personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_IN_DEPOSIT,
-                accountId = "ccccccccccccccccccccccccccccccccccccc",
-                amount = -200.0,
-            )
-            val d = PlaidFixtures.getTransferTestTransaction(
-                datetime = baseDateTime.minusHours(7),
-                personalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_OUT_WITHDRAWAL,
-                accountId = "ddddddddddddddddddddddddddddddddddddd",
-                amount = 200.0,
-            )
-            val pairs = listOf(
-                Pair(a, b),
-                Pair(c, d),
-            )
-            return listOf(
-                Arguments.of(
-//                    testName: String,
-                    "Base case",
-//                    input: List<Transaction>,
-                    singles + pairs.flatMap { sequenceOf(it.first, it.second) }.shuffled(),
-//                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
-                    PlaidFixtures.getStandardAccountMapping(),
-//                    expectedSingles: List<Transaction>,
-                    singles,
-//                    expectedPairs: List<Pair<Transaction, Transaction>>,
-                    pairs,
-                ),
-            )
-        }
     }
 
     @ParameterizedTest(name = "{index} => {0}")
@@ -302,38 +212,6 @@ internal class TransactionConverterTest {
 
             assertEquals(expectedResult, actual)
         }
-    }
-
-    @ParameterizedTest(name = "{index} => {0}")
-    @MethodSource("provideSortByPairs")
-    fun sortByPairs(
-        testName: String,
-        input: List<PlaidTransaction>,
-        accountMap: Map<PlaidAccountId, FireflyAccountId>,
-        expectedSingles: List<PlaidTransaction>,
-        expectedPairs: List<Pair<PlaidTransaction, PlaidTransaction>>,
-    ) {
-        runBlocking {
-            val converter = TransactionConverter(
-                false,
-                enablePrimaryCategorization = false,
-                primaryCategoryPrefix = "a",
-                enableDetailedCategorization = false,
-                detailedCategoryPrefix = "b",
-                timeZoneString = "America/New_York",
-                transferMatchWindowDays = 10L,
-            )
-            val (actualSingles, actualPairs) = converter.sortByPairsBatched(input, accountMap)
-
-            assertEquals(expectedSingles.sortedBy { it.transactionId }, actualSingles.sortedBy { it.transactionId })
-            assertEquals(sortListOfPairs(expectedPairs), sortListOfPairs(actualPairs))
-        }
-    }
-
-    private fun sortListOfPairs(input: List<Pair<Transaction, Transaction>>): List<List<Transaction>> {
-        return input.map { pair ->
-            pair.toList().sortedBy { tx -> tx.transactionId }
-        }.sortedBy { it.first().transactionId }
     }
 
     @Test

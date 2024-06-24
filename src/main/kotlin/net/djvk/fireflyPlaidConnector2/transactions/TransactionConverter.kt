@@ -308,28 +308,6 @@ class TransactionConverter(
         )
     }
 
-    data class SortByPairsBatchedResult(
-        val singles: List<PlaidTransaction>,
-        val pairs: List<Pair<PlaidTransaction, PlaidTransaction>>,
-    )
-
-    // This function is no longer used. It is only retained here in this commit to demonstrate that the existing
-    // unit test ("sortByPairs") still passes when transferMatcher subbed-in for the old code. This function to
-    // be removed in the following commit.
-    suspend fun sortByPairsBatched(
-        txs: List<PlaidTransaction>,
-        accountMap: Map<PlaidAccountId, FireflyAccountId>,
-    ): SortByPairsBatchedResult {
-        val (singles, pairs) = transferMatcher.match(PlaidFireflyTransaction.match(txs, listOf(), accountMap))
-
-        return SortByPairsBatchedResult(
-            (singles as List<PlaidFireflyTransaction.PlaidTransaction>)
-                .map { it.plaidTransaction },
-            (pairs as List<Pair<PlaidFireflyTransaction.PlaidTransaction, PlaidFireflyTransaction.PlaidTransaction>>)
-                .map { Pair(it.first.plaidTransaction, it.second.plaidTransaction) },
-        )
-    }
-
     fun filterFireflyCandidateTransferTxs(
         input: List<TransactionRead>,
     ): List<FireflyTransactionDto> {

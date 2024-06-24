@@ -21,7 +21,6 @@
 package net.djvk.fireflyPlaidConnector2.api.firefly.models
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import net.djvk.fireflyPlaidConnector2.transactions.SortableTransaction
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
@@ -50,30 +49,3 @@ data class TransactionRead(
     val links: ObjectLink
 
 )
-
-//    : SortableTransaction {
-//    override val transactionId: String
-//        get() = id
-//
-//    override val amount: Double
-//        get() {
-//            if (attributes.transactions.size != 1) {
-//                throw IllegalArgumentException(
-//                    "Cannot resolve transaction id for Transaction with " +
-//                            " ${attributes.transactions.size} splits"
-//                )
-//            }
-//            return attributes.transactions.first().amount.toDouble()
-//        }
-//
-//    override fun getTimestamp(zoneId: ZoneId): OffsetDateTime {
-//        if (attributes.transactions.size != 1) {
-//            throw IllegalArgumentException(
-//                "Cannot resolve transaction id for Transaction with " +
-//                        " ${attributes.transactions.size} splits"
-//            )
-//        }
-//        return attributes.transactions.first().date
-//    }
-//}
-
