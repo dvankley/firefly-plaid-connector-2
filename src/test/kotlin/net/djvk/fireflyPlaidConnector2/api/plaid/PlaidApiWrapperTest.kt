@@ -96,7 +96,9 @@ internal class PlaidApiWrapperTest {
                         "offset" : 0,
                         "include_original_description" : true,
                         "include_personal_finance_category_beta" : false,
-                        "include_personal_finance_category" : true
+                        "include_personal_finance_category" : true,
+                        "include_logo_and_counterparty_beta" : false,
+                        "days_requested" : 90
                       },
                       "secret" : null
                     }
@@ -208,7 +210,9 @@ internal class PlaidApiWrapperTest {
                       "count" : 100,
                       "options" : {
                         "include_original_description" : true,
-                        "include_personal_finance_category" : true
+                        "include_personal_finance_category" : true,
+                        "include_logo_and_counterparty_beta" : false,
+                        "days_requested" : 90
                       }
                     }
                 """.trimIndent(), request.body.toByteArray().toString(Charsets.UTF_8))
@@ -281,7 +285,8 @@ internal class PlaidApiWrapperTest {
                       "options" : {
                         "account_ids" : [ "${testAccount1}", "${testAccount2}" ],
                         "min_last_updated_datetime" : null
-                      }
+                      },
+                      "payment_details" : null
                     }
                 """.trimIndent(), request.body.toByteArray().toString(Charsets.UTF_8))
 

@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.nio.file.Paths
 
 val kotlinVersion: String by project
 val kotlinCoroutinesVersion: String by project
@@ -70,11 +71,20 @@ var generatePlaidClient = tasks.register<org.openapitools.generator.gradle.plugi
     configOptions.put("omitGradleWrapper", "true")
 }
 
+kotlin {
+    sourceSets {
+        main {
+            kotlin.srcDir(Paths.get(generatePlaidClient.get().outputDir.get(), "src", "main", "kotlin"))
+        }
+    }
+}
+
 tasks.withType<KotlinCompile> {
     kotlinOptions {
         freeCompilerArgs = listOf("-Xjsr305=strict")
         jvmTarget = "17"
     }
+    dependsOn(generatePlaidClient)
 }
 
 tasks.withType<Test> {
