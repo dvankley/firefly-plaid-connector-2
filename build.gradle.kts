@@ -7,6 +7,7 @@ val ktorVersion: String by project
 val jacksonVersion: String by project
 
 plugins {
+    id("org.openapi.generator") version "7.7.0"
     id("org.springframework.boot") version "3.3.1"
     id("io.spring.dependency-management") version "1.1.5"
     kotlin("jvm") version "1.9.24"
@@ -44,6 +45,29 @@ dependencies {
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.3.1")
     testImplementation("org.assertj:assertj-core:3.26.0")
     testImplementation("io.ktor:ktor-client-mock-jvm:2.3.12")
+}
+
+var generatePlaidClient = tasks.register<org.openapitools.generator.gradle.plugin.tasks.GenerateTask>("generatePlaidClient") {
+    generatorName.set("kotlin")
+    inputSpec.set(layout.projectDirectory.dir("specs").file("plaid-2020-09-14.yml").toString())
+    cleanupOutput.set(true)
+    outputDir.set(layout.buildDirectory.dir("generated-plaid").get().toString())
+    apiPackage.set("net.djvk.fireflyPlaidConnector2.api.plaid.apis")
+    invokerPackage.set("net.djvk.fireflyPlaidConnector2.api.plaid.invoker")
+    modelPackage.set("net.djvk.fireflyPlaidConnector2.api.plaid.models")
+    globalProperties.put("modelDocs", "false")
+    globalProperties.put("apiDocs", "false")
+    globalProperties.put("modelTests", "false")
+    globalProperties.put("apiTests", "false")
+    configOptions.put("groupId", "net.djvk")
+    configOptions.put("packageName", "net.djvk.fireflyPlaidConnector2.api.plaid")
+    configOptions.put("library", "jvm-ktor")
+    configOptions.put("dateLibrary", "java8")
+    configOptions.put("serializationLibrary", "jackson")
+    configOptions.put("additionalModelTypeAnnotations", "@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)")
+    configOptions.put("requestDateConverter", "toString")
+    configOptions.put("typeMappings", "BigDecimal=Double")
+    configOptions.put("omitGradleWrapper", "true")
 }
 
 tasks.withType<KotlinCompile> {
