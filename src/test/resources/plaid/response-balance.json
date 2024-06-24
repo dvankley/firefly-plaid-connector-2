@@ -1,0 +1,63 @@
+{
+  "accounts": [
+    {
+      "account_id": "aaa",
+      "balances": {
+        "available": 100,
+        "current": 110,
+        "iso_currency_code": "USD",
+        "limit": null,
+        "unofficial_currency_code": null
+      },
+      "mask": "0000",
+      "name": "Plaid Checking",
+      "official_name": "Plaid Gold Standard 0% Interest Checking",
+      "persistent_account_id": "a1a1",
+      "subtype": "checking",
+      "type": "depository"
+    },
+    {
+      "account_id": "bbb",
+      "balances": {
+        "available": 200,
+        "current": 210,
+        "iso_currency_code": "USD",
+        "limit": null,
+        "unofficial_currency_code": null
+      },
+      "mask": "1111",
+      "name": "Plaid Saving",
+      "official_name": "Plaid Silver Standard 0.1% Interest Saving",
+      "persistent_account_id": "b2b2",
+      "subtype": "savings",
+      "type": "depository"
+    }
+  ],
+  "item": {
+    "available_products": [
+      "assets",
+      "auth",
+      "balance",
+      "signal",
+      "identity",
+      "income_verification",
+      "investments",
+      "liabilities",
+      "recurring_transactions",
+      "transfer"
+    ],
+    "billed_products": [
+      "transactions"
+    ],
+    "consent_expiration_time": null,
+    "error": null,
+    "institution_id": "ins_56",
+    "item_id": "zzz",
+    "products": [
+      "transactions"
+    ],
+    "update_type": "background",
+    "webhook": ""
+  },
+  "request_id": "abc123"
+}
