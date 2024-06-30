@@ -1,8 +1,8 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyExternalId
-import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
+import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
 
 class FireflyTransactionExternalIdIndexer(
     existingFireflyTxs: List<TransactionRead>,
@@ -23,13 +23,13 @@ class FireflyTransactionExternalIdIndexer(
     }
 
     fun findExistingFireflyTx(
-        plaidTransactionId: String,
+        plaidTransactionId: PlaidTransactionId,
     ): TransactionRead? {
         return fireflyTxsByExternalId[getExternalId(plaidTransactionId)]
     }
 
     companion object {
-        fun getExternalId(txId: String): String {
+        fun getExternalId(txId: String): PlaidTransactionId {
             return "plaid-${txId}"
         }
     }

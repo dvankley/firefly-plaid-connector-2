@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
+import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -33,8 +34,8 @@ internal class TransactionConverterTest {
                     ),
 //                    plaidUpdatedTxs: List<PlaidTransaction>,
                     listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<String>,
-                    listOf<String>(),
+//                    plaidDeletedTxs: List<PlaidTransactionId>,
+                    listOf<PlaidTransactionId>(),
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf(
                         TransactionRead(
@@ -122,8 +123,8 @@ internal class TransactionConverterTest {
                     ),
 //                    plaidUpdatedTxs: List<PlaidTransaction>,
                     listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<String>,
-                    listOf<String>(),
+//                    plaidDeletedTxs: List<PlaidTransactionId>,
+                    listOf<PlaidTransactionId>(),
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf(
                         TransactionRead(
@@ -188,7 +189,7 @@ internal class TransactionConverterTest {
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
         plaidCreatedTxs: List<PlaidTransaction>,
         plaidUpdatedTxs: List<PlaidTransaction>,
-        plaidDeletedTxs: List<String>,
+        plaidDeletedTxs: List<PlaidTransactionId>,
         existingFireflyTxs: List<TransactionRead>,
         expectedResult: TransactionConverter.ConvertPollSyncResult,
     ) {

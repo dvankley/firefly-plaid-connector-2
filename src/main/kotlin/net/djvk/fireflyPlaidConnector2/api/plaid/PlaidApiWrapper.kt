@@ -11,6 +11,8 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import kotlin.time.Duration.Companion.minutes
 
+typealias PlaidTransactionId = String
+
 const val clientIdHeader = "PLAID-CLIENT-ID"
 const val secretHeader = "PLAID-SECRET"
 

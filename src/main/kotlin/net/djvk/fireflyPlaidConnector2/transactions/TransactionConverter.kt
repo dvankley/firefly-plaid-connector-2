@@ -4,6 +4,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
+import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.constants.Direction
 import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum.Primary.*
 import org.slf4j.LoggerFactory
@@ -184,7 +185,7 @@ class TransactionConverter(
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
         plaidCreatedTxs: List<PlaidTransaction>,
         plaidUpdatedTxs: List<PlaidTransaction>,
-        plaidDeletedTxs: List<String>,
+        plaidDeletedTxs: List<PlaidTransactionId>,
         existingFireflyTxs: List<TransactionRead>,
     ): ConvertPollSyncResult {
         logger.trace("Starting ${::convertPollSync.name}")

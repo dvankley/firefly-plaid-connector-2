@@ -6,6 +6,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
+import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
@@ -136,7 +137,7 @@ class PolledSyncRunner(
 
                     val plaidCreatedTxs = mutableListOf<PlaidTransaction>()
                     val plaidUpdatedTxs = mutableListOf<PlaidTransaction>()
-                    val plaidDeletedTxs = mutableListOf<String>()
+                    val plaidDeletedTxs = mutableListOf<PlaidTransactionId>()
 
                     accessTokenLoop@ for ((accessToken, accountIds) in accountAccessTokenSequence) {
                         logger.debug(
