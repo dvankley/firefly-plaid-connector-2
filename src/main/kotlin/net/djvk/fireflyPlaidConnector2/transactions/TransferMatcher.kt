@@ -120,7 +120,7 @@ class TransferMatcher(
                 }
 
                 match
-            }.map { (_, aTx, bTx) ->
+            }.forEach { (_, aTx, bTx) ->
                 logger.trace("${::match.name} found valid pair with timestamps ${aTx.getTimestamp(zoneId)};" +
                         "${bTx.getTimestamp(zoneId)} and amount $amount")
                 pairsOut.add(Pair(aTx, bTx))
