@@ -48,7 +48,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Validate Gradle wrapper
-        uses: gradle/wrapper-validation-action@699bb18358f12c5b78b37bb0111d3a0e2276e0e2
+        uses: gradle/wrapper-validation-action@88425854a36845f9c881450d9660b5fd46bee142
 
       - name: Build with Gradle
         uses: gradle/gradle-build-action@4c39dd82cd5e1ec7c6fa0173bb41b4b6bb3b86ff
