@@ -49,8 +49,7 @@ sealed interface PlaidFireflyTransaction {
                         }
                         PlaidTransaction(it, accountId)
                     }
-                    val converted: List<PlaidFireflyTransaction> = convertedPlaid + convertedFirefly
-                    return@flatMap converted
+                    return@flatMap convertedPlaid + convertedFirefly
                 }
 
                 val plaidTx = matchingPlaid.getOrNull(0)

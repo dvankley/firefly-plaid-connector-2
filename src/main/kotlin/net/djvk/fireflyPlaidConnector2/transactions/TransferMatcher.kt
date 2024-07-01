@@ -74,14 +74,12 @@ class TransferMatcher(
                 singlesOut.addAll(groupTxs)
                 continue
             }
-            val aTxs = groupTxs
-            val bTxs = matchingGroupTxs
             val txsSecondsDiff = mutableListOf<CandidatePair>()
 
             // Index txs by their temporal difference from each other so we can match up the closest pairs
             logger.trace("${::match.name} indexing transactions by time diff for amount $amount")
-            for (aTx in aTxs) {
-                for (bTx in bTxs) {
+            for (aTx in groupTxs) {
+                for (bTx in matchingGroupTxs) {
                     txsSecondsDiff.add(
                         CandidatePair(
                             abs(
@@ -129,8 +127,8 @@ class TransferMatcher(
             }
 
             // Output all leftover transactions as singles
-            singlesOut.addAll(aTxs.filter { !usedATxIds.contains(it.transactionId) })
-            singlesOut.addAll(bTxs.filter { !usedBTxIds.contains(it.transactionId) })
+            singlesOut.addAll(groupTxs.filter { !usedATxIds.contains(it.transactionId) })
+            singlesOut.addAll(matchingGroupTxs.filter { !usedBTxIds.contains(it.transactionId) })
         }
 
         return SortByPairsResult(singlesOut, pairsOut)
