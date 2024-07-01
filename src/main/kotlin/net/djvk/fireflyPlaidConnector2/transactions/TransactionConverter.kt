@@ -148,7 +148,7 @@ class TransactionConverter(
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
     ): List<FireflyTransactionDto> {
         logger.debug("Batch sync converting Plaid transactions to Firefly transactions")
-        val (singles, pairs) = transferMatcher.match(PlaidFireflyTransaction.match(txs, listOf(), accountMap))
+        val (singles, pairs) = transferMatcher.match(PlaidFireflyTransaction.normalizeByTransactionId(txs, listOf(), accountMap))
         val out = mutableListOf<FireflyTransactionDto>()
 
         for (single in singles) {
@@ -202,7 +202,7 @@ class TransactionConverter(
          *  because it's more complexity than I want to deal with, and I haven't seen any Plaid updates in the wild yet
          */
         val (singles, pairs) = transferMatcher.match(
-            PlaidFireflyTransaction.match(plaidCreatedTxs, transferCandidateExistingFireflyTxs, accountMap)
+            PlaidFireflyTransaction.normalizeByTransactionId(plaidCreatedTxs, transferCandidateExistingFireflyTxs, accountMap)
         )
         logger.debug("${::convertPollSync.name} call to transferMatcher returned ${singles.size} singles and ${pairs.size} pairs")
 

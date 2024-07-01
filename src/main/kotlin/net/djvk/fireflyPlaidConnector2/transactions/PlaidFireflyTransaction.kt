@@ -7,6 +7,8 @@ import java.time.ZoneId
 
 /**
  * Represents a single non-transfer transaction, including both the Plaid and the Firefly representation of it.
+ *
+ * See the descriptions of the individual subtypes for more details about the situations in which each is used.
  */
 sealed interface PlaidFireflyTransaction {
     val amount: Double
@@ -18,10 +20,11 @@ sealed interface PlaidFireflyTransaction {
 
     companion object {
         /**
-         * Wraps Plaid and Firefly transactions into PlaidFireflyTransaction objects, joining them together when
-         * matching transactions are identified.
+         * Normalizes Plaid and Firefly transactions into PlaidFireflyTransaction objects, joining them together as a
+         * MatchedTransaction when a Plaid transaction has a transactionId that matches a Firefly transaction's
+         * externalId.
          */
-        fun match(
+        fun normalizeByTransactionId(
             plaidTxs: List<Transaction>,
             fireflyTxs: List<FireflyTransactionDto>,
             accountMap: Map<String, Int>
@@ -91,6 +94,10 @@ sealed interface PlaidFireflyTransaction {
         }
     }
 
+    /**
+     * This subtype is used when we have a transaction from Plaid that either hasn't been created yet in Firefly, or
+     * has been created but we haven't found/loaded it.
+     */
     data class PlaidTransaction(
         override val plaidTransaction: Transaction,
         override val fireflyAccountId: Int,
@@ -103,6 +110,10 @@ sealed interface PlaidFireflyTransaction {
         override val fireflyTransaction = null
     }
 
+    /**
+     * This subtype is used when we've loaded a transaction from Firefly that we haven't seen in the current set of
+     * transactions from Plaid.
+     */
     data class FireflyTransaction(override val fireflyTransaction: FireflyTransactionDto): PlaidFireflyTransaction {
         override val amount = fireflyTransaction.amount
         override val fireflyAccountId get() = getFireflyAccountId(fireflyTransaction)
@@ -113,6 +124,10 @@ sealed interface PlaidFireflyTransaction {
         override val plaidTransaction = null
     }
 
+    /**
+     * This subtype is used when we've received a transaction from Plaid that already has a corresponding transaction
+     * in Firefly. Note that this is NOT related to
+     */
     data class MatchedTransaction(
         override val plaidTransaction: Transaction,
         override val fireflyTransaction: FireflyTransactionDto,
