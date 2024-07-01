@@ -14,6 +14,7 @@ object FireflyFixtures {
         groupTitle: String? = null,
         type: TransactionTypeProperty = TransactionTypeProperty.withdrawal,
         date: java.time.OffsetDateTime = defaultOffsetNow,
+        dateSubtractHours: Long = 0,
         amount: String = "1111.22",
         description: String = "Test Firefly Transaction",
         sourceId: String? = null,
@@ -77,7 +78,7 @@ object FireflyFixtures {
             transactions = listOf(
                 TransactionSplit(
                     type = type,
-                    date = date,
+                    date = date.minusHours(dateSubtractHours),
                     amount = amount,
                     description = description,
                     sourceId = sourceId,

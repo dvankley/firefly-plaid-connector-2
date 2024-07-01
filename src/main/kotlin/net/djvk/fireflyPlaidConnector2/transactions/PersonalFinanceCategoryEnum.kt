@@ -1,5 +1,6 @@
-package net.djvk.fireflyPlaidConnector2.api.plaid.models
+package net.djvk.fireflyPlaidConnector2.transactions
 
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategory
 import net.djvk.fireflyPlaidConnector2.constants.Direction
 
 /**
@@ -151,6 +152,25 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     RENT_AND_UTILITIES_WATER(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.WATER),
     RENT_AND_UTILITIES_OTHER_UTILITIES(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.OTHER_UTILITIES),
     OTHER(Primary.OTHER, OtherDetailed.OTHER);
+
+    companion object {
+        fun from(categoryModel: PersonalFinanceCategory): PersonalFinanceCategoryEnum {
+            // Special case to handle what I believe is a Plaid bug I saw in the wild
+            if (categoryModel.primary == Primary.TRAVEL.name &&
+                categoryModel.detailed == TRANSPORTATION_PUBLIC_TRANSIT.name) {
+                return TRANSPORTATION_PUBLIC_TRANSIT
+            }
+            // Business as usual
+            return values().find {
+                it.primary.name == categoryModel.primary && it.name == categoryModel.detailed
+            }
+                ?: throw IllegalArgumentException("Failed to convert personal finance category $categoryModel to enum")
+        }
+    }
+
+    fun toPersonalFinanceCategory(): PersonalFinanceCategory {
+        return PersonalFinanceCategory(this.primary.name, this.name)
+    }
 
     interface Detailed {
         val description: String
@@ -333,5 +353,3 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
         OTHER("Other"),
     }
 }
-
-

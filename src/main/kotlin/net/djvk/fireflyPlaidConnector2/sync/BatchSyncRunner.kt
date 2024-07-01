@@ -33,8 +33,6 @@ class BatchSyncRunner(
     private val setInitialBalance: Boolean,
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
-    @Value("\${fireflyPlaidConnector2.timeZone}")
-    private val timeZoneString: String,
 
     private val plaidApiWrapper: PlaidApiWrapper,
     private val syncHelper: SyncHelper,
@@ -44,7 +42,6 @@ class BatchSyncRunner(
 
     ) : Runner {
     private val logger = LoggerFactory.getLogger(this::class.java)
-    private val timeZone = TimeZone.getTimeZone(timeZoneString)
 
     override fun run() {
         val allPlaidTxs = mutableMapOf<PlaidAccessToken, MutableList<Transaction>>()
@@ -202,7 +199,7 @@ class BatchSyncRunner(
                 }
 
                 val earliestTimestamp = txs.fold(OffsetDateTime.now()) { acc, tx ->
-                    val ts = tx.getTimestamp(timeZone.toZoneId())
+                    val ts = converter.getTxTimestamp(tx)
                     if (ts < acc) {
                         ts
                     } else {

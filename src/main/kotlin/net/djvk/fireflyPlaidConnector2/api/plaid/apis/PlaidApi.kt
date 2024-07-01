@@ -31,7 +31,6 @@ import java.io.File
 
 @Component
 open class PlaidApi(
-    @Value("\${fireflyPlaidConnector2.plaid.url}")
     baseUrl: String = ApiClient.BASE_URL,
     httpClientEngine: HttpClientEngine? = null,
     httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,
