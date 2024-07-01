@@ -33,21 +33,19 @@ sealed interface PlaidFireflyTransaction {
             val fireflyByExtId = fireflyTxs.groupBy { it.tx.externalId }
             val externalIds = plaidById.keys.union(fireflyByExtId.keys)
 
-            return externalIds.flatMap {
-                val matchingPlaid = plaidById[it] ?: listOf()
-                val matchingFirefly = fireflyByExtId[it] ?: listOf()
+            return externalIds.flatMap { externalId ->
+                val matchingPlaid = plaidById[externalId] ?: listOf()
+                val matchingFirefly = fireflyByExtId[externalId] ?: listOf()
 
                 // For all transactions that do not have an external ID, or if we've found more matching transactions
                 // than we expected to find, return them without attempting to combine.
-                if (it == null || matchingFirefly.size > 1 || matchingPlaid.size > 1) {
+                if (externalId == null || matchingFirefly.size > 1 || matchingPlaid.size > 1) {
                     val convertedFirefly = matchingFirefly.map { FireflyTransaction(it) }
-                    val convertedPlaid = matchingPlaid.map {
-                        val accountId = accountMap[it.accountId]
-                        if (accountId == null) {
-                            throw throw IllegalArgumentException("Can not match Plaid transactions from accounts not mapped "
+                    val convertedPlaid = matchingPlaid.map { matchingPlaidTx ->
+                        val accountId = accountMap[matchingPlaidTx.accountId]
+                            ?: throw throw IllegalArgumentException("Can not match Plaid transactions from accounts not mapped "
                                     + "to a Firefly account id")
-                        }
-                        PlaidTransaction(it, accountId)
+                        PlaidTransaction(matchingPlaidTx, accountId)
                     }
                     return@flatMap convertedPlaid + convertedFirefly
                 }
