@@ -57,7 +57,7 @@ object PlaidFixtures {
         originalDescription: String? = null,
         merchantName: String? = null,
         checkNumber: String? = null,
-        personalFinanceCategory: PersonalFinanceCategory = PersonalFinanceCategoryEnum.TRANSFER_OUT_ACCOUNT_TRANSFER.toPersonalFinanceCategory()
+        personalFinanceCategory: PersonalFinanceCategory? = PersonalFinanceCategoryEnum.TRANSFER_OUT_ACCOUNT_TRANSFER.toPersonalFinanceCategory()
     ): Transaction {
         return Transaction(
             pendingTransactionId = pendingTransactionId,
