@@ -1,10 +1,9 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
-import org.junit.jupiter.api.Assertions.assertIterableEquals
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
@@ -37,12 +36,6 @@ internal class TransferMatcherTest {
             return FireflyTransactionDto("tx-${transactionIndex++}", txSplit)
         }
 
-        private fun sortListOfPairs(input: List<Pair<PlaidFireflyTransaction, PlaidFireflyTransaction>>): List<List<PlaidFireflyTransaction>> {
-            return input.map { pair ->
-                pair.toList().sortedBy { tx -> tx.transactionId }
-            }.sortedBy { it.first().transactionId }
-        }
-
         @JvmStatic
         fun provideTransferPairTestCases(): List<Arguments> {
             val plaidAcctA = "aaa"
@@ -50,7 +43,7 @@ internal class TransferMatcherTest {
             val plaidAcctB = "bbb"
             val fireflyAcctB = 2
 
-            val pairPlaid = Pair(
+            val pairPlaid = PlaidFireflyTransaction.Transfer.create(
                 PlaidFireflyTransaction.PlaidTransaction(
                     PlaidFixtures.getTransferTestTransaction(
                         name = "Plaid Transfer Source",
@@ -73,7 +66,7 @@ internal class TransferMatcherTest {
                 ),
             )
 
-            val pairMixedA = Pair(
+            val pairMixedA = PlaidFireflyTransaction.Transfer.create(
                 PlaidFireflyTransaction.FireflyTransaction(
                     getFireflyDto(
                         description = "Firefly Transfer Source",
@@ -95,7 +88,7 @@ internal class TransferMatcherTest {
                 ),
             )
 
-            val pairMixedB = Pair(
+            val pairMixedB = PlaidFireflyTransaction.Transfer.create(
                 PlaidFireflyTransaction.PlaidTransaction(
                     PlaidFixtures.getTransferTestTransaction(
                         name = "Plaid Transfer Source",
@@ -186,21 +179,18 @@ internal class TransferMatcherTest {
             return listOf(
                 Arguments.of(
                     "Matching Plaid Source/Dest",
-                    (singles + sequenceOf(pairPlaid.first, pairPlaid.second)).shuffled(),
-                    singles,
-                    listOf(pairPlaid),
+                    (singles + sequenceOf(pairPlaid.deposit, pairPlaid.withdrawal)).shuffled(),
+                    singles + listOf(pairPlaid),
                 ),
                 Arguments.of(
                     "Matching Plaid Source and Firefly Destination",
-                    (singles + sequenceOf(pairMixedA.first, pairMixedA.second)).shuffled(),
-                    singles,
-                    listOf(pairMixedA),
+                    (singles + sequenceOf(pairMixedA.deposit, pairMixedA.withdrawal)).shuffled(),
+                    singles + listOf(pairMixedA),
                 ),
                 Arguments.of(
                     "Matching Firefly Source and Plaid Destination",
-                    (singles + sequenceOf(pairMixedB.first, pairMixedB.second)).shuffled(),
-                    singles,
-                    listOf(pairMixedB),
+                    (singles + sequenceOf(pairMixedB.deposit, pairMixedB.withdrawal)).shuffled(),
+                    singles + listOf(pairMixedB),
                 ),
             )
         }
@@ -211,16 +201,14 @@ internal class TransferMatcherTest {
     fun match(
         testName: String,
         input: List<PlaidFireflyTransaction>,
-        expectedSingles: List<PlaidFireflyTransaction>,
-        expectedPairs: List<Pair<PlaidFireflyTransaction, PlaidFireflyTransaction>>,
+        expected: List<PlaidFireflyTransaction>,
     ) {
         val matcher = TransferMatcher(
             timeZoneString = "America/New_York",
             transferMatchWindowDays = matchWindowDays,
         )
 
-        val (actualSingles, actualPairs) = matcher.match(input)
-        assertIterableEquals(sortListOfPairs(expectedPairs), sortListOfPairs(actualPairs))
-        assertIterableEquals(expectedSingles.sortedBy { it.transactionId }, actualSingles.sortedBy { it.transactionId })
+        val actual = matcher.match(input)
+        assertThat(actual).containsExactlyInAnyOrderElementsOf(expected)
     }
 }

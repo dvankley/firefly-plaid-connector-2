@@ -29,11 +29,6 @@ class TransferMatcher(
             PersonalFinanceCategoryEnum.Primary.BANK_FEES,
         )
 
-    data class SortByPairsResult(
-        val singles: List<PlaidFireflyTransaction>,
-        val pairs: List<Pair<PlaidFireflyTransaction, PlaidFireflyTransaction>>,
-    )
-
     /**
      * Identify matching transaction pairs that can be converted to a single "transfer" in Firefly.
      *
@@ -41,7 +36,7 @@ class TransferMatcher(
      * that it would not make sense to act on, such as matching pairs of Firefly transactions that do not have
      * corresponding Plaid transactions.
      */
-    fun match(txs: List<PlaidFireflyTransaction>): SortByPairsResult {
+    fun match(txs: List<PlaidFireflyTransaction>): List<PlaidFireflyTransaction> {
         logger.trace("Starting ${::match.name}")
 
         // Split-out the transactions that are unlikely to be transfers based on their category. If we're not sure,
@@ -51,8 +46,7 @@ class TransferMatcher(
             category == null || transferTypes.contains(PersonalFinanceCategoryEnum.from(category).primary)
         }
 
-        val pairsOut = mutableListOf<Pair<PlaidFireflyTransaction, PlaidFireflyTransaction>>()
-        val singlesOut = nonTransfers.toMutableList()
+        val results = nonTransfers.toMutableList()
 
         val amountIndexedTxs = possibleTransfers.groupBy { it.amount }
         // The loop below will process an amount value and its inverse, so we use this to mark the inverse
@@ -71,7 +65,7 @@ class TransferMatcher(
 
             // If there are no matching txs, then this group has no soulmates and we should move on
             if (matchingGroupTxs == null) {
-                singlesOut.addAll(groupTxs)
+                results.addAll(groupTxs)
                 continue
             }
             val txsSecondsDiff = mutableListOf<CandidatePair>()
@@ -123,15 +117,15 @@ class TransferMatcher(
             }.forEach { (_, aTx, bTx) ->
                 logger.trace("${::match.name} found valid pair with timestamps ${aTx.getTimestamp(zoneId)};" +
                         "${bTx.getTimestamp(zoneId)} and amount $amount")
-                pairsOut.add(Pair(aTx, bTx))
+                results.add(PlaidFireflyTransaction.Transfer.create(aTx, bTx))
             }
 
             // Output all leftover transactions as singles
-            singlesOut.addAll(groupTxs.filter { !usedATxIds.contains(it.transactionId) })
-            singlesOut.addAll(matchingGroupTxs.filter { !usedBTxIds.contains(it.transactionId) })
+            results.addAll(groupTxs.filter { !usedATxIds.contains(it.transactionId) })
+            results.addAll(matchingGroupTxs.filter { !usedBTxIds.contains(it.transactionId) })
         }
 
-        return SortByPairsResult(singlesOut, pairsOut)
+        return results
     }
 
     private data class CandidatePair(
