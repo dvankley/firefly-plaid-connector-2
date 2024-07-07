@@ -18,29 +18,12 @@ data class FireflyTransactionDto(
      */
     val id: FireflyTransactionId?,
     val tx: TransactionSplit,
-) : SortableTransaction {
-    override val transactionId: String
+) {
+    val transactionId: String
         get() = id ?: throw RuntimeException("Can't use a Firefly transaction without an id for sorting")
 
-    override val amount: Double
+    val amount: Double
         get() = TransactionConverter.getPlaidAmount(this)
-
-    override fun getTimestamp(zoneId: ZoneId): OffsetDateTime {
-        return tx.date
-    }
-
-    override fun getFireflyAccountId(accountMap: Map<PlaidAccountId, FireflyAccountId>): FireflyAccountId {
-        return when (tx.type) {
-            TransactionTypeProperty.deposit -> tx.destinationId?.toInt()
-                ?: throw IllegalArgumentException("SortableTransaction.getFireflyAccountId can't be called on a deposit " +
-                "with a null destination id")
-            TransactionTypeProperty.withdrawal -> tx.sourceId?.toInt()
-                ?: throw IllegalArgumentException("SortableTransaction.getFireflyAccountId can't be called on a withdrawal " +
-                        "with a null source id")
-            else -> throw IllegalArgumentException("SortableTransaction.getFireflyAccountId isn't valid to call on " +
-                "FireflyTransactionDtos that are not withdrawals or deposits")
-        }
-    }
 
     fun toTransactionStore(): TransactionStore {
         return TransactionStore(

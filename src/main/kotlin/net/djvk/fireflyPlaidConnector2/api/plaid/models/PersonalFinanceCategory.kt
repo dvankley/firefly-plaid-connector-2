@@ -38,20 +38,4 @@ data class PersonalFinanceCategory(
     /* A granular category conveying the transaction's intent. This field can also be used as a unique identifier for the category. */
     @field:JsonProperty("detailed")
     val detailed: kotlin.String
-) : kotlin.collections.HashMap<String, kotlin.Any>() {
-    constructor(enum: PersonalFinanceCategoryEnum) : this(enum.primary.name, enum.name)
-
-    fun toEnum(): PersonalFinanceCategoryEnum {
-        // Special case to handle what I believe is a Plaid bug I saw in the wild
-        if (primary == PersonalFinanceCategoryEnum.Primary.TRAVEL.name &&
-            detailed == PersonalFinanceCategoryEnum.TRANSPORTATION_PUBLIC_TRANSIT.name) {
-            return PersonalFinanceCategoryEnum.TRANSPORTATION_PUBLIC_TRANSIT
-        }
-        // Business as usual
-        return PersonalFinanceCategoryEnum.values().find {
-            it.primary.name == primary && it.name == detailed
-        }
-            ?: throw IllegalArgumentException("Failed to convert personal finance category $this to enum")
-    }
-}
-
+) : kotlin.collections.HashMap<String, kotlin.Any>()

@@ -2,6 +2,7 @@ package net.djvk.fireflyPlaidConnector2.lib
 
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
+import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum
 import net.djvk.fireflyPlaidConnector2.transactions.PlaidAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import net.djvk.fireflyPlaidConnector2.util.Utilities
@@ -47,7 +48,7 @@ object PlaidFixtures {
         date: LocalDate = defaultLocalNow,
         pending: Boolean = false,
         transactionId: String = "ccccccccccccccccccccccccccccccccccccc",
-        paymentChannel: PaymentChannel = PaymentChannel.other,
+        paymentChannel: Transaction.PaymentChannel = Transaction.PaymentChannel.other,
         authorizedDate: LocalDate? = null,
         authorizedDatetime: java.time.OffsetDateTime? = null,
         datetime: java.time.OffsetDateTime? = null,
@@ -56,7 +57,7 @@ object PlaidFixtures {
         originalDescription: String? = null,
         merchantName: String? = null,
         checkNumber: String? = null,
-        personalFinanceCategory: PersonalFinanceCategory = PersonalFinanceCategory(PersonalFinanceCategoryEnum.TRANSFER_OUT_ACCOUNT_TRANSFER)
+        personalFinanceCategory: PersonalFinanceCategory? = PersonalFinanceCategoryEnum.TRANSFER_OUT_ACCOUNT_TRANSFER.toPersonalFinanceCategory()
     ): Transaction {
         return Transaction(
             pendingTransactionId = pendingTransactionId,
@@ -121,7 +122,7 @@ object PlaidFixtures {
         date: LocalDate = defaultLocalNow,
         pending: Boolean = false,
         transactionId: String = Utilities.getRandomAlphabeticalString(30),
-        paymentChannel: PaymentChannel = PaymentChannel.other,
+        paymentChannel: Transaction.PaymentChannel = Transaction.PaymentChannel.other,
         authorizedDate: LocalDate? = null,
         authorizedDatetime: java.time.OffsetDateTime? = null,
         transactionCode: TransactionCode? = null,
@@ -154,7 +155,7 @@ object PlaidFixtures {
             originalDescription = originalDescription,
             merchantName = merchantName,
             checkNumber = checkNumber,
-            personalFinanceCategory = PersonalFinanceCategory(personalFinanceCategory),
+            personalFinanceCategory = personalFinanceCategory.toPersonalFinanceCategory(),
         )
     }
 
@@ -191,7 +192,7 @@ object PlaidFixtures {
         date: LocalDate = defaultLocalNow,
         pending: Boolean = false,
         transactionId: String = "ccccccccccccccccccccccccccccccccccccc",
-        paymentChannel: PaymentChannel,
+        paymentChannel: Transaction.PaymentChannel,
         authorizedDate: LocalDate? = null,
         authorizedDatetime: java.time.OffsetDateTime? = null,
         datetime: java.time.OffsetDateTime? = null,
