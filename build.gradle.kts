@@ -10,7 +10,7 @@ plugins {
     id("org.springframework.boot") version "3.3.1"
     id("io.spring.dependency-management") version "1.1.5"
     kotlin("jvm") version "2.0.0"
-    kotlin("plugin.spring") version "1.9.22"
+    kotlin("plugin.spring") version "2.0.0"
 }
 
 group = "net.djvk"
