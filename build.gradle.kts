@@ -7,7 +7,7 @@ val ktorVersion: String by project
 val jacksonVersion: String by project
 
 plugins {
-    id("org.springframework.boot") version "3.3.0"
+    id("org.springframework.boot") version "3.3.1"
     id("io.spring.dependency-management") version "1.1.5"
     kotlin("jvm") version "2.0.0"
     kotlin("plugin.spring") version "1.9.22"
@@ -35,15 +35,15 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.46.0.0")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
     implementation("io.ktor:ktor-serialization-jackson:$ktorVersion")
-    implementation("io.ktor:ktor-client-core-jvm:2.3.11")
-    implementation("io.ktor:ktor-client-cio-jvm:2.3.11")
-    implementation("io.ktor:ktor-client-logging-jvm:2.3.11")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("io.ktor:ktor-client-core-jvm:2.3.12")
+    implementation("io.ktor:ktor-client-cio-jvm:2.3.12")
+    implementation("io.ktor:ktor-client-logging-jvm:2.3.12")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.1")
     implementation("org.semver4j:semver4j:5.3.0")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.3.1")
     testImplementation("org.assertj:assertj-core:3.26.0")
-    testImplementation("io.ktor:ktor-client-mock-jvm:2.3.11")
+    testImplementation("io.ktor:ktor-client-mock-jvm:2.3.12")
 }
 
 tasks.withType<KotlinCompile> {
