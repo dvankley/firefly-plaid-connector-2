@@ -88,9 +88,17 @@ class TransactionConverter(
         }
     }
 
-    fun getTxTimestamp(tx: PlaidTransaction): OffsetDateTime {
+    fun getTxAuthorizedTimestamp(tx: PlaidTransaction): OffsetDateTime? {
+        if (tx.authorizedDatetime != null) {
+            return tx.authorizedDatetime
+        } else if (tx.authorizedDate == null) {
+            return null
+        }
+        return getOffsetDateTimeForDate(zoneId, tx.authorizedDate)
+    }
+
+    fun getTxPostedTimestamp(tx: PlaidTransaction): OffsetDateTime {
         return tx.datetime
-            ?: tx.authorizedDatetime
             ?: getOffsetDateTimeForDate(zoneId, tx.date)
     }
 
@@ -426,10 +434,15 @@ class TransactionConverter(
         destinationName: String? = null,
         fireflyTx: FireflyTransactionDto? = null,
     ): FireflyTransactionDto {
-        val timestamp = getTxTimestamp(tx)
+        val postedTime = getTxPostedTimestamp(tx)
+        val authorizedTime = getTxAuthorizedTimestamp(tx)
         val split = TransactionSplit(
             getFireflyTransactionDtoType(tx, isPair),
-            timestamp,
+            // Plaid's guidance on using authorized date vs posted date:
+            // The authorized_date, when available, is generally preferable to use over the date field for posted
+            // transactions, as it will generally represent the date the user actually made the transaction.
+            // Source: https://plaid.com/docs/api/products/transactions/#transactionssync
+            authorizedTime ?: postedTime,
             /**
              * Always positive per https://github.com/firefly-iii/firefly-iii/issues/2476
              * "Direction" of transactions handled in [getFireflyTransactionDtoType]
@@ -442,6 +455,7 @@ class TransactionConverter(
                         } else {
                             ": ${tx.originalDescription}"
                         }),
+            processDate = postedTime,
             sourceId = sourceId,
             sourceName = sourceName,
             destinationId = destinationId,

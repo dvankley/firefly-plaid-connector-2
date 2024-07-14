@@ -7,6 +7,8 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypePropert
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
+import net.djvk.fireflyPlaidConnector2.lib.defaultLocalNow
+import net.djvk.fireflyPlaidConnector2.lib.defaultOffsetNow
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -14,6 +16,8 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.params.provider.ValueSource
+import java.time.LocalDate
+import java.time.ZoneId
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 
 internal class TransactionConverterTest {
@@ -432,6 +436,118 @@ internal class TransactionConverterTest {
                                     sourceId = "1",
                                     destinationName = "Unknown Transfer Recipient",
                                     externalId = "plaid-plaidWithdrawalId",
+                                ).transactions.first()
+                            ),
+                        ),
+                        updates = listOf(),
+                        deletes = listOf(),
+                    ),
+                ),
+
+                // This test case creates Plaid transactions with various combinations of date fields present, each
+                // field having a slightly different offset from our "default" date. We then validate that the expected
+                // offset was used to create the Firefly transactions.
+                Arguments.of(
+//                    testName: String,
+                    "Authorized time is preferred over posted, and dateTime is preferred over date",
+//                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
+                    PlaidFixtures.getStandardAccountMapping(),
+//                    plaidCreatedTxs: List<PlaidTransaction>,
+                    listOf(
+                        PlaidFixtures.getPaymentTransaction(
+                            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            name = "Tx with authorized date and dateTime",
+                            transactionId = "txWithAuthorizedDateAndDateTime",
+                            amount = -1111.11,
+                            date = defaultLocalNow,
+                            datetime = defaultOffsetNow.minusDays(1),
+                            authorizedDate = defaultLocalNow.minusDays(2),
+                            authorizedDatetime = defaultOffsetNow.minusDays(3),
+                        ),
+                        PlaidFixtures.getPaymentTransaction(
+                            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            name = "Tx with authorized date",
+                            transactionId = "txWithAuthorizedDate",
+                            amount = -1111.22,
+                            date = defaultLocalNow,
+                            datetime = defaultOffsetNow.minusDays(1),
+                            authorizedDate = defaultLocalNow.minusDays(2),
+                        ),
+                        PlaidFixtures.getPaymentTransaction(
+                            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            name = "Tx with posted date and dateTime",
+                            transactionId = "txWithPostedDateAndDateTime",
+                            amount = -1111.33,
+                            date = defaultLocalNow,
+                            datetime = defaultOffsetNow.minusDays(1),
+                        ),
+                        PlaidFixtures.getPaymentTransaction(
+                            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            name = "Tx with posted date",
+                            transactionId = "txWithPostedDate",
+                            amount = -1111.44,
+                            date = defaultLocalNow,
+                        ),
+                    ),
+//                    plaidUpdatedTxs: List<PlaidTransaction>,
+                    listOf<PlaidTransaction>(),
+//                    plaidDeletedTxs: List<PlaidTransactionId>,
+                    listOf<PlaidTransactionId>(),
+//                    existingFireflyTxs: List<TransactionRead>,
+                    listOf<TransactionRead>(),
+//                    expectedResult: TransactionConverter.ConvertPollSyncResult,
+                    TransactionConverter.ConvertPollSyncResult(
+                        creates = listOf(
+                            FireflyTransactionDto(
+                                null,
+                                FireflyFixtures.getTransaction(
+                                    type = TransactionTypeProperty.deposit,
+                                    description = "Tx with authorized date and dateTime",
+                                    amount = "1111.11",
+                                    sourceName = "Unknown Transfer Source",
+                                    destinationId = "1",
+                                    externalId = "plaid-txWithAuthorizedDateAndDateTime",
+                                    date = defaultOffsetNow.minusDays(3),
+                                    processDate = defaultOffsetNow.minusDays(1),
+                                ).transactions.first()
+                            ),
+                            FireflyTransactionDto(
+                                null,
+                                FireflyFixtures.getTransaction(
+                                    type = TransactionTypeProperty.deposit,
+                                    description = "Tx with authorized date",
+                                    amount = "1111.22",
+                                    sourceName = "Unknown Transfer Source",
+                                    destinationId = "1",
+                                    externalId = "plaid-txWithAuthorizedDate",
+                                    date = defaultOffsetNow.minusDays(2),
+                                    processDate = defaultOffsetNow.minusDays(1),
+                                ).transactions.first()
+                            ),
+                            FireflyTransactionDto(
+                                null,
+                                FireflyFixtures.getTransaction(
+                                    type = TransactionTypeProperty.deposit,
+                                    description = "Tx with posted date and dateTime",
+                                    amount = "1111.33",
+                                    sourceName = "Unknown Transfer Source",
+                                    destinationId = "1",
+                                    externalId = "plaid-txWithPostedDateAndDateTime",
+                                    date = defaultOffsetNow.minusDays(1),
+                                    processDate = defaultOffsetNow.minusDays(1),
+                                ).transactions.first()
+                            ),
+                            FireflyTransactionDto(
+                                null,
+                                FireflyFixtures.getTransaction(
+                                    type = TransactionTypeProperty.deposit,
+                                    description = "Tx with posted date",
+                                    amount = "1111.44",
+                                    sourceName = "Unknown Transfer Source",
+                                    destinationId = "1",
+                                    externalId = "plaid-txWithPostedDate",
+                                    date = defaultOffsetNow,
+                                    processDate = defaultOffsetNow,
                                 ).transactions.first()
                             ),
                         ),
