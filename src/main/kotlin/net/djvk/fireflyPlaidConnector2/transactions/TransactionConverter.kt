@@ -1,5 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
+import io.ktor.http.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
@@ -436,6 +437,15 @@ class TransactionConverter(
     ): FireflyTransactionDto {
         val postedTime = getTxPostedTimestamp(tx)
         val authorizedTime = getTxAuthorizedTimestamp(tx)
+        val externalUrl = if (tx.website != null) {
+            // Plaid does not provide the protocol in the string. Firefly requires a protocol.
+            URLBuilder(
+                protocol = URLProtocol.HTTPS,
+                host = tx.website,
+            ).buildString()
+        } else {
+            null
+        }
         val split = TransactionSplit(
             getFireflyTransactionDtoType(tx, isPair),
             // Plaid's guidance on using authorized date vs posted date:
@@ -461,6 +471,9 @@ class TransactionConverter(
             destinationId = destinationId,
             destinationName = destinationName,
             tags = getFireflyCategoryTags(tx),
+            latitude = tx.location.lat,
+            longitude = tx.location.lon,
+            externalUrl = externalUrl,
             externalId = FireflyTransactionExternalIdIndexer.getExternalId(tx.transactionId),
             order = 0,
             reconciled = false,

@@ -58,7 +58,12 @@ object PlaidFixtures {
         originalDescription: String? = null,
         merchantName: String? = null,
         checkNumber: String? = null,
-        personalFinanceCategory: PersonalFinanceCategory? = PersonalFinanceCategoryEnum.TRANSFER_OUT_ACCOUNT_TRANSFER.toPersonalFinanceCategory()
+        personalFinanceCategory: PersonalFinanceCategory? = PersonalFinanceCategoryEnum.TRANSFER_OUT_ACCOUNT_TRANSFER.toPersonalFinanceCategory(),
+        website: String? = null,
+        logoUrl: String? = null,
+        personalFinanceCategoryIconUrl: String? = null,
+        counterparties: List<TransactionCounterparty>? = null,
+        merchantEntityId: String? = null,
     ): Transaction {
         return Transaction(
             pendingTransactionId = pendingTransactionId,
@@ -85,6 +90,11 @@ object PlaidFixtures {
             merchantName = merchantName,
             checkNumber = checkNumber,
             personalFinanceCategory = personalFinanceCategory,
+            website = website,
+            logoUrl = logoUrl,
+            personalFinanceCategoryIconUrl = personalFinanceCategoryIconUrl,
+            counterparties = counterparties,
+            merchantEntityId = merchantEntityId,
         )
     }
 

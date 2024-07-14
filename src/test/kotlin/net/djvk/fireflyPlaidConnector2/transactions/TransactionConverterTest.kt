@@ -5,6 +5,10 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.CounterpartyType
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.Location
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionCode
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionCounterparty
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import net.djvk.fireflyPlaidConnector2.lib.defaultLocalNow
@@ -16,8 +20,6 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.params.provider.ValueSource
-import java.time.LocalDate
-import java.time.ZoneId
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 
 internal class TransactionConverterTest {
@@ -555,6 +557,86 @@ internal class TransactionConverterTest {
                         deletes = listOf(),
                     ),
                 ),
+                Arguments.of(
+//                    testName: String,
+                    "Populates expected miscellaneous fields",
+//                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
+                    PlaidFixtures.getStandardAccountMapping(),
+//                    plaidCreatedTxs: List<PlaidTransaction>,
+                    listOf(
+                        PlaidFixtures.getPaymentTransaction(
+                            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            name = "Transaction Name",
+                            originalDescription = "Transaction Orig Desc",
+                            transactionId = "txWithAllMiscFieldsPopulated",
+                            amount = 1111.11,
+                            merchantName = "Test Merchant",
+                            accountOwner = "Test Account Owner",
+                            transactionCode = TransactionCode.purchase,
+                            logoUrl = "https://example.org/logo.png",
+                            personalFinanceCategoryIconUrl = "https://example.org/category.png",
+                            counterparties = listOf(
+                                TransactionCounterparty(
+                                    name = "Example Merchant",
+                                    type = CounterpartyType.merchant,
+                                    website = "merchant.example.org",
+                                    logoUrl = "https://example.org/logo_merchant.png",
+                                    entityId = "merchantCounterpartyId1",
+                                    confidenceLevel = "HIGH",
+                                ),
+                                TransactionCounterparty(
+                                    name = "Example Marketplace",
+                                    type = CounterpartyType.marketplace,
+                                    website = "marketplace.example.org",
+                                    logoUrl = "https://example.org/logo_marketplace.png",
+                                    entityId = "marketplaceCounterpartyId1",
+                                    confidenceLevel = "HIGH",
+                                )
+                            ),
+                            merchantEntityId = "abc123",
+                            website = "example.org",
+                            location = Location(
+                                address = "14400 State Hwy Z",
+                                city = "St Robert",
+                                region = "MO",
+                                postalCode = "65584",
+                                country = "US",
+                                lat = 37.8291789099181,
+                                lon = -92.10510834805055,
+                                storeNumber = "101",
+                            ),
+                        ),
+                    ),
+//                    plaidUpdatedTxs: List<PlaidTransaction>,
+                    listOf<PlaidTransaction>(),
+//                    plaidDeletedTxs: List<PlaidTransactionId>,
+                    listOf<PlaidTransactionId>(),
+//                    existingFireflyTxs: List<TransactionRead>,
+                    listOf<TransactionRead>(),
+//                    expectedResult: TransactionConverter.ConvertPollSyncResult,
+                    TransactionConverter.ConvertPollSyncResult(
+                        creates = listOf(
+                            FireflyTransactionDto(
+                                null,
+                                FireflyFixtures.getTransaction(
+                                    type = TransactionTypeProperty.withdrawal,
+                                    description = "Transaction Name: Transaction Orig Desc",
+                                    amount = "1111.11",
+                                    destinationName = "Test Merchant",
+                                    sourceId = "1",
+                                    externalId = "plaid-txWithAllMiscFieldsPopulated",
+                                    date = defaultOffsetNow,
+                                    processDate = defaultOffsetNow,
+                                    latitude = 37.8291789099181,
+                                    longitude = -92.10510834805055,
+                                    externalUrl = "https://example.org"
+                                ).transactions.first()
+                            ),
+                        ),
+                        updates = listOf(),
+                        deletes = listOf(),
+                    ),
+                ),
             )
         }
 
@@ -738,6 +820,50 @@ internal class TransactionConverterTest {
             accountMap = PlaidFixtures.getStandardAccountMapping()
         )
         assertThat(actual).containsExactlyInAnyOrder(expectedFfTxWithTags, expectedFfTxWithoutTags)
+    }
+
+    @ParameterizedTest(name = "poll mode = {0}")
+    @ValueSource(booleans = [true, false])
+    fun convertProvidesValidExternalUrl(poll: Boolean) {
+        val converter = TransactionConverter(
+            useNameForDestination = false,
+            enablePrimaryCategorization = false,
+            primaryCategoryPrefix = "a",
+            enableDetailedCategorization = false,
+            detailedCategoryPrefix = "b",
+            timeZoneString = "America/New_York",
+            transferMatchWindowDays = 10L,
+        )
+
+        val plaidTx = PlaidFixtures.getPaymentTransaction(
+            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            name = "Plaid transaction",
+            transactionId = "plaidId",
+            amount = 123.45,
+            website = "example.org",
+        )
+
+        val expectedFfTx = FireflyTransactionDto(
+            null,
+            FireflyFixtures.getTransaction(
+                type = TransactionTypeProperty.withdrawal,
+                description = "Plaid transaction",
+                amount = "123.45",
+                sourceId = "1",
+                destinationName = "Unknown Transfer Recipient",
+                externalId = "plaid-plaidId",
+                externalUrl = "https://example.org",
+            ).transactions.first()
+        )
+
+        val actual = convertCreates(
+            converter = converter,
+            poll = poll,
+            inputPlaidTxs = listOf(plaidTx),
+            accountMap = PlaidFixtures.getStandardAccountMapping()
+        )
+
+        assertThat(actual).isEqualTo(listOf(expectedFfTx))
     }
 
     @ParameterizedTest(name = "poll mode = {0}")
