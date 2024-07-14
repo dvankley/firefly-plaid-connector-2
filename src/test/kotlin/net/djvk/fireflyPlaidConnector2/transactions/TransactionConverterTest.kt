@@ -9,6 +9,7 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.CounterpartyType
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Location
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionCode
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionCounterparty
+import net.djvk.fireflyPlaidConnector2.config.properties.TransactionStyleConfig
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import net.djvk.fireflyPlaidConnector2.lib.defaultLocalNow
@@ -24,6 +25,8 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTran
 
 internal class TransactionConverterTest {
     companion object {
+        val defaultStyle = TransactionStyleConfig(null)
+
         @JvmStatic
         fun provideConvertPollSync(): List<Arguments> {
             return listOf(
@@ -620,7 +623,7 @@ internal class TransactionConverterTest {
                                 null,
                                 FireflyFixtures.getTransaction(
                                     type = TransactionTypeProperty.withdrawal,
-                                    description = "Transaction Name: Transaction Orig Desc",
+                                    description = "Test Merchant: Transaction Orig Desc",
                                     amount = "1111.11",
                                     destinationName = "Test Merchant",
                                     sourceId = "1",
@@ -691,6 +694,132 @@ internal class TransactionConverterTest {
                 }
             }
         }
+
+        @JvmStatic
+        fun provideDescriptionCases(): List<Arguments> {
+            return listOf(
+                Arguments.of(
+                    "Expression can access fields from the Plaid transaction",
+                    TransactionStyleConfig("name + ': ' + originalDescription"),
+                    "Name", // Plaid "name"
+                    "Merchant", // Plaid "merchantName"
+                    "Desc", // Plaid "originalDescription"
+                    "Name: Desc", // Expected FF description
+                ),
+                Arguments.of(
+                    "Demonstration of the ternary operator to conditionally append a string",
+                    TransactionStyleConfig("#merchantAndDescription + (amount > 100 ? ' (expensive!)' : '')"),
+                    "Name", // Plaid "name"
+                    "Merchant", // Plaid "merchantName"
+                    "Desc", // Plaid "originalDescription"
+                    "Merchant: Desc (expensive!)", // Expected FF description
+                ),
+                Arguments.of(
+                    "Demonstration of the Elvis operator to fallback to a non-null value",
+                    TransactionStyleConfig("merchantName?:name + ': ' + originalDescription"),
+                    "Name", // Plaid "name"
+                    null, // Plaid "merchantName"
+                    "Desc", // Plaid "originalDescription"
+                    "Name: Desc", // Expected FF description
+                ),
+                Arguments.of(
+                    "Demonstration of multiple chained elvis operators",
+                    TransactionStyleConfig("originalDescription ?: merchantName ?: name"),
+                    "Name", // Plaid "name"
+                    null, // Plaid "merchantName"
+                    null, // Plaid "originalDescription"
+                    "Name", // Expected FF description
+                ),
+                Arguments.of(
+                    "#merchantAndDescription uses merchant, if available, followed by originalDescription",
+                    TransactionStyleConfig("#merchantAndDescription"),
+                    "unused", // Plaid "name"
+                    "Merchant", // Plaid "merchantName"
+                    "OriginalDesc", // Plaid "originalDescription"
+                    "Merchant: OriginalDesc", // Expected FF description
+                ),
+                Arguments.of(
+                    "null expression is same as merchantAndDescription",
+                    TransactionStyleConfig(null),
+                    "unused", // Plaid "name"
+                    "Merchant", // Plaid "merchantName"
+                    "OriginalDesc", // Plaid "originalDescription"
+                    "Merchant: OriginalDesc", // Expected FF description
+                ),
+                Arguments.of(
+                    "empty expression is same as merchantAndDescription",
+                    TransactionStyleConfig("  "), // (Add a couple spaces to ensure we're trimming)
+                    "unused", // Plaid "name"
+                    "Merchant", // Plaid "merchantName"
+                    "OriginalDesc", // Plaid "originalDescription"
+                    "Merchant: OriginalDesc", // Expected FF description
+                ),
+                Arguments.of(
+                    "spaces are trimmed from the expression",
+                    TransactionStyleConfig("  #merchantAndDescription  "),
+                    "unused", // Plaid "name"
+                    "Merchant", // Plaid "merchantName"
+                    "OriginalDesc", // Plaid "originalDescription"
+                    "Merchant: OriginalDesc", // Expected FF description
+                ),
+                Arguments.of(
+                    "#merchantAndDescription uses name if merchant is not available, followed by originalDescription",
+                    TransactionStyleConfig("#merchantAndDescription"),
+                    "Name", // Plaid "name"
+                    null, // Plaid "merchantName"
+                    "OriginalDesc", // Plaid "originalDescription"
+                    "Name: OriginalDesc", // Expected FF description
+                ),
+                Arguments.of(
+                    "#merchantAndDescription does not include originalDescription if it's not available",
+                    TransactionStyleConfig("#merchantAndDescription"),
+                    "Name", // Plaid "name"
+                    null, // Plaid "merchantName"
+                    null, // Plaid "originalDescription"
+                    "Name", // Expected FF description
+                ),
+                Arguments.of(
+                    "#merchantNameWithFallback is available and is set to merchant name when available",
+                    TransactionStyleConfig("#merchantNameWithFallback"),
+                    "Name", // Plaid "name"
+                    "Contoso", // Plaid "merchantName"
+                    "unused", // Plaid "originalDescription"
+                    "Contoso", // Expected FF description
+                ),
+                Arguments.of(
+                    "#merchantNameWithFallback is available and is set to name when merchant is not available",
+                    TransactionStyleConfig("#merchantNameWithFallback"),
+                    "Name", // Plaid "name"
+                    null, // Plaid "merchantName"
+                    "unused", // Plaid "originalDescription"
+                    "Name", // Expected FF description
+                ),
+                Arguments.of(
+                    "if the expression references a null field, the string \"null\" is used",
+                    TransactionStyleConfig("merchantName + ': ' + originalDescription"),
+                    "unused", // Plaid "name"
+                    null, // Plaid "merchantName"
+                    "Desc", // Plaid "originalDescription"
+                    "null: Desc", // Expected FF description
+                ),
+                Arguments.of(
+                    "if the expression results in null, the default description is used",
+                    TransactionStyleConfig("merchantName"),
+                    "Name", // Plaid "name"
+                    null, // Plaid "merchantName"
+                    "Desc", // Plaid "originalDescription"
+                    "Name: Desc", // Expected FF description
+                ),
+                Arguments.of(
+                    "if the expression is invalid, the default description is used",
+                    TransactionStyleConfig("this-is-invalid"),
+                    "Name", // Plaid "name"
+                    null, // Plaid "merchantName"
+                    "Desc", // Plaid "originalDescription"
+                    "Name: Desc", // Expected FF description
+                ),
+            )
+        }
     }
 
     @ParameterizedTest(name = "{index} => {0}")
@@ -713,6 +842,7 @@ internal class TransactionConverterTest {
                 detailedCategoryPrefix = "b",
                 timeZoneString = "America/New_York",
                 transferMatchWindowDays = 10L,
+                txStyle = defaultStyle,
             )
             val actual = converter.convertPollSync(
                 accountMap,
@@ -746,6 +876,7 @@ internal class TransactionConverterTest {
                 detailedCategoryPrefix = "b",
                 timeZoneString = "America/New_York",
                 transferMatchWindowDays = 10L,
+                txStyle = defaultStyle,
             )
             val actual = converter.convertBatchSync(listOf(input), accountMap)
 
@@ -769,6 +900,7 @@ internal class TransactionConverterTest {
             detailedCategoryPrefix = "dcat-",
             timeZoneString = "America/New_York",
             transferMatchWindowDays = 10L,
+            txStyle = defaultStyle,
         )
 
         val plaidTxWithCategory = PlaidFixtures.getPaymentTransaction(
@@ -833,6 +965,7 @@ internal class TransactionConverterTest {
             detailedCategoryPrefix = "b",
             timeZoneString = "America/New_York",
             transferMatchWindowDays = 10L,
+            txStyle = defaultStyle,
         )
 
         val plaidTx = PlaidFixtures.getPaymentTransaction(
@@ -877,6 +1010,7 @@ internal class TransactionConverterTest {
             detailedCategoryPrefix = "b",
             timeZoneString = "America/New_York",
             transferMatchWindowDays = 10L,
+            txStyle = defaultStyle,
         )
 
         val plaidTx = PlaidFixtures.getPaymentTransaction(
@@ -895,5 +1029,57 @@ internal class TransactionConverterTest {
             )
         }
             .hasMessageContaining("Can not match Plaid transactions from accounts not mapped to a Firefly account id")
+    }
+
+    @ParameterizedTest(name = "{index} => {0}")
+    @MethodSource("provideDescriptionCases")
+    fun convertedTxHasExpectedDescription(
+        testName: String,
+        txStyle: TransactionStyleConfig,
+        plaidName: String,
+        plaidMerchant: String?,
+        plaidOriginalDesc: String?,
+        expectedFfDesc: String,
+    ) {
+        val converter = TransactionConverter(
+            useNameForDestination = false,
+            enablePrimaryCategorization = false,
+            primaryCategoryPrefix = "a",
+            enableDetailedCategorization = false,
+            detailedCategoryPrefix = "b",
+            timeZoneString = "America/New_York",
+            transferMatchWindowDays = 10L,
+            txStyle = txStyle,
+        )
+
+        val plaidTx = PlaidFixtures.getPaymentTransaction(
+            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            name = plaidName,
+            merchantName = plaidMerchant,
+            originalDescription = plaidOriginalDesc,
+            transactionId = "plaidId",
+            amount = 123.45,
+        )
+
+        val expectedFfTx = FireflyTransactionDto(
+            null,
+            FireflyFixtures.getTransaction(
+                type = TransactionTypeProperty.withdrawal,
+                description = expectedFfDesc,
+                amount = "123.45",
+                sourceId = "1",
+                destinationName = plaidMerchant ?: "Unknown Transfer Recipient",
+                externalId = "plaid-plaidId",
+            ).transactions.first()
+        )
+
+        val actual = convertCreates(
+            converter = converter,
+            poll = true,
+            inputPlaidTxs = listOf(plaidTx),
+            accountMap = PlaidFixtures.getStandardAccountMapping()
+        )
+
+        assertThat(actual).isEqualTo(listOf(expectedFfTx))
     }
 }

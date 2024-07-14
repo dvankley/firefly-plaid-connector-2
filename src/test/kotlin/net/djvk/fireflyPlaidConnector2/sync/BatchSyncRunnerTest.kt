@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsGetResponse
 import net.djvk.fireflyPlaidConnector2.config.AccountConfig
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
+import net.djvk.fireflyPlaidConnector2.config.properties.TransactionStyleConfig
 import net.djvk.fireflyPlaidConnector2.lib.*
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.assertj.core.api.Assertions.assertThat
@@ -38,6 +39,7 @@ internal class BatchSyncRunnerTest {
                 primaryCategoryPrefix = "primary-",
                 enableDetailedCategorization = true,
                 detailedCategoryPrefix = "detailed-",
+                txStyle = TransactionStyleConfig(),
             )
 
             return BatchSyncRunner(
