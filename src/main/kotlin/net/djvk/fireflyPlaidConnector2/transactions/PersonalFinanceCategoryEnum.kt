@@ -2,6 +2,7 @@ package net.djvk.fireflyPlaidConnector2.transactions
 
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PersonalFinanceCategory
 import net.djvk.fireflyPlaidConnector2.constants.Direction
+import org.slf4j.LoggerFactory
 
 /**
  * Possible values of [PersonalFinanceCategory]
@@ -154,16 +155,25 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     OTHER(Primary.OTHER, OtherDetailed.OTHER);
 
     companion object {
+        private val logger = LoggerFactory.getLogger(this::class.java)
+
         fun from(categoryModel: PersonalFinanceCategory): PersonalFinanceCategoryEnum {
-            // Special case to handle what I believe is a Plaid bug I saw in the wild
-            if (categoryModel.primary == Primary.TRAVEL.name &&
-                categoryModel.detailed == TRANSPORTATION_PUBLIC_TRANSIT.name) {
-                return TRANSPORTATION_PUBLIC_TRANSIT
-            }
             // Business as usual
-            return values().find {
+            return entries.find {
                 it.primary.name == categoryModel.primary && it.name == categoryModel.detailed
             }
+            // Fallback to handle random Plaid bugs
+                ?: run {
+                    val fallback = entries.find { it.name == categoryModel.detailed }
+                    if (fallback != null) {
+                        logger.warn(
+                            "Invalid personal finance category $categoryModel; falling back to likely " +
+                                    "correct value $fallback"
+                        )
+                    }
+                    fallback
+                }
+                // Give up
                 ?: throw IllegalArgumentException("Failed to convert personal finance category $categoryModel to enum")
         }
     }
