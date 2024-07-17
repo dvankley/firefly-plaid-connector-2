@@ -162,16 +162,20 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
             return entries.find {
                 it.primary.name == categoryModel.primary && it.name == categoryModel.detailed
             }
-            // Fallback to handle random Plaid bugs
+            // Fallback to handle random Plaid issues where the primary and detailed are both valid, but
+            // don't match each other
                 ?: run {
-                    val fallback = entries.find { it.name == categoryModel.detailed }
-                    if (fallback != null) {
+                    val fallbackPrimary = entries.find { it.primary.name == categoryModel.primary }
+                    val fallbackDetailed = entries.find { it.name == categoryModel.detailed }
+                    if (fallbackPrimary != null && fallbackDetailed != null) {
                         logger.warn(
-                            "Invalid personal finance category $categoryModel; falling back to likely " +
-                                    "correct value $fallback"
+                            "Incoming personal finance category $categoryModel has valid but non-matching primary and detailed " +
+                                    "values. Falling back to using the detailed value $fallbackDetailed"
                         )
+                        fallbackDetailed
+                    } else {
+                        null
                     }
-                    fallback
                 }
                 // Give up
                 ?: throw IllegalArgumentException("Failed to convert personal finance category $categoryModel to enum")
