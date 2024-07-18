@@ -24,7 +24,7 @@ internal class PersonalFinanceCategoryEnumTest {
                 ),
                 Arguments.of(
 //                    testName: String,
-                    "Goofy edge case",
+                    "Valid but not matching primary and detailed (should be handled as we see this in prod sometimes)",
 //                    input: PersonalFinanceCategory,
                     PersonalFinanceCategory("TRAVEL", "TRANSPORTATION_PUBLIC_TRANSIT"),
 //                    expectedResult: PersonalFinanceCategoryEnum?,
@@ -36,7 +36,7 @@ internal class PersonalFinanceCategoryEnumTest {
 //                    testName: String,
                     "Invalid primary",
 //                    input: PersonalFinanceCategory,
-                    PersonalFinanceCategory("TACOS", "FAST_FOOD"),
+                    PersonalFinanceCategory("TACOS", "FOOD_AND_DRINK_FAST_FOOD"),
 //                    expectedResult: PersonalFinanceCategoryEnum?,
                     null,
 //                    expectedException: Boolean,

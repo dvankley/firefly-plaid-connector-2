@@ -1,0 +1,33 @@
+[versions]
+kotlin = "1.9.24"
+ktor = "2.3.12"
+jackson = "2.17.0"
+
+[libraries]
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+jackson-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
+jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
+ktor-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-contentnegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-jackson-client = { module = "io.ktor:ktor-client-jackson", version.ref = "ktor" }
+ktor-jackson-serialization = { module = "io.ktor:ktor-serialization-jackson", version.ref = "ktor" }
+ktor-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
+ktor-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+
+[bundles]
+# Dependencies required by the generated OpenAPI clients.
+openapi = [
+    "kotlin-reflect",
+    "jackson-kotlin",
+    "jackson-jsr310",
+    "ktor-core",
+    "ktor-contentnegotiation",
+    "ktor-jackson-client",
+    "ktor-jackson-serialization",
+]
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
