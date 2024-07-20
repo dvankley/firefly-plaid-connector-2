@@ -375,10 +375,6 @@ profile (i.e. `dev`) to allow you to persist and iterate on your local configura
 I recommend setting up a local copy of Firefly for development purposes, especially one that you can easily backup
 and restore the database for to minimize your feedback loop on testing things.
 
-## Guidelines
-I don't currently have firm guidelines yet, but I will adopt some if I ever get contributions. For now the main guideline
-is to have a test covering the changes you make.
-
 # FAQ
 * Why did you make a new program rather than contributing to [firefly-plaid-connector](https://gitlab.com/GeorgeHahn/firefly-plaid-connector/)?
   * I initially tried firefly-plaid-connector, but I had a few issues with it, and it didn't fully support Plaid categories.
