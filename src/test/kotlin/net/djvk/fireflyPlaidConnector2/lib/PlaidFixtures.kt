@@ -1,5 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.lib
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum
@@ -228,6 +229,32 @@ object PlaidFixtures {
             merchantName = merchantName,
             checkNumber = checkNumber,
             personalFinanceCategory = personalFinanceCategory,
+        )
+    }
+
+    fun getItem(
+        itemId: kotlin.String = "testItemId1",
+        webhook: kotlin.String? = null,
+        error: PlaidError? = null,
+        availableProducts: List<Products> = listOf(Products.transactions),
+        billedProducts: List<Products> = listOf(Products.transactions),
+        consentExpirationTime: java.time.OffsetDateTime? = null,
+        updateType: Item.UpdateType = Item.UpdateType.background,
+        institutionId: String? = null,
+        products: List<Products>? = null,
+        consentedProducts: List<Products>? = null,
+    ): Item {
+        return Item(
+            itemId = itemId,
+            webhook = webhook,
+            error = error,
+            availableProducts = availableProducts,
+            billedProducts = billedProducts,
+            consentExpirationTime = consentExpirationTime,
+            updateType = updateType,
+            institutionId = institutionId,
+            products = products,
+            consentedProducts = consentedProducts,
         )
     }
 
