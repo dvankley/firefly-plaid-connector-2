@@ -51,7 +51,7 @@ fireflyPlaidConnector2:
     # Can be created in Firefly in Options->Profile->Oauth->Personal Access Tokens
 #    personalAccessToken: TOKAAAAAN
   plaid:
-#    url: https://development.plaid.com
+#    url: https://production.plaid.com
 #    clientId: HI I'M A CLIENT ID
 #    secret: SECRETZ
     # The number of transactions to fetch from Plaid at a time.
