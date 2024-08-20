@@ -128,7 +128,7 @@ class TransactionConverter(
 
         return try {
             val parser = SpelExpressionParser()
-            val context = StandardEvaluationContext(tx)
+            val context = StandardEvaluationContext(FormattingContext(tx))
 
             // Provide #defaultDescription with the default description
             context.setVariable("merchantAndDescription", defaultDesc)
@@ -582,3 +582,10 @@ class TransactionConverter(
         }
     }
 }
+
+/**
+ * Container data class for the values passed into the SpEL evaluator context. Although there is currently only one
+ * value here, wrapping that value will make it much easier in the future if we ever want to make other objects
+ * available during SpEL evaluation.
+ */
+data class FormattingContext(val transaction: PlaidTransaction)

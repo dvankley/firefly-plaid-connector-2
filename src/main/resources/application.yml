@@ -74,19 +74,22 @@ fireflyPlaidConnector2:
   #      set to the legacy "name" field.
   # Although we do our best to fall back to the default description format if you specify an invalid expression, this
   # can be a little difficult to use if you're unfamiliar with the format. Here are a few examples to get you started.
-  #   * "name + ': ' + originalDescription" - This is a simple demonstration of how to access fields from the Plaid
-  #       transaction and link them together. Notice how Plaid fields are NOT prefixed with "#", and you must use + and
-  #       single quotes to concatenate those values with string literals.
-  #   * "merchantName + ': ' + originalDescription" - This is an example of what NOT to do. If you look at the Plaid
-  #       documentation you'll see that merchant_name is nullable. When we get a transaction where the merchant_name
-  #       is not set, you'll get a description like "null: Your Original Description". If you don't want "null" showing
-  #       up like that you'll need to look at the next few examples for tips on avoiding it.
-  #   * "merchantName?:name + ': ' + originalDescription" - This demonstrates use of the Elvis operator to fallback to
-  #       another value if the first is null. Note that "#merchantNameWithFallback" is the same as "merchantName?:name".
-  #   * "originalDescription ?: merchantName ?: name" - This demonstrates chaining multiple Elvis operators together.
-  #       This is a recommended expression if you want to have expressive descriptions with minimal redundancy.
-  #   * "#merchantAndDescription + (amount > 100 ? ' (expensive!)' : '')" - This will append (expensive!) at the end of
-  #       the description for transactions above a certain amount. This demonstrates usage of the SpEL ternary operator.
+  #   * "transaction.name + ': ' + transaction.originalDescription" - This is a simple demonstration of how to access
+  #       fields from the Plaid transaction and link them together. Notice how Plaid fields are NOT prefixed with "#",
+  #       and you must use + and single quotes to concatenate those values with string literals.
+  #   * "transaction.merchantName + ': ' + transaction.originalDescription" - This is an example of what NOT to do. If
+  #       you look at the Plaiddocumentation you'll see that merchant_name is nullable. When we get a transaction where
+  #       the merchant_nameis not set, you'll get a description like "null: Your Original Description". If you don't
+  #       want "null" showing up like that you'll need to look at the next few examples for tips on avoiding it.
+  #   * "transaction.merchantName?:transaction.name + ': ' + transaction.originalDescription" - This demonstrates use of
+  #       the Elvis operator to fallback to another value if the first is null. Note that "#merchantNameWithFallback" is
+  #       the same as "merchantName?:name".
+  #   * "transaction.originalDescription ?: transaction.merchantName ?: transaction.name" - This demonstrates chaining
+  #       multiple Elvis operators together. This is a recommended expression if you want to have expressive
+  #       descriptions with minimal redundancy.
+  #   * "#merchantAndDescription + (transaction.amount > 100 ? ' (expensive!)' : '')" - This will append the string
+  #       "(expensive!)" at the end of the description for transactions above a certain amount. This demonstrates usage
+  #       of the SpEL ternary operator.
   # As some of the expression syntax can conflict with YAML syntax, it's important to explicitly quote this value.
 #  descriptionExpression: "#merchantAndDescription"
   # Transaction categorization configuration (optional, defaults to disable categorization)

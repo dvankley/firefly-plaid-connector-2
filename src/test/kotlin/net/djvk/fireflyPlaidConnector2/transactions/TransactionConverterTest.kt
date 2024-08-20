@@ -700,7 +700,7 @@ internal class TransactionConverterTest {
             return listOf(
                 Arguments.of(
                     "Expression can access fields from the Plaid transaction",
-                    TransactionStyleConfig("name + ': ' + originalDescription"),
+                    TransactionStyleConfig("transaction.name + ': ' + transaction.originalDescription"),
                     "Name", // Plaid "name"
                     "Merchant", // Plaid "merchantName"
                     "Desc", // Plaid "originalDescription"
@@ -708,7 +708,7 @@ internal class TransactionConverterTest {
                 ),
                 Arguments.of(
                     "Demonstration of the ternary operator to conditionally append a string",
-                    TransactionStyleConfig("#merchantAndDescription + (amount > 100 ? ' (expensive!)' : '')"),
+                    TransactionStyleConfig("#merchantAndDescription + (transaction.amount > 100 ? ' (expensive!)' : '')"),
                     "Name", // Plaid "name"
                     "Merchant", // Plaid "merchantName"
                     "Desc", // Plaid "originalDescription"
@@ -716,7 +716,7 @@ internal class TransactionConverterTest {
                 ),
                 Arguments.of(
                     "Demonstration of the Elvis operator to fallback to a non-null value",
-                    TransactionStyleConfig("merchantName?:name + ': ' + originalDescription"),
+                    TransactionStyleConfig("transaction.merchantName?:transaction.name + ': ' + transaction.originalDescription"),
                     "Name", // Plaid "name"
                     null, // Plaid "merchantName"
                     "Desc", // Plaid "originalDescription"
@@ -724,7 +724,7 @@ internal class TransactionConverterTest {
                 ),
                 Arguments.of(
                     "Demonstration of multiple chained elvis operators",
-                    TransactionStyleConfig("originalDescription ?: merchantName ?: name"),
+                    TransactionStyleConfig("transaction.originalDescription ?: transaction.merchantName ?: transaction.name"),
                     "Name", // Plaid "name"
                     null, // Plaid "merchantName"
                     null, // Plaid "originalDescription"
@@ -796,7 +796,7 @@ internal class TransactionConverterTest {
                 ),
                 Arguments.of(
                     "if the expression references a null field, the string \"null\" is used",
-                    TransactionStyleConfig("merchantName + ': ' + originalDescription"),
+                    TransactionStyleConfig("transaction.merchantName + ': ' + transaction.originalDescription"),
                     "unused", // Plaid "name"
                     null, // Plaid "merchantName"
                     "Desc", // Plaid "originalDescription"
@@ -804,7 +804,7 @@ internal class TransactionConverterTest {
                 ),
                 Arguments.of(
                     "if the expression results in null, the default description is used",
-                    TransactionStyleConfig("merchantName"),
+                    TransactionStyleConfig("transaction.merchantName"),
                     "Name", // Plaid "name"
                     null, // Plaid "merchantName"
                     "Desc", // Plaid "originalDescription"
