@@ -91,6 +91,9 @@ fireflyPlaidConnector2:
   #       "(expensive!)" at the end of the description for transactions above a certain amount. This demonstrates usage
   #       of the SpEL ternary operator.
   # As some of the expression syntax can conflict with YAML syntax, it's important to explicitly quote this value.
+  # If you're ok with new behavior, the expression below is the new recommended configuration.
+  # descriptionExpression: "transaction.originalDescription ?: transaction.merchantName ?: transaction.name"
+  # The expression below is the default to maintain the previous behavior.
 #  descriptionExpression: "#merchantAndDescription"
   # Transaction categorization configuration (optional, defaults to disable categorization)
   # Plaid currently supplies two types of categorization information https://plaid.com/blog/transactions-categorization-taxonomy/
