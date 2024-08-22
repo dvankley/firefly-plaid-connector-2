@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   app:
-    image: docker.io/dvk/firefly-plaid-connector-2:dev
+    image: ghcr.io/dvankley/firefly-plaid-connector-2:latest
     hostname: plaidconnector
     restart: always
     volumes:
