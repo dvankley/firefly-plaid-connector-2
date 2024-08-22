@@ -190,16 +190,10 @@ financial institutions you might expect because they don't support the `auth` pr
 
 Once you have Quickstart running, just follow the UI prompts to connect to your financial institutions.
 For each institution you connect to, Plaid should give you an `item_id` and an `access_token`. Make a note of both.
-Each institution can contain multiple accounts (i.e. your bank has both your savings and checking account), so you
-will need to make an additional call to the Plaid API to get individual account ids. Example callout using `httpie`:
-```
-http POST https://production.plaid.com/accounts/get \
-    client_id=yourclientid \
-    secret=yoursecret \
-    access_token=access-production-your-items-access-token
-```
-This will give you a list of account ids that belong to that item/financial institution. Make a note of these, as
-you will need to enter them into the connector's configuration file.
+
+Each institution can contain multiple accounts (i.e. your bank has both your savings and checking account).
+If you scroll down in the Quickstart page, you should also see a list of account ids associated with that item.
+Make a note of each account you want to use with Firefly, as you will need to enter them in the connector's configuration file.
 
 ## Configuration File
 The configuration file is unsurprisingly where most of the configuration of the connector takes place.
