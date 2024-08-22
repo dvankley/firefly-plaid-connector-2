@@ -78,8 +78,8 @@ fireflyPlaidConnector2:
   #       fields from the Plaid transaction and link them together. Notice how Plaid fields are NOT prefixed with "#",
   #       and you must use + and single quotes to concatenate those values with string literals.
   #   * "transaction.merchantName + ': ' + transaction.originalDescription" - This is an example of what NOT to do. If
-  #       you look at the Plaiddocumentation you'll see that merchant_name is nullable. When we get a transaction where
-  #       the merchant_nameis not set, you'll get a description like "null: Your Original Description". If you don't
+  #       you look at the Plaid documentation you'll see that merchant_name is nullable. When we get a transaction where
+  #       the merchant_name is not set, you'll get a description like "null: Your Original Description". If you don't
   #       want "null" showing up like that you'll need to look at the next few examples for tips on avoiding it.
   #   * "transaction.merchantName?:transaction.name + ': ' + transaction.originalDescription" - This demonstrates use of
   #       the Elvis operator to fallback to another value if the first is null. Note that "#merchantNameWithFallback" is
