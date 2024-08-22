@@ -65,7 +65,7 @@ object FireflyFixtures {
         sepaBatchId: String? = null,
         interestDate: java.time.OffsetDateTime? = null,
         bookDate: java.time.OffsetDateTime? = null,
-        processDate: java.time.OffsetDateTime? = null,
+        processDate: java.time.OffsetDateTime? = defaultOffsetNow,
         dueDate: java.time.OffsetDateTime? = null,
         paymentDate: java.time.OffsetDateTime? = null,
         invoiceDate: java.time.OffsetDateTime? = null,

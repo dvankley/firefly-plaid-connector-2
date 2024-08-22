@@ -1,14 +1,18 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
+import io.ktor.http.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
+import net.djvk.fireflyPlaidConnector2.config.properties.TransactionStyleConfig
 import net.djvk.fireflyPlaidConnector2.constants.Direction
 import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum.Primary.*
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.expression.spel.standard.SpelExpressionParser
+import org.springframework.expression.spel.support.StandardEvaluationContext
 import org.springframework.stereotype.Component
 import java.time.*
 import java.util.*
@@ -45,6 +49,8 @@ class TransactionConverter(
     private val enableDetailedCategorization: Boolean,
     @Value("\${fireflyPlaidConnector2.categorization.detailed.prefix:plaid-detailed-cat-}")
     private val detailedCategoryPrefix: String,
+
+    private val txStyle: TransactionStyleConfig,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
     private val timeZone = TimeZone.getTimeZone(timeZoneString)
@@ -88,10 +94,58 @@ class TransactionConverter(
         }
     }
 
-    fun getTxTimestamp(tx: PlaidTransaction): OffsetDateTime {
+    fun getTxAuthorizedTimestamp(tx: PlaidTransaction): OffsetDateTime? {
+        if (tx.authorizedDatetime != null) {
+            return tx.authorizedDatetime
+        } else if (tx.authorizedDate == null) {
+            return null
+        }
+        return getOffsetDateTimeForDate(zoneId, tx.authorizedDate)
+    }
+
+    fun getTxPostedTimestamp(tx: PlaidTransaction): OffsetDateTime {
         return tx.datetime
-            ?: tx.authorizedDatetime
             ?: getOffsetDateTimeForDate(zoneId, tx.date)
+    }
+
+    fun getTxDescription(tx: PlaidTransaction): String {
+        // Note about the "name" field from Plaid's API docs:
+        // This is a legacy field that is not actively maintained. Use merchant_name instead for the merchant name.
+        // Source: https://plaid.com/docs/api/products/transactions/#transactionssync
+        //
+        // Observations about the "name" field. It seems to be used differently by different institutions. It's
+        // sometimes exactly the same as merchantName, sometimes it's exactly the same as originalDescription, and
+        // yet other times it's something completely different from either.
+        val merchantName = tx.merchantName ?: tx.name
+
+        // The originalDescription should always be populated because we're calling Plaid
+        // with include_original_description set to true
+        val defaultDesc = merchantName + if (tx.originalDescription == null) "" else ": ${tx.originalDescription}"
+
+        if (txStyle.descriptionExpression == null || txStyle.descriptionExpression.trim().isEmpty()) {
+            return defaultDesc
+        }
+
+        return try {
+            val parser = SpelExpressionParser()
+            val context = StandardEvaluationContext(FormattingContext(tx))
+
+            // Provide #defaultDescription with the default description
+            context.setVariable("merchantAndDescription", defaultDesc)
+
+            // Provide shorthand for tx.merchantName ?: tx.name using #merchantNameWithFallback
+            context.setVariable("merchantNameWithFallback", merchantName)
+
+            val value = parser.parseExpression(txStyle.descriptionExpression.trim()).getValue(context, String::class.java)
+
+            value ?: run {
+                logger.error("Custom description SpEL expression {} returned null. Falling-back to default.", txStyle.descriptionExpression)
+                defaultDesc
+            }
+        } catch (e: RuntimeException) {
+            logger.error("Failed to parse custom description SpEL expression {}. Falling-back to default.", txStyle.descriptionExpression, e)
+            defaultDesc
+        }
     }
 
     fun getSourceOrDestinationName(
@@ -426,27 +480,39 @@ class TransactionConverter(
         destinationName: String? = null,
         fireflyTx: FireflyTransactionDto? = null,
     ): FireflyTransactionDto {
-        val timestamp = getTxTimestamp(tx)
+        val postedTime = getTxPostedTimestamp(tx)
+        val authorizedTime = getTxAuthorizedTimestamp(tx)
+        val externalUrl = if (tx.website != null) {
+            // Plaid does not provide the protocol in the string. Firefly requires a protocol.
+            URLBuilder(
+                protocol = URLProtocol.HTTPS,
+                host = tx.website,
+            ).buildString()
+        } else {
+            null
+        }
         val split = TransactionSplit(
             getFireflyTransactionDtoType(tx, isPair),
-            timestamp,
+            // Plaid's guidance on using authorized date vs posted date:
+            // The authorized_date, when available, is generally preferable to use over the date field for posted
+            // transactions, as it will generally represent the date the user actually made the transaction.
+            // Source: https://plaid.com/docs/api/products/transactions/#transactionssync
+            authorizedTime ?: postedTime,
             /**
              * Always positive per https://github.com/firefly-iii/firefly-iii/issues/2476
              * "Direction" of transactions handled in [getFireflyTransactionDtoType]
              */
             abs(tx.amount).toString(),
-            fireflyTx?.tx?.description
-                ?: (tx.name +
-                        if (tx.originalDescription == null) {
-                            ""
-                        } else {
-                            ": ${tx.originalDescription}"
-                        }),
+            fireflyTx?.tx?.description ?: getTxDescription(tx),
+            processDate = postedTime,
             sourceId = sourceId,
             sourceName = sourceName,
             destinationId = destinationId,
             destinationName = destinationName,
             tags = getFireflyCategoryTags(tx),
+            latitude = tx.location.lat,
+            longitude = tx.location.lon,
+            externalUrl = externalUrl,
             externalId = FireflyTransactionExternalIdIndexer.getExternalId(tx.transactionId),
             order = 0,
             reconciled = false,
@@ -516,3 +582,10 @@ class TransactionConverter(
         }
     }
 }
+
+/**
+ * Container data class for the values passed into the SpEL evaluator context. Although there is currently only one
+ * value here, wrapping that value will make it much easier in the future if we ever want to make other objects
+ * available during SpEL evaluation.
+ */
+data class FormattingContext(val transaction: PlaidTransaction)

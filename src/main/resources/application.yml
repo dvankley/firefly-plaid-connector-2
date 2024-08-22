@@ -61,6 +61,37 @@ fireflyPlaidConnector2:
     batchSize: 100
     # The number of times to retry a failed API call.
     maxRetries: 3
+  # Customize your Firefly transaction description string. When descriptionExpression is omitted or set to an empty
+  # string, the description will be formatted as something like "merchantName: originalDescription".
+  # The expressions are formed as Spring Expression Language (SpEL).
+  # https://docs.spring.io/spring-framework/docs/3.0.x/reference/expressions.html
+  # You should be able to access any of the fields seen under the "added" section of the Plaid sync transactions docs.
+  # Note that the Plaid field names must be converted from snake_case to camelCase.
+  # https://plaid.com/docs/api/products/transactions/#transactions-sync-response-added
+  # Additionally, we set a few special variables that are prefixed with a "#". Those variables are:
+  #  * #merchantAndDescription : The default description value that we use if you don't set any expression at all.
+  #  * #merchantNameWithFallback : This will be set to the Plaid "merchant" field, if available, otherwise it will be
+  #      set to the legacy "name" field.
+  # Although we do our best to fall back to the default description format if you specify an invalid expression, this
+  # can be a little difficult to use if you're unfamiliar with the format. Here are a few examples to get you started.
+  #   * "transaction.name + ': ' + transaction.originalDescription" - This is a simple demonstration of how to access
+  #       fields from the Plaid transaction and link them together. Notice how Plaid fields are NOT prefixed with "#",
+  #       and you must use + and single quotes to concatenate those values with string literals.
+  #   * "transaction.merchantName + ': ' + transaction.originalDescription" - This is an example of what NOT to do. If
+  #       you look at the Plaiddocumentation you'll see that merchant_name is nullable. When we get a transaction where
+  #       the merchant_nameis not set, you'll get a description like "null: Your Original Description". If you don't
+  #       want "null" showing up like that you'll need to look at the next few examples for tips on avoiding it.
+  #   * "transaction.merchantName?:transaction.name + ': ' + transaction.originalDescription" - This demonstrates use of
+  #       the Elvis operator to fallback to another value if the first is null. Note that "#merchantNameWithFallback" is
+  #       the same as "merchantName?:name".
+  #   * "transaction.originalDescription ?: transaction.merchantName ?: transaction.name" - This demonstrates chaining
+  #       multiple Elvis operators together. This is a recommended expression if you want to have expressive
+  #       descriptions with minimal redundancy.
+  #   * "#merchantAndDescription + (transaction.amount > 100 ? ' (expensive!)' : '')" - This will append the string
+  #       "(expensive!)" at the end of the description for transactions above a certain amount. This demonstrates usage
+  #       of the SpEL ternary operator.
+  # As some of the expression syntax can conflict with YAML syntax, it's important to explicitly quote this value.
+#  descriptionExpression: "#merchantAndDescription"
   # Transaction categorization configuration (optional, defaults to disable categorization)
   # Plaid currently supplies two types of categorization information https://plaid.com/blog/transactions-categorization-taxonomy/
   # The current plan is to ignore the old categorization type because the new type (transaction.personalFinanceCategory)
