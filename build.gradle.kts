@@ -8,8 +8,8 @@ val ktorVersion: String by project
 val jacksonVersion: String by project
 
 plugins {
-    id("org.openapi.generator") version "7.7.0"
-    id("org.springframework.boot") version "3.3.2"
+    id("org.openapi.generator") version "7.8.0"
+    id("org.springframework.boot") version "3.3.3"
     id("io.spring.dependency-management") version "1.1.6"
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
