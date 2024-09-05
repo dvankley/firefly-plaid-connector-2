@@ -53,7 +53,7 @@ jobs:
       - name: Build with Gradle
         uses: gradle/gradle-build-action@ac2d340dc04d9e1113182899e983b5400c17cda1
         with:
-          arguments: bootBuildImage --imageName=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          arguments: bootBuildImage --imageName=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest --createdDate=now
 
 #      - name: Build and push Docker image
 #        uses: docker/build-push-action@v3
