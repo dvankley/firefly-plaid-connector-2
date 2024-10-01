@@ -8,8 +8,8 @@ val ktorVersion: String by project
 val jacksonVersion: String by project
 
 plugins {
-    id("org.openapi.generator") version "7.7.0"
-    id("org.springframework.boot") version "3.3.2"
+    id("org.openapi.generator") version "7.8.0"
+    id("org.springframework.boot") version "3.3.4"
     id("io.spring.dependency-management") version "1.1.6"
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
@@ -28,8 +28,8 @@ dependencies {
     implementation(libs.ktor.cio)
     implementation(libs.ktor.logging)
     implementation("org.springframework.boot:spring-boot-starter")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
-    implementation("org.semver4j:semver4j:5.3.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    implementation("org.semver4j:semver4j:5.4.0")
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.mock)
     testImplementation("org.springframework.boot:spring-boot-starter-test")
