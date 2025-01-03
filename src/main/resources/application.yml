@@ -39,6 +39,8 @@ fireflyPlaidConnector2:
   batch:
     # The number of days in the past to pull data for.
     maxSyncDays: 5
+    # NOTE: Given that the balance endpoint is now $0.10 per call, this feature isn't really worth using anymore
+    # and is no longer officially supported because it costs me money every time I want to QA a change to it.
     # If set to true, we will insert an offsetting transaction at the beginning of the batch pull window so
     #   that the total amount of all transactions pulled plus the offsetting transaction equals the current
     #   balance in the account as reported by Plaid.
@@ -46,6 +48,12 @@ fireflyPlaidConnector2:
     #   pull every transaction from the beginning of time.
     # Defaults to false.
     setInitialBalance: false
+    # The number of seconds in the past to use as min_last_updated_datetime in the Plaid /accounts/balance/get call
+    # https://plaid.com/docs/api/products/balance/#accounts-balance-get-request-options-min-last-updated-datetime
+    # Note that this field is only used for Capital One non-depository accounts.
+    # Every other account type can safely ignore this.
+    # Defaults to null
+#    balanceMinLastUpdatedDatetimeSeconds: 86400
   firefly:
 #    url: https://firefly.yourdomain.com
     # Can be created in Firefly in Options->Profile->Oauth->Personal Access Tokens

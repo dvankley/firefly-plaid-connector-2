@@ -8,6 +8,8 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
+import net.djvk.fireflyPlaidConnector2.constants.IntervalSeconds
+import net.djvk.fireflyPlaidConnector2.constants.TimestampSeconds
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
@@ -33,6 +35,8 @@ class BatchSyncRunner(
     private val syncDays: Int,
     @Value("\${fireflyPlaidConnector2.batch.setInitialBalance:false}")
     private val setInitialBalance: Boolean,
+    @Value("\${fireflyPlaidConnector2.batch.balanceMinLastUpdatedDatetimeSeconds:}")
+    private val balanceMinLastUpdatedDatetimeSeconds: IntervalSeconds? = null,
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
 
@@ -151,13 +155,18 @@ class BatchSyncRunner(
             val plaidTxs = allPlaidTxs[accessToken] ?: continue
             // Request balance data for this item/access token
             logger.debug("Requesting balances for access token $accessToken and account ids ${accountIds.joinToString()}")
+            // Calculate min last updated, if required
+            val minLastUpdated = balanceMinLastUpdatedDatetimeSeconds?.let {
+                logger.debug("Setting min_last_updated_datetime to $balanceMinLastUpdatedDatetimeSeconds seconds ago")
+                OffsetDateTime.now().minusSeconds(it)
+            }
             val balances: AccountsGetResponse
             try {
                 balances = plaidApiWrapper.executeRequest(
                     { plaidApi ->
                         plaidApi.accountsBalanceGet(
                             AccountsBalanceGetRequest(
-                                accessToken, null, null, AccountsBalanceGetRequestOptions(accountIds)
+                                accessToken, null, null, AccountsBalanceGetRequestOptions(accountIds, minLastUpdated)
                             )
                         )
                     },

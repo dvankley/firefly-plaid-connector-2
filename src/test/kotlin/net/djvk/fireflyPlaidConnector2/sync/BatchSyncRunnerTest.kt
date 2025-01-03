@@ -45,6 +45,7 @@ internal class BatchSyncRunnerTest {
             return BatchSyncRunner(
                 syncDays,
                 setInitialBalance,
+                null,
                 plaidBatchSize,
                 plaid.wrapper,
                 syncHelper ?: defaultSyncHelper,

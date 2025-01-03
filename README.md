@@ -111,7 +111,8 @@ transaction to a Firefly transfer, the existing Firefly transaction will be dele
 transaction will be created because the Firefly API does not support converting existing transaction types.
 
 ## Initial Balances
-**Note**: Given that the balance endpoint is now $0.10 per call, this feature isn't really worth using anymore.
+**Note**: Given that the balance endpoint is now $0.10 per call, this feature isn't really worth using anymore
+and is no longer officially supported because it costs me money every time I want to QA a change to it.
 
 If `fireflyPlaidConnector2.batch.setInitialBalance` is set to `true`, the connector will try to create "initial balance"
 transactions for each Firefly account that result in the current Firefly balance for each account equalling the
