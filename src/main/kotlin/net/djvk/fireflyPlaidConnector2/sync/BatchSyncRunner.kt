@@ -91,14 +91,6 @@ class BatchSyncRunner(
                             includeOriginalDescription = true,
                             includePersonalFinanceCategoryBeta = false,
                             includePersonalFinanceCategory = true,
-
-                            // The number of days of history to request from the financial institution the first time
-                            // Plaid fetches transactions for an item. This only matters the first time transactions
-                            // are requested for an item and after that it will be ignored. The max value is 730 and
-                            // the default for the API is 90. Since we only have one chance to get this right, we'll
-                            // enforce a minimum value of 180 days, regardless of how many days our config instructs
-                            // us to sync.
-                            daysRequested = max(min(syncDays + 1, 730), 180),
                         )
                     )
                     val plaidTxs: List<Transaction>

@@ -3,69 +3,6 @@ Connector to pull Plaid financial data into the Firefly finance tool.
 
 Inspired by [firefly-plaid-connector](https://gitlab.com/GeorgeHahn/firefly-plaid-connector/).
 
-# Running
-Please note this version of the connector requires at least version v6.1.2 of Firefly.
-
-These are basic instructions for installing and running the connector. See further topics below for more details.
-
-## Running the JAR Directly 
-1. Ensure you have a JRE or JDK for at least Java 17.
-2. Download the latest JAR from the [releases page](https://github.com/dvankley/firefly-plaid-connector-2/releases).
-3. Move the JAR to your desired working directory. 
-4. Make a `persistence/` subdirectory in your working directory for the connector to persist data to that's writeable 
-by the user running the connector.
-5. Set up a configuration file. I suggest copying the existing `application.yml` and modifying as needed.
-See [below](#configuration) for details on configuration.
-6. Run the connector, for instance with `java -jar connector.jar --spring.config.location=application.yml`
-
-## Running via Docker
-New versions of the Docker image are pushed to GHCR with each release.
-The latest version is available at `ghcr.io/dvankley/firefly-plaid-connector-2:latest`.
-
-You can also build your own with `./gradlew bootBuildImage --imageName=your-docker-registry/firefly-plaid-connector-2`.
-
-### Docker Compose
-1. Pull down the [docker-compose-polled.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose-polled.yml) and/or
-[docker-compose-batch.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose-batch.yml) files.
-   1. Ensure you copy the raw file with the exact same whitespace, otherwise you'll have issues. YAML is very picky about whitespace.
-   2. The two different compose files correspond to different [run modes](https://github.com/dvankley/firefly-plaid-connector-2/blob/main/README.md#mode)
-   and contain suggested configuration for a given mode.
-2. Set the `HOST_APPLICATION_CONFIG_FILE_LOCATION` environment variable to point to your
-[config file](https://github.com/dvankley/firefly-plaid-connector-2/blob/main/README.md#configuration-file)
-(or just manually insert your path in the compose file).
-3. If running in polled mode (and thus using `docker-compose-polled.yml`), create a directory on your host machine
-that is writable by anyone, then pass its location in as `HOST_PERSISTENCE_DIRECTORY_LOCATION`.
-   1. This directory will store the polled mode cursor file, which is basically the polled mode's last synced state.
-   2. Using a bind mount for this is kind of crappy, but I couldn't find a good way to make the Spring Boot Gradle
-   bootBuildImage plugin set perms on a named volume cleanly. Suggestions welcome.
-4. Run `docker compose up`.
-### Docker CLI
-#### Requirements
-The application container requires the following:
-1. An application configuration file to read from.
-   1. See [below](#configuration) for details on configuration.
-   2. The `SPRING_CONFIG_LOCATION` environment variable can be 
-   used to set the location (in the container) of the application configuration file.
-2. A directory to write the sync cursor file to (if run in polled mode).
-   1. The `FIREFLYPLAIDCONNECTOR2_POLLED_CURSORFILEDIRECTORYPATH` environment variable can be
-      used to set the location (in the container) of the directory that will contain the sync cursor file.
-
-The example below uses bind mounts for these purposes for
-simplicity, but you can also use volumes if you want.
-If using volumes you will need to use an intermediate container
-to write the application configuration file to a volume, as well as setting permissions to allow the
-application user `cnb` to write to the cursor file directory's volume.
-
-#### Example Docker Run Command
-```shell
-docker run \
---mount type=bind,source=/host/machine/application/config/file/directory,destination=/opt/fpc-config,readonly \
---mount type=bind,source=/host/machine/writeable/directory,destination=/opt/fpc-cursors \
--e SPRING_CONFIG_LOCATION=/opt/fpc-config/application.yml \
--e FIREFLYPLAIDCONNECTOR2_POLLED_CURSORFILEDIRECTORYPATH=/opt/fpc-cursors \
--t firefly-plaid-connector-2
-```
-
 # Concepts
 ## Mode
 The connector can be run in either `batch` or `polled` mode.
@@ -180,13 +117,20 @@ file where you'd expect (`fireflyPlaidConnector2.plaid.clientId` and `fireflyPla
 
 ### Connecting Accounts
 Next up, you need to connect Plaid to your various financial institutions. The easiest way to do this is to run
-[Plaid Quickstart](https://plaid.com/docs/quickstart/) locally. I found the Docker experience to be fairly painless.
+[Plaid Quickstart](https://plaid.com/docs/quickstart/) locally. I recommend using [my fork](https://github.com/dvankley/quickstart)
+of Quickstart because it will enable you to use the [update flow](#update-mode) for credential updates in the future,
+and because it will automatically set the max value for `transactions.days_requested` when initializing an Item, which
+will allow you to backfill up to 2 years of data in batch mode without additional fuss.
+If you use vanilla Quickstart, your Items will [default to a maximum of 90 days of past transaction data]
+(https://github.com/dvankley/firefly-plaid-connector-2/issues/125) and will require re-creation if you want more than that.
+
+I found the Docker experience to be fairly painless.
 I recommend copying the `.env.example` file to a new `.env` file, filling in your credentials, setting `PLAID_ENV` to
 `development` or `production`, and setting `PLAID_PRODUCTS` to `transactions`.
 Note that you will need to add `balances` to use the [initial balances](#initial-balances) feature, but given that
 there's an additional cost for that in production, it's not really worth it.
-Note that
-if you leave `PLAID_PRODUCTS` set to the default `auth,transactions`, you won't be able to connect to some of the
+
+Note that if you leave `PLAID_PRODUCTS` set to the default `auth,transactions`, you won't be able to connect to some of the
 financial institutions you might expect because they don't support the `auth` product.
 
 Once you have Quickstart running, just follow the UI prompts to connect to your financial institutions.
@@ -284,6 +228,70 @@ Environment=“SPRING_CONFIG_LOCATION=/opt/firefly-plaid-connector/application-p
 WantedBy=multi-user.target
 
 ```
+
+# Running
+Please note this version of the connector requires at least version v6.1.2 of Firefly.
+
+These are basic instructions for installing and running the connector. You will See further topics below for more details.
+
+## Running the JAR Directly
+1. Ensure you have a JRE or JDK for at least Java 17.
+2. Download the latest JAR from the [releases page](https://github.com/dvankley/firefly-plaid-connector-2/releases).
+3. Move the JAR to your desired working directory.
+4. Make a `persistence/` subdirectory in your working directory for the connector to persist data to that's writeable
+   by the user running the connector.
+5. Set up a configuration file. I suggest copying the existing `application.yml` and modifying as needed.
+   See [below](#configuration) for details on configuration.
+6. Run the connector, for instance with `java -jar connector.jar --spring.config.location=application.yml`
+
+## Running via Docker
+New versions of the Docker image are pushed to GHCR with each release.
+The latest version is available at `ghcr.io/dvankley/firefly-plaid-connector-2:latest`.
+
+You can also build your own with `./gradlew bootBuildImage --imageName=your-docker-registry/firefly-plaid-connector-2`.
+
+### Docker Compose
+1. Pull down the [docker-compose-polled.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose-polled.yml) and/or
+   [docker-compose-batch.yml](https://raw.githubusercontent.com/dvankley/firefly-plaid-connector-2/main/docker-compose-batch.yml) files.
+    1. Ensure you copy the raw file with the exact same whitespace, otherwise you'll have issues. YAML is very picky about whitespace.
+    2. The two different compose files correspond to different [run modes](https://github.com/dvankley/firefly-plaid-connector-2/blob/main/README.md#mode)
+       and contain suggested configuration for a given mode.
+2. Set the `HOST_APPLICATION_CONFIG_FILE_LOCATION` environment variable to point to your
+   [config file](https://github.com/dvankley/firefly-plaid-connector-2/blob/main/README.md#configuration-file)
+   (or just manually insert your path in the compose file).
+3. If running in polled mode (and thus using `docker-compose-polled.yml`), create a directory on your host machine
+   that is writable by anyone, then pass its location in as `HOST_PERSISTENCE_DIRECTORY_LOCATION`.
+    1. This directory will store the polled mode cursor file, which is basically the polled mode's last synced state.
+    2. Using a bind mount for this is kind of crappy, but I couldn't find a good way to make the Spring Boot Gradle
+       bootBuildImage plugin set perms on a named volume cleanly. Suggestions welcome.
+4. Run `docker compose up`.
+### Docker CLI
+#### Requirements
+The application container requires the following:
+1. An application configuration file to read from.
+    1. See [below](#configuration) for details on configuration.
+    2. The `SPRING_CONFIG_LOCATION` environment variable can be
+       used to set the location (in the container) of the application configuration file.
+2. A directory to write the sync cursor file to (if run in polled mode).
+    1. The `FIREFLYPLAIDCONNECTOR2_POLLED_CURSORFILEDIRECTORYPATH` environment variable can be
+       used to set the location (in the container) of the directory that will contain the sync cursor file.
+
+The example below uses bind mounts for these purposes for
+simplicity, but you can also use volumes if you want.
+If using volumes you will need to use an intermediate container
+to write the application configuration file to a volume, as well as setting permissions to allow the
+application user `cnb` to write to the cursor file directory's volume.
+
+#### Example Docker Run Command
+```shell
+docker run \
+--mount type=bind,source=/host/machine/application/config/file/directory,destination=/opt/fpc-config,readonly \
+--mount type=bind,source=/host/machine/writeable/directory,destination=/opt/fpc-cursors \
+-e SPRING_CONFIG_LOCATION=/opt/fpc-config/application.yml \
+-e FIREFLYPLAIDCONNECTOR2_POLLED_CURSORFILEDIRECTORYPATH=/opt/fpc-cursors \
+-t firefly-plaid-connector-2
+```
+
 # Credential Updates
    On occasion, you will get an `ITEM_LOGIN_REQUIRED` error in the connector logs. This typically happens when the credentials
    for one of the institutional accounts you've linked Plaid to have changed. You can find the access token for the account in question on the log line above the exception log.
