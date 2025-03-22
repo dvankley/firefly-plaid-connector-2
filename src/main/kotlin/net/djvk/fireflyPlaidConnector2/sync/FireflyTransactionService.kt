@@ -3,6 +3,7 @@ package net.djvk.fireflyPlaidConnector2.sync
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -76,15 +77,32 @@ class FireflyTransactionService(
         syncHelper.optimisticInsertBatchIntoFirefly(creates)
         
         // Process updates
+        /**
+         * All updates here will either be updates of existing Firefly transactions that have been
+         *  paired with incoming Plaid creates to become transfers, or updates coming in directly from Plaid.
+         *
+         * Split them here so we can handle them separately.
+         */
+        val (transferUpdates, nonTransferUpdates) = updates.partition { it.tx.type == TransactionTypeProperty.transfer }
+        processFireflyTransferUpdates(transferUpdates)
+        processFireflyNonTransferUpdates(nonTransferUpdates)
+
+        // Process deletes
+        syncHelper.deleteBatchInFirefly(deletes)
+    }
+
+    /**
+     * Firefly's transaction update endpoint does not allow changing transaction types
+     *  (i.e. deposit to transfer), so in cases where we're trying to update existing
+     *  Firefly non-transfer transactions (combined with an incoming Plaid create) to become
+     *  transfer transactions, we have to resolve the updates as deletes and creates.
+     * I'm not crazy about this because any other reference to the existing record will be
+     *  broken, but such is life (and this behavior has been around for a while at this point).
+     */
+    private suspend fun processFireflyTransferUpdates(updates: List<FireflyTransactionDto>) {
         for (update in updates) {
-            /**
-             * Firefly's transaction update endpoint does not allow changing transaction types
-             *  (i.e. deposit to transfer), so we have to resolve updates as deletes and creates.
-             * I'm not crazy about this because any other reference to the existing record will be
-             *  broken, but such is life.
-             */
-            update.id ?: throw IllegalArgumentException("Unexpected update tx missing id: $update")
-            
+            update.id ?: throw IllegalArgumentException("Unexpected transfer update tx missing id: $update")
+
             /**
              * Delete first, if that fails, don't do the create.
              */
@@ -97,14 +115,22 @@ class FireflyTransactionService(
                 )
                 continue
             }
-            
+
             /**
              * This should not be a duplicate, so allow an exception to propagate if it is
              */
             syncHelper.pessimisticInsertBatchIntoFirefly(listOf(update))
         }
-        
-        // Process deletes
-        syncHelper.deleteBatchInFirefly(deletes)
+    }
+
+    /**
+     * Updates direct from Plaid will always be non-transfers (see comment a few lines down
+     *  in [TransactionConverter.convertPollSync]) because we're currently not trying to handle
+     *  the complexity of Plaid updates being applied to Firefly transfers (which themselves
+     *  originated as two distinct Plaid transactions).
+     * Because Plaid direct updates are not transfers, we can update them directly in Firefly.
+     */
+    private suspend fun processFireflyNonTransferUpdates(updates: List<FireflyTransactionDto>) {
+        syncHelper.updateBatchInFirefly(updates)
     }
 }

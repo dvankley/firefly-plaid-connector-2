@@ -3,7 +3,9 @@ package net.djvk.fireflyPlaidConnector2.sync
 import io.ktor.client.plugins.*
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequestOptions
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncResponse
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -15,10 +17,10 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTran
 @Component
 class PlaidSyncService(
     private val plaidApiWrapper: PlaidApiWrapper,
-    
+
     @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
     private val plaidBatchSize: Int,
-    
+
     @Value("\${fireflyPlaidConnector2.polled.allowItemToFail:false}")
     private val allowItemToFail: Boolean,
 ) {
@@ -87,7 +89,7 @@ class PlaidSyncService(
                         " and account ids ${accountIds.joinToString("; ")}"
             )
             val accountIdSet = accountIds.toSet()
-            
+
             // Plaid transaction batch loop
             do {
                 // Iterate through batches of Plaid transactions
@@ -97,7 +99,7 @@ class PlaidSyncService(
                     cursorMap[accessToken],
                     plaidBatchSize
                 ) ?: continue@accessTokenLoop
-                
+
                 cursorMap[accessToken] = response.nextCursor
                 logger.debug(
                     "Received batch of sync updates for access token $accessToken: " +
@@ -135,7 +137,7 @@ class PlaidSyncService(
                 logger.debug("Cursor map contains $accessToken, skipping initialization for it")
                 continue
             }
-            
+
             // For access tokens that we don't have cursors for, iterate through historical data and ignore it
             // to get current cursors
             do {

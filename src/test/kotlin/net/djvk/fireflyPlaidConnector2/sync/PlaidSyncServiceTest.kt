@@ -1,18 +1,13 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
-import io.ktor.client.call.body
-import io.ktor.client.plugins.ClientRequestException
-import io.ktor.client.statement.HttpResponse
-import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
-import org.junit.jupiter.api.Assertions.*
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequestOptions
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
-import org.mockito.Mockito
-import org.mockito.kotlin.*
-import java.time.LocalDate
+import org.mockito.kotlin.mock
 import java.util.stream.Stream
 
 /**
@@ -43,7 +38,7 @@ class PlaidSyncServiceTest {
                         )
                     )
                 ),
-                
+
                 // Test case 2: Without cursor
                 Arguments.of(
                     "Without cursor",
@@ -60,7 +55,7 @@ class PlaidSyncServiceTest {
                         )
                     )
                 ),
-                
+
                 // Test case 3: Custom batch size
                 Arguments.of(
                     "Custom batch size",
@@ -77,7 +72,7 @@ class PlaidSyncServiceTest {
                         )
                     )
                 ),
-                
+
                 // Test case 4: Empty cursor
                 Arguments.of(
                     "Empty cursor",
@@ -94,7 +89,7 @@ class PlaidSyncServiceTest {
                         )
                     )
                 ),
-                
+
                 // Test case 5: Very large batch size
                 Arguments.of(
                     "Very large batch size",
@@ -111,7 +106,7 @@ class PlaidSyncServiceTest {
                         )
                     )
                 ),
-                
+
                 // Test case 6: Very small batch size
                 Arguments.of(
                     "Very small batch size",
@@ -128,7 +123,7 @@ class PlaidSyncServiceTest {
                         )
                     )
                 ),
-                
+
                 // Test case 7: Long token and cursor
                 Arguments.of(
                     "Long token and cursor",
@@ -145,7 +140,7 @@ class PlaidSyncServiceTest {
                         )
                     )
                 ),
-                
+
                 // Test case 8: Special characters in token and cursor
                 Arguments.of(
                     "Special characters in token and cursor",
@@ -184,12 +179,15 @@ class PlaidSyncServiceTest {
     ) {
         // Execute
         val request = plaidSyncService.getTransactionSyncRequest(accessToken, cursor, batchSize)
-        
+
         // Verify
         assertEquals(expectedRequest.accessToken, request.accessToken)
         assertEquals(expectedRequest.cursor, request.cursor)
         assertEquals(expectedRequest.count, request.count)
         assertEquals(expectedRequest.options?.includeOriginalDescription, request.options?.includeOriginalDescription)
-        assertEquals(expectedRequest.options?.includePersonalFinanceCategory, request.options?.includePersonalFinanceCategory)
+        assertEquals(
+            expectedRequest.options?.includePersonalFinanceCategory,
+            request.options?.includePersonalFinanceCategory
+        )
     }
 }
