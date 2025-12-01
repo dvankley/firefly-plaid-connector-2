@@ -25,10 +25,10 @@ class CursorManager(
     suspend fun readCursorMap(): MutableMap<PlaidAccessToken, PlaidSyncCursor> {
         return withContext(Dispatchers.IO) {
             val file = cursorFilePath.toFile()
-            logger.trace("Reading Plaid sync cursor map from $file")
+            logger.debug("Reading Plaid sync cursor map from $file")
 
             if (!file.exists()) {
-                logger.trace("No existing Plaid sync cursor map found, starting from scratch")
+                logger.info("No existing Plaid sync cursor map at ${file.absolutePath}, starting from scratch")
                 return@withContext mutableMapOf()
             }
 

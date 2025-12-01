@@ -13,6 +13,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.6"
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
+    kotlin("plugin.serialization") version "1.9.24"
 }
 
 group = "net.djvk"
@@ -27,14 +28,19 @@ dependencies {
     implementation(libs.bundles.openapi)
     implementation(libs.ktor.cio)
     implementation(libs.ktor.logging)
+    implementation("org.semver4j:semver4j:5.3.0")
     implementation("org.springframework.boot:spring-boot-starter")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
-    implementation("org.semver4j:semver4j:5.3.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.6")
     testImplementation(libs.kotlin.test)
     testImplementation(libs.ktor.mock)
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testImplementation("org.assertj:assertj-core:3.26.3")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+
 }
 
 var generatePlaidClient = tasks.register<org.openapitools.generator.gradle.plugin.tasks.GenerateTask>("generatePlaidClient") {

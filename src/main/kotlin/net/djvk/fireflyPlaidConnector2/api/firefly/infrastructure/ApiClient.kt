@@ -203,4 +203,11 @@ abstract class ApiClient(
             RequestMethod.POST -> HttpMethod.Post
             RequestMethod.OPTIONS -> HttpMethod.Options
         }
+
+    /**
+     * Returns the base URL used for API requests.
+     *
+     * @return The base URL string
+     */
+    fun getBaseUrl(): String = baseUrl
 }

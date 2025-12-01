@@ -1,10 +1,9 @@
 package net.djvk.fireflyPlaidConnector2.lib
 
-import com.fasterxml.jackson.annotation.JsonProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
-import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
+import net.djvk.fireflyPlaidConnector2.constants.FireflyAccountId
+import net.djvk.fireflyPlaidConnector2.constants.PlaidAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum
-import net.djvk.fireflyPlaidConnector2.transactions.PlaidAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import net.djvk.fireflyPlaidConnector2.util.Utilities
 import java.time.LocalDate

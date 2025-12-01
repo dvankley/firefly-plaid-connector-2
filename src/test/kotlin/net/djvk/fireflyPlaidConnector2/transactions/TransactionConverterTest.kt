@@ -1,6 +1,9 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
 import kotlinx.coroutines.runBlocking
+
+import net.djvk.fireflyPlaidConnector2.constants.PlaidAccountId
+import net.djvk.fireflyPlaidConnector2.constants.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
