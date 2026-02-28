@@ -115,7 +115,7 @@ internal class TransferMatcherTest {
                     PlaidFixtures.getTransferTestTransaction(
                         name = "Category makes this not a transfer",
                         datetime = baseDateTime,
-                        personalFinanceCategory = PersonalFinanceCategoryEnum.INCOME_WAGES,
+                        personalFinanceCategory = PersonalFinanceCategoryEnum.INCOME_SALARY,
                         accountId = plaidAcctA,
                         amount = 100.0,
                     ),

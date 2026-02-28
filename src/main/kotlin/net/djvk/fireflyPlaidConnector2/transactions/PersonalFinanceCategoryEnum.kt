@@ -5,52 +5,62 @@ import net.djvk.fireflyPlaidConnector2.constants.Direction
 import org.slf4j.LoggerFactory
 
 /**
- * Possible values of [PersonalFinanceCategory]
- * Pulled from https://plaid.com/documents/transactions-personal-finance-category-taxonomy.csv
+ * Possible values of [PersonalFinanceCategory].
+ *
+ * PFC2 taxonomy pulled from pfc-taxonomy-all.csv / https://plaid.com/docs/transactions/pfc-migration/
  */
 enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detailed) {
+    INCOME_CHILD_SUPPORT(Primary.INCOME, IncomeDetailed.CHILD_SUPPORT),
     INCOME_DIVIDENDS(Primary.INCOME, IncomeDetailed.DIVIDENDS),
+    INCOME_GIG_ECONOMY(Primary.INCOME, IncomeDetailed.GIG_ECONOMY),
     INCOME_INTEREST_EARNED(Primary.INCOME, IncomeDetailed.INTEREST_EARNED),
+    INCOME_LONG_TERM_DISABILITY(Primary.INCOME, IncomeDetailed.LONG_TERM_DISABILITY),
+    INCOME_MILITARY(Primary.INCOME, IncomeDetailed.MILITARY),
+    INCOME_RENTAL(Primary.INCOME, IncomeDetailed.RENTAL),
     INCOME_RETIREMENT_PENSION(Primary.INCOME, IncomeDetailed.RETIREMENT_PENSION),
+    INCOME_SALARY(Primary.INCOME, IncomeDetailed.SALARY),
     INCOME_TAX_REFUND(Primary.INCOME, IncomeDetailed.TAX_REFUND),
     INCOME_UNEMPLOYMENT(Primary.INCOME, IncomeDetailed.UNEMPLOYMENT),
-    INCOME_WAGES(Primary.INCOME, IncomeDetailed.WAGES),
-    INCOME_OTHER_INCOME(Primary.INCOME, IncomeDetailed.OTHER_INCOME),
-    TRANSFER_IN_CASH_ADVANCES_AND_LOANS(Primary.TRANSFER_IN, TransferInDetailed.CASH_ADVANCES_AND_LOANS),
-    TRANSFER_IN_DEPOSIT(Primary.TRANSFER_IN, TransferInDetailed.DEPOSIT),
-    TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS(
-        Primary.TRANSFER_IN,
-        TransferInDetailed.INVESTMENT_AND_RETIREMENT_FUNDS
-    ),
-    TRANSFER_IN_SAVINGS(Primary.TRANSFER_IN, TransferInDetailed.SAVINGS),
-    TRANSFER_IN_ACCOUNT_TRANSFER(Primary.TRANSFER_IN, TransferInDetailed.ACCOUNT_TRANSFER),
-    TRANSFER_IN_OTHER_TRANSFER_IN(Primary.TRANSFER_IN, TransferInDetailed.OTHER_TRANSFER_IN),
-    TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS(
-        Primary.TRANSFER_OUT,
-        TransferOutDetailed.INVESTMENT_AND_RETIREMENT_FUNDS
-    ),
-    TRANSFER_OUT_SAVINGS(Primary.TRANSFER_OUT, TransferOutDetailed.SAVINGS),
-    TRANSFER_OUT_WITHDRAWAL(Primary.TRANSFER_OUT, TransferOutDetailed.WITHDRAWAL),
-    TRANSFER_OUT_ACCOUNT_TRANSFER(Primary.TRANSFER_OUT, TransferOutDetailed.ACCOUNT_TRANSFER),
-    TRANSFER_OUT_OTHER_TRANSFER_OUT(Primary.TRANSFER_OUT, TransferOutDetailed.OTHER_TRANSFER_OUT),
+    INCOME_OTHER(Primary.INCOME, IncomeDetailed.OTHER),
+    LOAN_DISBURSEMENTS_AUTO(Primary.LOAN_DISBURSEMENTS, LoanDisbursementsDetailed.AUTO),
+    LOAN_DISBURSEMENTS_BNPL(Primary.LOAN_DISBURSEMENTS, LoanDisbursementsDetailed.BNPL),
+    LOAN_DISBURSEMENTS_CASH_ADVANCES(Primary.LOAN_DISBURSEMENTS, LoanDisbursementsDetailed.CASH_ADVANCES),
+    LOAN_DISBURSEMENTS_EWA(Primary.LOAN_DISBURSEMENTS, LoanDisbursementsDetailed.EWA),
+    LOAN_DISBURSEMENTS_MORTGAGE(Primary.LOAN_DISBURSEMENTS, LoanDisbursementsDetailed.MORTGAGE),
+    LOAN_DISBURSEMENTS_PERSONAL(Primary.LOAN_DISBURSEMENTS, LoanDisbursementsDetailed.PERSONAL),
+    LOAN_DISBURSEMENTS_STUDENT(Primary.LOAN_DISBURSEMENTS, LoanDisbursementsDetailed.STUDENT),
+    LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT(Primary.LOAN_DISBURSEMENTS, LoanDisbursementsDetailed.OTHER_DISBURSEMENT),
     LOAN_PAYMENTS_CAR_PAYMENT(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.CAR_PAYMENT),
+    LOAN_PAYMENTS_CASH_ADVANCES(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.CASH_ADVANCES),
     LOAN_PAYMENTS_CREDIT_CARD_PAYMENT(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.CREDIT_CARD_PAYMENT),
-    LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.PERSONAL_LOAN_PAYMENT),
+    LOAN_PAYMENTS_EWA(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.EWA),
     LOAN_PAYMENTS_MORTGAGE_PAYMENT(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.MORTGAGE_PAYMENT),
+    LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.PERSONAL_LOAN_PAYMENT),
     LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.STUDENT_LOAN_PAYMENT),
     LOAN_PAYMENTS_OTHER_PAYMENT(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.OTHER_PAYMENT),
+    TRANSFER_IN_ACCOUNT_TRANSFER(Primary.TRANSFER_IN, TransferInDetailed.ACCOUNT_TRANSFER),
+    TRANSFER_IN_DEPOSIT(Primary.TRANSFER_IN, TransferInDetailed.DEPOSIT),
+    TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS(Primary.TRANSFER_IN, TransferInDetailed.INVESTMENT_AND_RETIREMENT_FUNDS),
+    TRANSFER_IN_SAVINGS(Primary.TRANSFER_IN, TransferInDetailed.SAVINGS),
+    TRANSFER_IN_WIRE(Primary.TRANSFER_IN, TransferInDetailed.WIRE),
+    TRANSFER_IN_OTHER_TRANSFER_IN(Primary.TRANSFER_IN, TransferInDetailed.OTHER_TRANSFER_IN),
+    TRANSFER_OUT_ACCOUNT_TRANSFER(Primary.TRANSFER_OUT, TransferOutDetailed.ACCOUNT_TRANSFER),
+    TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS(Primary.TRANSFER_OUT, TransferOutDetailed.INVESTMENT_AND_RETIREMENT_FUNDS),
+    TRANSFER_OUT_SAVINGS(Primary.TRANSFER_OUT, TransferOutDetailed.SAVINGS),
+    TRANSFER_OUT_WIRE(Primary.TRANSFER_OUT, TransferOutDetailed.WIRE),
+    TRANSFER_OUT_WITHDRAWAL(Primary.TRANSFER_OUT, TransferOutDetailed.WITHDRAWAL),
+    TRANSFER_OUT_OTHER_TRANSFER_OUT(Primary.TRANSFER_OUT, TransferOutDetailed.OTHER_TRANSFER_OUT),
     BANK_FEES_ATM_FEES(Primary.BANK_FEES, BankFeesDetailed.ATM_FEES),
-    BANK_FEES_FOREIGN_TRANSACTION_FEES(Primary.BANK_FEES, BankFeesDetailed.FOREIGN_TRANSACTION_FEES),
     BANK_FEES_INSUFFICIENT_FUNDS(Primary.BANK_FEES, BankFeesDetailed.INSUFFICIENT_FUNDS),
     BANK_FEES_INTEREST_CHARGE(Primary.BANK_FEES, BankFeesDetailed.INTEREST_CHARGE),
+    BANK_FEES_FOREIGN_TRANSACTION_FEES(Primary.BANK_FEES, BankFeesDetailed.FOREIGN_TRANSACTION_FEES),
     BANK_FEES_OVERDRAFT_FEES(Primary.BANK_FEES, BankFeesDetailed.OVERDRAFT_FEES),
+    BANK_FEES_LATE_FEES(Primary.BANK_FEES, BankFeesDetailed.LATE_FEES),
+    BANK_FEES_CASH_ADVANCE(Primary.BANK_FEES, BankFeesDetailed.CASH_ADVANCE),
     BANK_FEES_OTHER_BANK_FEES(Primary.BANK_FEES, BankFeesDetailed.OTHER_BANK_FEES),
     ENTERTAINMENT_CASINOS_AND_GAMBLING(Primary.ENTERTAINMENT, EntertainmentDetailed.CASINOS_AND_GAMBLING),
     ENTERTAINMENT_MUSIC_AND_AUDIO(Primary.ENTERTAINMENT, EntertainmentDetailed.MUSIC_AND_AUDIO),
-    ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS(
-        Primary.ENTERTAINMENT,
-        EntertainmentDetailed.SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS
-    ),
+    ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS(Primary.ENTERTAINMENT, EntertainmentDetailed.SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS),
     ENTERTAINMENT_TV_AND_MOVIES(Primary.ENTERTAINMENT, EntertainmentDetailed.TV_AND_MOVIES),
     ENTERTAINMENT_VIDEO_GAMES(Primary.ENTERTAINMENT, EntertainmentDetailed.VIDEO_GAMES),
     ENTERTAINMENT_OTHER_ENTERTAINMENT(Primary.ENTERTAINMENT, EntertainmentDetailed.OTHER_ENTERTAINMENT),
@@ -61,35 +71,20 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     FOOD_AND_DRINK_RESTAURANT(Primary.FOOD_AND_DRINK, FoodAndDrinkDetailed.RESTAURANT),
     FOOD_AND_DRINK_VENDING_MACHINES(Primary.FOOD_AND_DRINK, FoodAndDrinkDetailed.VENDING_MACHINES),
     FOOD_AND_DRINK_OTHER_FOOD_AND_DRINK(Primary.FOOD_AND_DRINK, FoodAndDrinkDetailed.OTHER_FOOD_AND_DRINK),
-    GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS(
-        Primary.GENERAL_MERCHANDISE,
-        GeneralMerchandiseDetailed.BOOKSTORES_AND_NEWSSTANDS
-    ),
-    GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES(
-        Primary.GENERAL_MERCHANDISE,
-        GeneralMerchandiseDetailed.CLOTHING_AND_ACCESSORIES
-    ),
+    GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.BOOKSTORES_AND_NEWSSTANDS),
+    GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.CLOTHING_AND_ACCESSORIES),
     GENERAL_MERCHANDISE_CONVENIENCE_STORES(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.CONVENIENCE_STORES),
     GENERAL_MERCHANDISE_DEPARTMENT_STORES(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.DEPARTMENT_STORES),
     GENERAL_MERCHANDISE_DISCOUNT_STORES(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.DISCOUNT_STORES),
     GENERAL_MERCHANDISE_ELECTRONICS(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.ELECTRONICS),
-    GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES(
-        Primary.GENERAL_MERCHANDISE,
-        GeneralMerchandiseDetailed.GIFTS_AND_NOVELTIES
-    ),
+    GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.GIFTS_AND_NOVELTIES),
     GENERAL_MERCHANDISE_OFFICE_SUPPLIES(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.OFFICE_SUPPLIES),
-    GENERAL_MERCHANDISE_ONLINE_MARKETPLACES(
-        Primary.GENERAL_MERCHANDISE,
-        GeneralMerchandiseDetailed.ONLINE_MARKETPLACES
-    ),
+    GENERAL_MERCHANDISE_ONLINE_MARKETPLACES(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.ONLINE_MARKETPLACES),
     GENERAL_MERCHANDISE_PET_SUPPLIES(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.PET_SUPPLIES),
     GENERAL_MERCHANDISE_SPORTING_GOODS(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.SPORTING_GOODS),
     GENERAL_MERCHANDISE_SUPERSTORES(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.SUPERSTORES),
     GENERAL_MERCHANDISE_TOBACCO_AND_VAPE(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.TOBACCO_AND_VAPE),
-    GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE(
-        Primary.GENERAL_MERCHANDISE,
-        GeneralMerchandiseDetailed.OTHER_GENERAL_MERCHANDISE
-    ),
+    GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE(Primary.GENERAL_MERCHANDISE, GeneralMerchandiseDetailed.OTHER_GENERAL_MERCHANDISE),
     HOME_IMPROVEMENT_FURNITURE(Primary.HOME_IMPROVEMENT, HomeImprovementDetailed.FURNITURE),
     HOME_IMPROVEMENT_HARDWARE(Primary.HOME_IMPROVEMENT, HomeImprovementDetailed.HARDWARE),
     HOME_IMPROVEMENT_REPAIR_AND_MAINTENANCE(Primary.HOME_IMPROVEMENT, HomeImprovementDetailed.REPAIR_AND_MAINTENANCE),
@@ -106,10 +101,7 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     PERSONAL_CARE_HAIR_AND_BEAUTY(Primary.PERSONAL_CARE, PersonalCareDetailed.HAIR_AND_BEAUTY),
     PERSONAL_CARE_LAUNDRY_AND_DRY_CLEANING(Primary.PERSONAL_CARE, PersonalCareDetailed.LAUNDRY_AND_DRY_CLEANING),
     PERSONAL_CARE_OTHER_PERSONAL_CARE(Primary.PERSONAL_CARE, PersonalCareDetailed.OTHER_PERSONAL_CARE),
-    GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING(
-        Primary.GENERAL_SERVICES,
-        GeneralServicesDetailed.ACCOUNTING_AND_FINANCIAL_PLANNING
-    ),
+    GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING(Primary.GENERAL_SERVICES, GeneralServicesDetailed.ACCOUNTING_AND_FINANCIAL_PLANNING),
     GENERAL_SERVICES_AUTOMOTIVE(Primary.GENERAL_SERVICES, GeneralServicesDetailed.AUTOMOTIVE),
     GENERAL_SERVICES_CHILDCARE(Primary.GENERAL_SERVICES, GeneralServicesDetailed.CHILDCARE),
     GENERAL_SERVICES_CONSULTING_AND_LEGAL(Primary.GENERAL_SERVICES, GeneralServicesDetailed.CONSULTING_AND_LEGAL),
@@ -119,18 +111,9 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     GENERAL_SERVICES_STORAGE(Primary.GENERAL_SERVICES, GeneralServicesDetailed.STORAGE),
     GENERAL_SERVICES_OTHER_GENERAL_SERVICES(Primary.GENERAL_SERVICES, GeneralServicesDetailed.OTHER_GENERAL_SERVICES),
     GOVERNMENT_AND_NON_PROFIT_DONATIONS(Primary.GOVERNMENT_AND_NON_PROFIT, GovernmentAndNonProfitDetailed.DONATIONS),
-    GOVERNMENT_AND_NON_PROFIT_GOVERNMENT_DEPARTMENTS_AND_AGENCIES(
-        Primary.GOVERNMENT_AND_NON_PROFIT,
-        GovernmentAndNonProfitDetailed.GOVERNMENT_DEPARTMENTS_AND_AGENCIES
-    ),
-    GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT(
-        Primary.GOVERNMENT_AND_NON_PROFIT,
-        GovernmentAndNonProfitDetailed.TAX_PAYMENT
-    ),
-    GOVERNMENT_AND_NON_PROFIT_OTHER_GOVERNMENT_AND_NON_PROFIT(
-        Primary.GOVERNMENT_AND_NON_PROFIT,
-        GovernmentAndNonProfitDetailed.OTHER_GOVERNMENT_AND_NON_PROFIT
-    ),
+    GOVERNMENT_AND_NON_PROFIT_GOVERNMENT_DEPARTMENTS_AND_AGENCIES(Primary.GOVERNMENT_AND_NON_PROFIT, GovernmentAndNonProfitDetailed.GOVERNMENT_DEPARTMENTS_AND_AGENCIES),
+    GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT(Primary.GOVERNMENT_AND_NON_PROFIT, GovernmentAndNonProfitDetailed.TAX_PAYMENT),
+    GOVERNMENT_AND_NON_PROFIT_OTHER_GOVERNMENT_AND_NON_PROFIT(Primary.GOVERNMENT_AND_NON_PROFIT, GovernmentAndNonProfitDetailed.OTHER_GOVERNMENT_AND_NON_PROFIT),
     TRANSPORTATION_BIKES_AND_SCOOTERS(Primary.TRANSPORTATION, TransportationDetailed.BIKES_AND_SCOOTERS),
     TRANSPORTATION_GAS(Primary.TRANSPORTATION, TransportationDetailed.GAS),
     TRANSPORTATION_PARKING(Primary.TRANSPORTATION, TransportationDetailed.PARKING),
@@ -145,40 +128,51 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     RENT_AND_UTILITIES_GAS_AND_ELECTRICITY(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.GAS_AND_ELECTRICITY),
     RENT_AND_UTILITIES_INTERNET_AND_CABLE(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.INTERNET_AND_CABLE),
     RENT_AND_UTILITIES_RENT(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.RENT),
-    RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT(
-        Primary.RENT_AND_UTILITIES,
-        RentAndUtilitiesDetailed.SEWAGE_AND_WASTE_MANAGEMENT
-    ),
+    RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.SEWAGE_AND_WASTE_MANAGEMENT),
     RENT_AND_UTILITIES_TELEPHONE(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.TELEPHONE),
     RENT_AND_UTILITIES_WATER(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.WATER),
     RENT_AND_UTILITIES_OTHER_UTILITIES(Primary.RENT_AND_UTILITIES, RentAndUtilitiesDetailed.OTHER_UTILITIES),
-    OTHER(Primary.OTHER, OtherDetailed.OTHER);
+    OTHER_OTHER(Primary.OTHER, OtherDetailed.OTHER);
 
     companion object {
         private val logger = LoggerFactory.getLogger(this::class.java)
 
+        /**
+         * Used to map old PFC1 categories to corresponding new PFC2 categories
+         */
+        private val pfc1DetailedToPfc2Detailed = mapOf(
+            "INCOME_OTHER_INCOME" to "INCOME_OTHER",
+            "INCOME_WAGES" to "INCOME_SALARY",
+            "OTHER" to "OTHER_OTHER",
+            "TRANSFER_IN_CASH_ADVANCES_AND_LOANS" to "LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT",
+        )
+
         fun from(categoryModel: PersonalFinanceCategory): PersonalFinanceCategoryEnum {
-            // Business as usual
-            return entries.find {
+            // Business as usual for direct PFC2 matches
+            entries.find {
                 it.primary.name == categoryModel.primary && it.name == categoryModel.detailed
-            }
-            // Fallback to handle random Plaid issues where the primary and detailed are both valid, but
-            // don't match each other
-                ?: run {
-                    val fallbackPrimary = entries.find { it.primary.name == categoryModel.primary }
-                    val fallbackDetailed = entries.find { it.name == categoryModel.detailed }
-                    if (fallbackPrimary != null && fallbackDetailed != null) {
-                        logger.warn(
-                            "Incoming personal finance category $categoryModel has valid but non-matching primary and detailed " +
-                                    "values. Falling back to using the detailed value $fallbackDetailed"
-                        )
-                        fallbackDetailed
-                    } else {
-                        null
-                    }
+            }?.let { return it }
+
+            // Fallback for PFC1 detailed values that were renamed in PFC2
+            val migratedDetailed = pfc1DetailedToPfc2Detailed[categoryModel.detailed] ?: categoryModel.detailed
+
+            // Fallback to handle Plaid issues where primary and detailed are both valid but do not match
+            val fallbackPrimary = entries.find { it.primary.name == categoryModel.primary }
+            val fallbackDetailed = entries.find { it.name == migratedDetailed }
+            if (fallbackPrimary != null && fallbackDetailed != null) {
+                if (migratedDetailed != categoryModel.detailed) {
+                    logger.warn(
+                        "Migrated legacy personal finance category detailed value ${categoryModel.detailed} to $migratedDetailed for category $categoryModel"
+                    )
+                } else {
+                    logger.warn(
+                        "Incoming personal finance category $categoryModel has valid but non-matching primary and detailed values. Falling back to using the detailed value $fallbackDetailed"
+                    )
                 }
-                // Give up
-                ?: throw IllegalArgumentException("Failed to convert personal finance category $categoryModel to enum")
+                return fallbackDetailed
+            }
+
+            throw IllegalArgumentException("Failed to convert personal finance category $categoryModel to enum")
         }
     }
 
@@ -193,9 +187,10 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
 
     enum class Primary(val defaultDirection: Direction) {
         INCOME(Direction.IN),
+        LOAN_DISBURSEMENTS(Direction.IN),
+        LOAN_PAYMENTS(Direction.OUT),
         TRANSFER_IN(Direction.IN),
         TRANSFER_OUT(Direction.OUT),
-        LOAN_PAYMENTS(Direction.OUT),
         BANK_FEES(Direction.OUT),
         ENTERTAINMENT(Direction.OUT),
         FOOD_AND_DRINK(Direction.OUT),
@@ -212,47 +207,68 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     }
 
     enum class IncomeDetailed(override val description: String) : Detailed {
+        CHILD_SUPPORT("Child support"),
         DIVIDENDS("Dividends from investment accounts"),
+        GIG_ECONOMY("Gig economy"),
         INTEREST_EARNED("Income from interest on savings accounts"),
-        RETIREMENT_PENSION("Income from pension payments "),
+        LONG_TERM_DISABILITY("Long term disability"),
+        MILITARY("Military"),
+        RENTAL("Rental"),
+        RETIREMENT_PENSION("Income from pension payments"),
+        SALARY("Income from salaries, gig-economy work, and tips earned"),
         TAX_REFUND("Income from tax refunds"),
         UNEMPLOYMENT("Income from unemployment benefits, including unemployment insurance and healthcare"),
-        WAGES("Income from salaries, gig-economy work, and tips earned"),
-        OTHER_INCOME("Other miscellaneous income, including alimony, social security, child support, and rental"),
+        OTHER("Other miscellaneous income, including alimony, social security, child support, and rental"),
     }
 
-    enum class TransferInDetailed(override val description: String) : Detailed {
-        CASH_ADVANCES_AND_LOANS("Loans and cash advances deposited into a bank account"),
-        DEPOSIT("Cash, checks, and ATM deposits into a bank account"),
-        INVESTMENT_AND_RETIREMENT_FUNDS("Inbound transfers to an investment or retirement account"),
-        SAVINGS("Inbound transfers to a savings account"),
-        ACCOUNT_TRANSFER("General inbound transfers from another account"),
-        OTHER_TRANSFER_IN("Other miscellaneous inbound transactions"),
-    }
-
-    enum class TransferOutDetailed(override val description: String) : Detailed {
-        INVESTMENT_AND_RETIREMENT_FUNDS("Transfers to an investment or retirement account, including investment apps such as Acorns, Betterment"),
-        SAVINGS("Outbound transfers to savings accounts"),
-        WITHDRAWAL("Withdrawals from a bank account"),
-        ACCOUNT_TRANSFER("General outbound transfers to another account"),
-        OTHER_TRANSFER_OUT("Other miscellaneous outbound transactions"),
+    enum class LoanDisbursementsDetailed(override val description: String) : Detailed {
+        AUTO("Auto"),
+        BNPL("Bnpl"),
+        CASH_ADVANCES("Cash advances"),
+        EWA("Ewa"),
+        MORTGAGE("Mortgage"),
+        PERSONAL("Personal"),
+        STUDENT("Student"),
+        OTHER_DISBURSEMENT("Loans and cash advances deposited into a bank account"),
     }
 
     enum class LoanPaymentsDetailed(override val description: String) : Detailed {
         CAR_PAYMENT("Car loans and leases"),
+        CASH_ADVANCES("Cash advances"),
         CREDIT_CARD_PAYMENT("Payments to a credit card. These are positive amounts for credit card subtypes and negative for depository subtypes"),
-        PERSONAL_LOAN_PAYMENT("Personal loans, including cash advances and buy now pay later repayments"),
+        EWA("Ewa"),
         MORTGAGE_PAYMENT("Payments on mortgages"),
+        PERSONAL_LOAN_PAYMENT("Personal loans, including cash advances and buy now pay later repayments"),
         STUDENT_LOAN_PAYMENT("Payments on student loans. For college tuition, refer to \"General Services - Education\""),
         OTHER_PAYMENT("Other miscellaneous debt payments"),
     }
 
+    enum class TransferInDetailed(override val description: String) : Detailed {
+        ACCOUNT_TRANSFER("General inbound transfers from another account"),
+        DEPOSIT("Cash, checks, and ATM deposits into a bank account"),
+        INVESTMENT_AND_RETIREMENT_FUNDS("Inbound transfers to an investment or retirement account"),
+        SAVINGS("Inbound transfers to a savings account"),
+        WIRE("Wire"),
+        OTHER_TRANSFER_IN("Other miscellaneous inbound transactions"),
+    }
+
+    enum class TransferOutDetailed(override val description: String) : Detailed {
+        ACCOUNT_TRANSFER("General outbound transfers to another account"),
+        INVESTMENT_AND_RETIREMENT_FUNDS("Transfers to an investment or retirement account, including investment apps such as Acorns, Betterment"),
+        SAVINGS("Outbound transfers to savings accounts"),
+        WIRE("Wire"),
+        WITHDRAWAL("Withdrawals from a bank account"),
+        OTHER_TRANSFER_OUT("Other miscellaneous outbound transactions"),
+    }
+
     enum class BankFeesDetailed(override val description: String) : Detailed {
         ATM_FEES("Fees incurred for out-of-network ATMs"),
-        FOREIGN_TRANSACTION_FEES("Fees incurred on non-domestic transactions"),
         INSUFFICIENT_FUNDS("Fees relating to insufficient funds"),
         INTEREST_CHARGE("Fees incurred for interest on purchases, including not-paid-in-full or interest on cash advances"),
+        FOREIGN_TRANSACTION_FEES("Fees incurred on non-domestic transactions"),
         OVERDRAFT_FEES("Fees incurred when an account is in overdraft"),
+        LATE_FEES("Late fees"),
+        CASH_ADVANCE("Cash advance"),
         OTHER_BANK_FEES("Other miscellaneous bank fees"),
     }
 
@@ -276,7 +292,7 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     }
 
     enum class GeneralMerchandiseDetailed(override val description: String) : Detailed {
-        BOOKSTORES_AND_NEWSSTANDS("Books, magazines, and news "),
+        BOOKSTORES_AND_NEWSSTANDS("Books, magazines, and news"),
         CLOTHING_AND_ACCESSORIES("Apparel, shoes, and jewelry"),
         CONVENIENCE_STORES("Purchases at convenience stores"),
         DEPARTMENT_STORES("Retail stores with wide ranges of consumer goods, typically specializing in clothing and home goods"),
@@ -312,7 +328,7 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
 
     enum class PersonalCareDetailed(override val description: String) : Detailed {
         GYMS_AND_FITNESS_CENTERS("Gyms, fitness centers, and workout classes"),
-        HAIR_AND_BEAUTY("Manicures, haircuts, waxing, spa/massages, and bath and beauty products "),
+        HAIR_AND_BEAUTY("Manicures, haircuts, waxing, spa/massages, and bath and beauty products"),
         LAUNDRY_AND_DRY_CLEANING("Wash and fold, and dry cleaning expenses"),
         OTHER_PERSONAL_CARE("Other miscellaneous personal care, including mental health apps and services"),
     }
@@ -326,7 +342,7 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
         INSURANCE("Insurance for auto, home, and healthcare"),
         POSTAGE_AND_SHIPPING("Mail, packaging, and shipping services"),
         STORAGE("Storage services and facilities"),
-        OTHER_GENERAL_SERVICES("Other miscellaneous services, including advertising and cloud storage "),
+        OTHER_GENERAL_SERVICES("Other miscellaneous services, including advertising and cloud storage"),
     }
 
     enum class GovernmentAndNonProfitDetailed(override val description: String) : Detailed {
