@@ -1,7 +1,7 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
 import io.ktor.http.*
-import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
+
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
@@ -17,10 +17,13 @@ import org.springframework.stereotype.Component
 import java.time.*
 import java.util.*
 import kotlin.math.abs
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 
-typealias PlaidAccountId = String
-typealias FireflyAccountId = Int
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
+import net.djvk.fireflyPlaidConnector2.constants.FireflyTransactionId
+import net.djvk.fireflyPlaidConnector2.constants.PlaidAccountId
+import net.djvk.fireflyPlaidConnector2.constants.FireflyAccountId
+
+
 
 /**
  * These are the only Firefly transaction types that are eligible to be converted into transfers.

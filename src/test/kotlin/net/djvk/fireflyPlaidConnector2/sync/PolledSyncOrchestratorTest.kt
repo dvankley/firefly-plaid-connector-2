@@ -52,6 +52,8 @@ internal class PolledSyncOrchestratorTest {
         // Create an orchestrator instance
         val orchestrator = PolledSyncOrchestrator(
             30, // syncFrequencyMinutes
+            null,
+            null,
             syncHelper,
             cursorManager,
             plaidSyncService,
@@ -257,6 +259,8 @@ internal class PolledSyncOrchestratorTest {
         // Create an orchestrator instance
         val orchestrator = PolledSyncOrchestrator(
             30, // syncFrequencyMinutes
+            null,
+            null,
             syncHelper,
             cursorManager,
             plaidSyncService,

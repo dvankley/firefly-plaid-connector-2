@@ -36,6 +36,13 @@ fireflyPlaidConnector2:
     # Configuration element specifying whether the remainder of the poll sync session should continue if one item
     # has failed to fetch from Plaid for any reason.
     allowItemToFail: false
+    #
+    # Parameters below are *optional*
+    # resultCallbackUrl: https://aserver.fromwhich.tomonitor/somecallback
+    # A url at which the connector can report results of each poll that is conducted
+    # resultCallbackBearerToken: WebhookToken
+    # If provided, this is the value that will be provided as authorization in the
+    #    Authorization header as a bearer type
   batch:
     # The number of days in the past to pull data for.
     maxSyncDays: 5

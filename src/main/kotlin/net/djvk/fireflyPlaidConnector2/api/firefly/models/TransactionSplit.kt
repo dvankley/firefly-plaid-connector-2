@@ -21,7 +21,7 @@
 package net.djvk.fireflyPlaidConnector2.api.firefly.models
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionSplitId
+import net.djvk.fireflyPlaidConnector2.constants.FireflyTransactionSplitId
 
 /**
  *
