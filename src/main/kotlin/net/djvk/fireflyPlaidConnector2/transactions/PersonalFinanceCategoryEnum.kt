@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory
  */
 enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detailed) {
     INCOME_CHILD_SUPPORT(Primary.INCOME, IncomeDetailed.CHILD_SUPPORT),
+    INCOME_CONTRACTOR(Primary.INCOME, IncomeDetailed.CONTRACTOR),
     INCOME_DIVIDENDS(Primary.INCOME, IncomeDetailed.DIVIDENDS),
     INCOME_GIG_ECONOMY(Primary.INCOME, IncomeDetailed.GIG_ECONOMY),
     INCOME_INTEREST_EARNED(Primary.INCOME, IncomeDetailed.INTEREST_EARNED),
@@ -31,6 +32,7 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     LOAN_DISBURSEMENTS_STUDENT(Primary.LOAN_DISBURSEMENTS, LoanDisbursementsDetailed.STUDENT),
     LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT(Primary.LOAN_DISBURSEMENTS, LoanDisbursementsDetailed.OTHER_DISBURSEMENT),
     LOAN_PAYMENTS_CAR_PAYMENT(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.CAR_PAYMENT),
+    LOAN_PAYMENTS_BNPL(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.BNPL),
     LOAN_PAYMENTS_CASH_ADVANCES(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.CASH_ADVANCES),
     LOAN_PAYMENTS_CREDIT_CARD_PAYMENT(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.CREDIT_CARD_PAYMENT),
     LOAN_PAYMENTS_EWA(Primary.LOAN_PAYMENTS, LoanPaymentsDetailed.EWA),
@@ -42,11 +44,14 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
     TRANSFER_IN_DEPOSIT(Primary.TRANSFER_IN, TransferInDetailed.DEPOSIT),
     TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS(Primary.TRANSFER_IN, TransferInDetailed.INVESTMENT_AND_RETIREMENT_FUNDS),
     TRANSFER_IN_SAVINGS(Primary.TRANSFER_IN, TransferInDetailed.SAVINGS),
+    TRANSFER_IN_TRANSFER_IN_FROM_APPS(Primary.TRANSFER_IN, TransferInDetailed.TRANSFER_IN_FROM_APPS),
     TRANSFER_IN_WIRE(Primary.TRANSFER_IN, TransferInDetailed.WIRE),
     TRANSFER_IN_OTHER_TRANSFER_IN(Primary.TRANSFER_IN, TransferInDetailed.OTHER_TRANSFER_IN),
     TRANSFER_OUT_ACCOUNT_TRANSFER(Primary.TRANSFER_OUT, TransferOutDetailed.ACCOUNT_TRANSFER),
+    TRANSFER_OUT_CRYPTO(Primary.TRANSFER_OUT, TransferOutDetailed.CRYPTO),
     TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS(Primary.TRANSFER_OUT, TransferOutDetailed.INVESTMENT_AND_RETIREMENT_FUNDS),
     TRANSFER_OUT_SAVINGS(Primary.TRANSFER_OUT, TransferOutDetailed.SAVINGS),
+    TRANSFER_OUT_TRANSFER_OUT_FROM_APPS(Primary.TRANSFER_OUT, TransferOutDetailed.TRANSFER_OUT_FROM_APPS),
     TRANSFER_OUT_WIRE(Primary.TRANSFER_OUT, TransferOutDetailed.WIRE),
     TRANSFER_OUT_WITHDRAWAL(Primary.TRANSFER_OUT, TransferOutDetailed.WITHDRAWAL),
     TRANSFER_OUT_OTHER_TRANSFER_OUT(Primary.TRANSFER_OUT, TransferOutDetailed.OTHER_TRANSFER_OUT),
@@ -208,6 +213,7 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
 
     enum class IncomeDetailed(override val description: String) : Detailed {
         CHILD_SUPPORT("Child support"),
+        CONTRACTOR("Income from freelance or independent contract work."),
         DIVIDENDS("Dividends from investment accounts"),
         GIG_ECONOMY("Gig economy"),
         INTEREST_EARNED("Income from interest on savings accounts"),
@@ -234,6 +240,7 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
 
     enum class LoanPaymentsDetailed(override val description: String) : Detailed {
         CAR_PAYMENT("Car loans and leases"),
+        BNPL("Loan payments for buy now, pay later (BNPL) services."),
         CASH_ADVANCES("Cash advances"),
         CREDIT_CARD_PAYMENT("Payments to a credit card. These are positive amounts for credit card subtypes and negative for depository subtypes"),
         EWA("Ewa"),
@@ -248,14 +255,17 @@ enum class PersonalFinanceCategoryEnum(val primary: Primary, val detailed: Detai
         DEPOSIT("Cash, checks, and ATM deposits into a bank account"),
         INVESTMENT_AND_RETIREMENT_FUNDS("Inbound transfers to an investment or retirement account"),
         SAVINGS("Inbound transfers to a savings account"),
+        TRANSFER_IN_FROM_APPS("Money transferred into the account from another application"),
         WIRE("Wire"),
         OTHER_TRANSFER_IN("Other miscellaneous inbound transactions"),
     }
 
     enum class TransferOutDetailed(override val description: String) : Detailed {
         ACCOUNT_TRANSFER("General outbound transfers to another account"),
+        CRYPTO("Outbound transfers of cryptocurrency"),
         INVESTMENT_AND_RETIREMENT_FUNDS("Transfers to an investment or retirement account, including investment apps such as Acorns, Betterment"),
         SAVINGS("Outbound transfers to savings accounts"),
+        TRANSFER_OUT_FROM_APPS("Money transferred out of the account into another application"),
         WIRE("Wire"),
         WITHDRAWAL("Withdrawals from a bank account"),
         OTHER_TRANSFER_OUT("Other miscellaneous outbound transactions"),
