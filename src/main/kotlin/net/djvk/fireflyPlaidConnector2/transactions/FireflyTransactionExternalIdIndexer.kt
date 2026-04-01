@@ -1,6 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
-import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyExternalId
+import net.djvk.fireflyPlaidConnector2.constants.FireflyExternalId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
 

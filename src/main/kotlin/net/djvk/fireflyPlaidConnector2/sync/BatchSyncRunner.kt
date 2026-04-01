@@ -8,8 +8,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
-import net.djvk.fireflyPlaidConnector2.constants.IntervalSeconds
-import net.djvk.fireflyPlaidConnector2.constants.TimestampSeconds
+import net.djvk.fireflyPlaidConnector2.constants.*
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory

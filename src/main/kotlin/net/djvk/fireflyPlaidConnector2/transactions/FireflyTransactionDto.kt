@@ -1,6 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
-import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
+import net.djvk.fireflyPlaidConnector2.constants.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.*
 import java.time.OffsetDateTime
 import java.time.ZoneId

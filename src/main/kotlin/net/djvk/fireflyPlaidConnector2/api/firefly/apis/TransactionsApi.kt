@@ -27,10 +27,9 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.infrastructure.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.*
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import net.djvk.fireflyPlaidConnector2.constants.FireflyTransactionId
+import net.djvk.fireflyPlaidConnector2.constants.FireflyTransactionSplitId
 
-typealias FireflyTransactionId = String
-typealias FireflyExternalId = String
-typealias FireflyTransactionSplitId = String
 
 @Component
 open class TransactionsApi(

@@ -1,6 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.lib
 
-import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionSplitId
+import net.djvk.fireflyPlaidConnector2.constants.FireflyTransactionSplitId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.AccountTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.Transaction
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
