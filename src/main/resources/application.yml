@@ -58,6 +58,22 @@ fireflyPlaidConnector2:
 #    url: https://firefly.yourdomain.com
     # Can be created in Firefly in Options->Profile->Oauth->Personal Access Tokens
 #    personalAccessToken: TOKAAAAAN
+    # Timeout for HTTP requests to the Firefly API, in milliseconds. Previously hardcoded to 60000.
+    requestTimeoutMillis: 60000
+    retry:
+      # Total number of attempts (including the first), for a retryable Firefly API failure, before
+      #   giving up and letting the exception propagate. This will crash the app; it's expected to be
+      #   restarted by your container orchestration (e.g. Docker Compose). On restart, the last
+      #   successfully-persisted Plaid sync cursor is re-read and any transactions already written to
+      #   Firefly before the failure are safely re-delivered and deduped by Firefly (matched on
+      #   external ID), so retries here just reduce how often that restart cycle is needed.
+      maxAttempts: 5
+      # Backoff delay (ms) before the next attempt is initialDelayMs * (multiplier ^ (attempt - 1)),
+      #   capped at maxDelayMs, with +/- jitterFactor randomization applied.
+      initialDelayMs: 1000
+      maxDelayMs: 60000
+      multiplier: 2.0
+      jitterFactor: 0.2
   plaid:
 #    url: https://production.plaid.com
 #    clientId: HI I'M A CLIENT ID
@@ -67,8 +83,17 @@ fireflyPlaidConnector2:
     #   than just the Plaid transaction batch in memory to try to match up transfers.
     # Larger batch sizes can reduce rate limiting issues.
     batchSize: 100
-    # The number of times to retry a failed API call.
-    maxRetries: 3
+    # Deprecated: use plaid.retry.maxAttempts instead. If maxAttempts is not set, it is inferred as
+    #   maxRetries + 1 (maxRetries counted retries after the first attempt; maxAttempts counts the
+    #   first attempt too). If both are set, maxAttempts wins.
+#    maxRetries: 3
+    retry:
+      # See fireflyPlaidConnector2.firefly.retry.maxAttempts above for what happens on exhaustion.
+      maxAttempts: 4
+      initialDelayMs: 1000
+      maxDelayMs: 60000
+      multiplier: 2.0
+      jitterFactor: 0.2
   # Customize your Firefly transaction description string. When descriptionExpression is omitted or set to an empty
   # string, the description will be formatted as something like "merchantName: originalDescription".
   # The expressions are formed as Spring Expression Language (SpEL).

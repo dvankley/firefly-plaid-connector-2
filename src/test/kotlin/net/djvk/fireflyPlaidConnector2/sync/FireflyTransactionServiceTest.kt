@@ -1,6 +1,8 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.api.RetryProperties
+import net.djvk.fireflyPlaidConnector2.api.firefly.FireflyApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
@@ -24,8 +26,25 @@ class FireflyTransactionServiceTest {
     private val fireflyTransactionService = FireflyTransactionService(
         fireflyTxApi,
         syncHelper,
+        FireflyApiWrapper(RetryProperties(maxAttempts = 1)),
         existingFireflyPullWindowDays
     )
+
+    @Test
+    fun retriesDnsFailureWithoutAdvancingPage() = runBlocking {
+        val failure = java.nio.channels.UnresolvedAddressException()
+        whenever(fireflyTxApi.listTransaction(eq(0), any(), any(), any())).thenThrow(failure)
+        val service = FireflyTransactionService(
+            fireflyTxApi, syncHelper,
+            FireflyApiWrapper(RetryProperties(maxAttempts = 3, initialDelayMs = 0)),
+            existingFireflyPullWindowDays,
+        )
+        val thrown = kotlin.test.assertFailsWith<java.nio.channels.UnresolvedAddressException> {
+            service.fetchExistingFireflyTransactions()
+        }
+        kotlin.test.assertSame(failure, thrown)
+        verify(fireflyTxApi, times(3)).listTransaction(eq(0), any(), any(), any())
+    }
 
     @Test
     fun testProcessFireflyTransactionUpdates() {

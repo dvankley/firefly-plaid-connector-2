@@ -3,6 +3,7 @@ package net.djvk.fireflyPlaidConnector2.lib
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.util.reflect.*
+import net.djvk.fireflyPlaidConnector2.api.firefly.FireflyApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AboutApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AccountsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
@@ -44,7 +45,7 @@ fun <T : Any> createPlaidResponse(
 class PlaidMock {
     val api = mock<PlaidApi>()
     val wrapper = mock<PlaidApiWrapper> {
-        onBlocking { executeRequest(any<suspend (PlaidApi) -> Any>(), any(), any()) } doSuspendableAnswer {
+        onBlocking { executeRequest(any<suspend (PlaidApi) -> Any>(), any()) } doSuspendableAnswer {
             val requestExecutor = it.getArgument(0) as suspend (PlaidApi) -> Any
             requestExecutor.invoke(api)
         }
@@ -73,6 +74,12 @@ class FireflyMock {
     val aboutApi = mock<AboutApi>()
     val transactionsApi = mock<TransactionsApi>()
     val accountsApi = mock<AccountsApi>()
+    val wrapper = mock<FireflyApiWrapper> {
+        onBlocking { executeRequest(any(), any(), any<suspend () -> Any>()) } doSuspendableAnswer {
+            val block = it.getArgument<suspend () -> Any>(2)
+            block.invoke()
+        }
+    }
 
     init {
         val systemInfoData = SystemInfoData(
