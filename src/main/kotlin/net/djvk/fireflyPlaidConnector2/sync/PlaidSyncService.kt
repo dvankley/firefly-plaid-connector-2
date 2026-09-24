@@ -108,13 +108,29 @@ class PlaidSyncService(
                 )
 
                 // The transaction sync endpoint doesn't take accountId as a parameter, so do that filtering here
-                plaidCreatedTxs.addAll(response.added.filter { accountIdSet.contains(it.accountId) })
-                plaidUpdatedTxs.addAll(response.modified.filter { accountIdSet.contains(it.accountId) })
-                plaidDeletedTxs.addAll(
-                    response.removed
-                        .filter { accountIdSet.contains(it.accountId) }
-                        .mapNotNull { it.transactionId }
-                )
+                val added = response.added.filter { accountIdSet.contains(it.accountId) }
+                val modified = response.modified.filter { accountIdSet.contains(it.accountId) }
+                val removed = response.removed.filter { accountIdSet.contains(it.accountId) }
+                plaidCreatedTxs.addAll(added)
+                plaidUpdatedTxs.addAll(modified)
+                plaidDeletedTxs.addAll(removed.mapNotNull { it.transactionId })
+                added.forEach {
+                    logger.debug(
+                        "Adding transaction: (id={}; account={}; desc={}; merchant={}; date={}; amount={}; pending={}; pendingId={})",
+                        it.transactionId, it.accountId, it.originalDescription, it.merchantName, it.date, it.amount,
+                        it.pending, it.pendingTransactionId
+                    )
+                }
+                modified.forEach {
+                    logger.debug(
+                        "Modifying transaction: (id={}; account={}; desc={}; merchant={}; date={}; amount={}; pending={}; pendingId={})",
+                        it.transactionId, it.accountId, it.originalDescription, it.merchantName, it.date, it.amount,
+                        it.pending, it.pendingTransactionId
+                    )
+                }
+                removed.forEach {
+                    logger.debug("Removing transaction: (id={}; account={})", it.transactionId, it.accountId)
+                }
 
                 // Keep going until we get all the transactions
             } while (response.hasMore)
