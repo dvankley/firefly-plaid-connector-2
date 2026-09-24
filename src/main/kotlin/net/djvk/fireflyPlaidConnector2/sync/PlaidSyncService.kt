@@ -110,7 +110,11 @@ class PlaidSyncService(
                 // The transaction sync endpoint doesn't take accountId as a parameter, so do that filtering here
                 plaidCreatedTxs.addAll(response.added.filter { accountIdSet.contains(it.accountId) })
                 plaidUpdatedTxs.addAll(response.modified.filter { accountIdSet.contains(it.accountId) })
-                plaidDeletedTxs.addAll(response.removed.mapNotNull { it.transactionId })
+                plaidDeletedTxs.addAll(
+                    response.removed
+                        .filter { accountIdSet.contains(it.accountId) }
+                        .mapNotNull { it.transactionId }
+                )
 
                 // Keep going until we get all the transactions
             } while (response.hasMore)
