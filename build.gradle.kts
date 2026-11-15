@@ -9,7 +9,7 @@ val jacksonVersion: String by project
 
 plugins {
     id("org.openapi.generator") version "7.7.0"
-    id("org.springframework.boot") version "3.3.2"
+    id("org.springframework.boot") version "3.5.16"
     id("io.spring.dependency-management") version "1.1.6"
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
