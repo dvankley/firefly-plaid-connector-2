@@ -19,7 +19,7 @@ import kotlin.math.pow
  * exactly as if retries had never been attempted.
  */
 object RetryExecutor {
-    const val DEFAULT_MAX_ATTEMPTS = 5
+    const val DEFAULT_MAX_ATTEMPTS = 7
 
     private val logger = LoggerFactory.getLogger(this::class.java)
 

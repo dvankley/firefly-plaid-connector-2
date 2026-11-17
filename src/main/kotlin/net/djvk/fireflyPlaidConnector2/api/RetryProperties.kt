@@ -13,8 +13,8 @@ data class RetryProperties(
      * deprecated `maxRetries` inference).
      */
     var maxAttempts: Int? = null,
-    var initialDelayMs: Long = 1000,
-    var maxDelayMs: Long = 60000,
+    var initialDelayMs: Long = 15000,
+    var maxDelayMs: Long = 300000,
     var multiplier: Double = 2.0,
     var jitterFactor: Double = 0.2,
 )

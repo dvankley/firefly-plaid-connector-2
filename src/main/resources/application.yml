@@ -67,11 +67,11 @@ fireflyPlaidConnector2:
       #   successfully-persisted Plaid sync cursor is re-read and any transactions already written to
       #   Firefly before the failure are safely re-delivered and deduped by Firefly (matched on
       #   external ID), so retries here just reduce how often that restart cycle is needed.
-      maxAttempts: 5
+      maxAttempts: 7
       # Backoff delay (ms) before the next attempt is initialDelayMs * (multiplier ^ (attempt - 1)),
       #   capped at maxDelayMs, with +/- jitterFactor randomization applied.
-      initialDelayMs: 1000
-      maxDelayMs: 60000
+      initialDelayMs: 15000
+      maxDelayMs: 300000
       multiplier: 2.0
       jitterFactor: 0.2
   plaid:
@@ -89,9 +89,9 @@ fireflyPlaidConnector2:
 #    maxRetries: 3
     retry:
       # See fireflyPlaidConnector2.firefly.retry.maxAttempts above for what happens on exhaustion.
-      maxAttempts: 4
-      initialDelayMs: 1000
-      maxDelayMs: 60000
+      maxAttempts: 7
+      initialDelayMs: 15000
+      maxDelayMs: 300000
       multiplier: 2.0
       jitterFactor: 0.2
   # Customize your Firefly transaction description string. When descriptionExpression is omitted or set to an empty
