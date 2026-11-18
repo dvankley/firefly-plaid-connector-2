@@ -1,0 +1,19 @@
+{
+  "properties": [
+    {
+      "name": "firefly-plaid-connector2.plaid.max-retries",
+      "type": "java.lang.Integer",
+      "description": "Maximum number of Plaid retries after the initial attempt.",
+      "deprecation": {
+        "level": "warning",
+        "reason": "The replacement counts the initial attempt. Set max-attempts to max-retries plus one when migrating.",
+        "replacement": "firefly-plaid-connector2.plaid.retry.max-attempts"
+      }
+    },
+    {
+      "name": "firefly-plaid-connector2.plaid.retry.max-attempts",
+      "type": "java.lang.Integer",
+      "description": "Maximum number of Plaid request attempts, including the initial attempt."
+    }
+  ]
+}
