@@ -1,8 +1,16 @@
 package net.djvk.fireflyPlaidConnector2.api.firefly
 
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
+import io.ktor.utils.io.ByteChannel
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.api.ApiConfiguration
 import net.djvk.fireflyPlaidConnector2.api.RetryProperties
 import org.junit.jupiter.api.Test
+import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -11,6 +19,26 @@ internal class FireflyApiWrapperTest {
     private val fastRetryProperties = RetryProperties(maxAttempts = 3, initialDelayMs = 0)
 
     private fun wrapper(properties: RetryProperties = fastRetryProperties) = FireflyApiWrapper(properties)
+
+    @Test
+    fun retriesWhenReadingASuccessfulResponseFails() = runBlocking {
+        var attempts = 0
+        val engine = MockEngine {
+            if (++attempts == 1) {
+                val body = ByteChannel().apply { close(IOException("Connection dropped during body read")) }
+                respond(body)
+            } else {
+                respond("complete response")
+            }
+        }
+        HttpClient(engine, ApiConfiguration().getFireflyClientConfig(60000)).use { client ->
+            val result = wrapper().executeRequest("test") {
+                client.get("https://firefly.test").bodyAsText()
+            }
+            assertEquals("complete response", result)
+            assertEquals(2, attempts)
+        }
+    }
 
     @Test
     fun passthroughSuccess() {

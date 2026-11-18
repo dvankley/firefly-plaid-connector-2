@@ -1,7 +1,16 @@
 package net.djvk.fireflyPlaidConnector2.api
 
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.request.get
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import java.util.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -9,6 +18,37 @@ import kotlin.test.assertTrue
 
 internal class RetryExecutorTest {
     private val fastRetry = RetryProperties(maxAttempts = 5, initialDelayMs = 0, maxDelayMs = 0)
+
+    @ParameterizedTest
+    @CsvSource(
+        "429, 10, 15000",
+        "429, 600, 600000",
+        "503, 600, 600000",
+        "503, 3601, 3600000",
+        "503, 9223372036854775808, 3600000",
+        "429, -1, 15000",
+        "429, 'Wed, 01 Jan 2031 00:00:00 GMT', 15000",
+    )
+    fun usesNumericRetryAfterAsMinimumDelay(status: Int, header: String, expectedDelay: Long) = runBlocking {
+        val engine = MockEngine {
+            respond("", HttpStatusCode.fromValue(status), headersOf(HttpHeaders.RetryAfter, header))
+        }
+        HttpClient(engine) { expectSuccess = true }.use { client ->
+            val stopBeforeWaiting = IllegalStateException("Stop before waiting")
+            val thrown = assertFailsWith<IllegalStateException> {
+                RetryExecutor.execute(
+                    RetryProperties(jitterFactor = 0.0),
+                    onRetry = { _, delayMs, _ ->
+                        assertEquals(expectedDelay, delayMs)
+                        throw stopBeforeWaiting
+                    },
+                ) {
+                    client.get("https://api.test")
+                }
+            }
+            assertTrue(thrown === stopBeforeWaiting)
+        }
+    }
 
     @Test
     fun retriesDnsFailureThenSucceeds() = runBlocking {

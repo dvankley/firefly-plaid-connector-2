@@ -20,6 +20,7 @@ import kotlin.math.pow
  */
 object RetryExecutor {
     const val DEFAULT_MAX_ATTEMPTS = 7
+    private const val MAX_RETRY_AFTER_SECONDS = 3600L
 
     private val logger = LoggerFactory.getLogger(this::class.java)
 
@@ -41,12 +42,21 @@ object RetryExecutor {
                 if (attempt >= maxAttempts || !isRetryable(e)) {
                     throw e
                 }
-                val delayMs = computeDelayMs(properties, attempt)
+                val delayMs = maxOf(computeDelayMs(properties, attempt), retryAfterDelayMs(e))
                 onRetry(attempt, delayMs, e)
                 delay(delayMs)
                 attempt++
             }
         }
+    }
+
+    private fun retryAfterDelayMs(error: Throwable): Long {
+        val header = (error as? ResponseException)?.response?.headers?.get(HttpHeaders.RetryAfter)?.trim()
+            ?: return 0
+        if (header.isEmpty() || header.any { it !in '0'..'9' }) return 0
+
+        val seconds = header.toLongOrNull()?.coerceAtMost(MAX_RETRY_AFTER_SECONDS) ?: MAX_RETRY_AFTER_SECONDS
+        return seconds * 1000
     }
 
     /**
