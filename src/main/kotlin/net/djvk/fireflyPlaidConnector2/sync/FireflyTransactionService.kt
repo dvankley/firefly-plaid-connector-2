@@ -1,5 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
+import net.djvk.fireflyPlaidConnector2.api.firefly.FireflyApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
@@ -17,6 +18,7 @@ import java.time.LocalDate
 class FireflyTransactionService(
     private val fireflyTxApi: TransactionsApi,
     private val syncHelper: SyncHelper,
+    private val fireflyApiWrapper: FireflyApiWrapper,
     
     @Value("\${fireflyPlaidConnector2.polled.existingFireflyPullWindowDays}")
     private val existingFireflyPullWindowDays: Int
@@ -34,12 +36,15 @@ class FireflyTransactionService(
         var fireflyTxPage = 0
         do {
             logger.debug("Fetching page $fireflyTxPage of Firefly transactions with window starting at $transferWindowStart")
-            val response = fireflyTxApi.listTransaction(
-                fireflyTxPage++,
-                transferWindowStart,
-                LocalDate.now(),
-                TransactionTypeFilter.all,
-            ).body()
+            val page = fireflyTxPage++
+            val response = fireflyApiWrapper.executeRequest("list Firefly transactions page $page") {
+                fireflyTxApi.listTransaction(
+                    page,
+                    transferWindowStart,
+                    LocalDate.now(),
+                    TransactionTypeFilter.all,
+                ).body()
+            }
             val pagination = response.meta.pagination
 
             /**
