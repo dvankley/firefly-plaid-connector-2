@@ -26,12 +26,18 @@ When started in this mode, the connector will not pull any past transactions, bu
 
 The last sync position of each account will be stored in `persistence/plaid_sync_cursors.txt`.
 
-Polled mode finds modified and removed transactions in Firefly by their Plaid external ID
-regardless of date. Unresolved changes are saved in `plaid_unresolved_changes.json` in the
+Polled mode finds modified and removed transactions in Firefly by their Plaid ID regardless
+of date. It checks the full Firefly group before applying a correction.
+Unresolved changes are saved in `plaid_unresolved_changes.json` in the
 configured cursor directory before the cursor advances. Failed lookups and writes are retried
 on later polls, with up to four attempts per change. Ambiguous matches and unsupported
 targets, including merged transfers and split groups, go directly to `needs_review`.
 These entries stay in the file for reconciliation while regular polls continue.
+
+When the connector pairs two Plaid transactions, it stores one Plaid ID in Firefly's
+external ID and the other in its internal reference with the prefix `plaid-transfer-leg-`.
+Corrections to either recorded leg go directly to review and include the Firefly group
+and journal IDs. Transfers imported before tracking may still have only one known Plaid leg.
 
 The queue can contain transaction details. To retry a `needs_review` entry after resolving
 its cause, stop the connector, back up the queue, and set the entry's `status` to `pending`,
@@ -440,7 +446,9 @@ The command seeds two USD asset accounts and uses a local Plaid HTTP stub with s
 It verifies a paginated batch import, a duplicate-free rerun, transfer matching, category tagging,
 and a paginated polled delta with creates, updates, and deletes across connector restarts. It also
 drops the response after Firefly creates a transfer replacement, then verifies recovery advances
-the cursor without issuing a second create. It reads the results back through Firefly's API. On
+the cursor without issuing a second create. It checks that corrections to both legs of imported
+and replacement transfers, and to one journal in a split group, go to review with no Firefly
+changes. It reads the results back through Firefly's API. On
 failure, it prints the failed check and recent logs.
 
 GitHub Actions runs this mode on pull requests from a JAR built with `./gradlew -PsmokeTestJar bootJar`.

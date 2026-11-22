@@ -3,6 +3,7 @@ package net.djvk.fireflyPlaidConnector2.sync
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -21,6 +22,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.PageLink
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.Transaction
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionArray
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSingle
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
@@ -57,6 +59,7 @@ internal class TransferReplacementRecoveryTest {
         sourceId = "10",
         destinationId = "20",
         externalId = "plaid-new",
+        internalReference = "plaid-transfer-leg-old",
     ))
     private val update = FireflyTransactionDto(original.id, transfer.attributes.transactions.single().copy(amount = "1111.22"))
     private val intent = TransferReplacement(original.id, original.attributes.transactions.single(), update.toTransactionStore())
@@ -200,7 +203,8 @@ internal class TransferReplacementRecoveryTest {
                 emptyList(), if (alreadyCommitted || restoring) emptyList() else listOf(update),
             )
         }
-        PolledSyncOrchestrator(30, helper, cursor, plaid, service, converter, journal, PlaidCorrectionQueue(cursor, helper, converter))
+        val queue = PlaidCorrectionQueue(cursor, helper, converter)
+        PolledSyncOrchestrator(30, helper, cursor, plaid, service, converter, journal, queue)
             .processTransactions(emptyMap(), emptySequence(), cursorMap)
     }
 
@@ -240,6 +244,8 @@ internal class TransferReplacementRecoveryTest {
                 }
                 HttpMethod.Post to "/api/v1/transactions" -> {
                     posts++
+                    val split = mapper.readTree(request.body.toByteArray()).required("transactions").single()
+                    assertEquals("plaid-transfer-leg-old", split.required("internal_reference").asText())
                     assertFalse(originalExists)
                     assertFalse(transferExists)
                     if (rejectCreate) {
@@ -247,7 +253,7 @@ internal class TransferReplacementRecoveryTest {
                     } else {
                         transferExists = true
                         if (loseCreateResponse) throw IOException("Response lost after Firefly committed")
-                        respond("{}", HttpStatusCode.Created, headers)
+                        respond(mapper.writeValueAsString(TransactionSingle(transfer)), HttpStatusCode.Created, headers)
                     }
                 }
                 else -> error("Unexpected Firefly request ${request.method} ${request.url}")

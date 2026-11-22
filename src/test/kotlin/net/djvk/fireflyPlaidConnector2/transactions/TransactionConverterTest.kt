@@ -88,6 +88,7 @@ internal class TransactionConverterTest {
                                 type = TransactionTypeProperty.withdrawal,
                                 amount = "1111.22",
                                 sourceId = "2",
+                                externalId = "plaid-existingWithdrawal",
                                 // The transfer matching logic attempts to find the closest (by date) matching
                                 // transaction. Offset this date compared to the other Firefly transactions above so
                                 // that when this one "wins" we know it's not incidental just because this one was
@@ -106,6 +107,7 @@ internal class TransactionConverterTest {
                                     type = TransactionTypeProperty.transfer,
                                     amount = "1111.22",
                                     externalId = "plaid-plaidTransactionId",
+                                    internalReference = "plaid-transfer-leg-existingWithdrawal",
                                     sourceId = "2",
                                     destinationId = "1",
                                 ).transactions.first()
@@ -194,10 +196,11 @@ internal class TransactionConverterTest {
                                     type = TransactionTypeProperty.transfer,
                                     amount = "1111.22",
                                     externalId = "plaid-plaidDepositId",
+                                    internalReference = "plaid-transfer-leg-plaidWithdrawalId",
                                     description = "Plaid Deposit Tx",
                                     sourceId = "1",
                                     destinationId = "2",
-                                ).transactions.first()
+                                ).transactions.first(),
                             ),
                         ),
                         updates = listOf(),

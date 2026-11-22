@@ -1,5 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.client.engine.mock.*
 import io.ktor.client.network.sockets.*
 import io.ktor.http.*
@@ -10,7 +11,15 @@ import net.djvk.fireflyPlaidConnector2.api.RetryProperties
 import net.djvk.fireflyPlaidConnector2.api.firefly.FireflyApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AboutApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AccountsApi
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.SearchApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
+import net.djvk.fireflyPlaidConnector2.api.firefly.infrastructure.ApiClient
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.Meta
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.PageLink
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionArray
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
@@ -77,6 +86,39 @@ internal class SyncHelperTest {
             }
             assertEquals(2, callCount, "should not silently swallow the timeout after exhausting retries")
         }
+    }
+
+    @Test
+    fun `internal reference search keeps exact journal matches`() = runBlocking {
+        val attributes = FireflyFixtures.getTransaction(
+            type = TransactionTypeProperty.transfer, externalId = "plaid-deposit",
+            sourceId = "1", destinationId = "2", internalReference = "plaid-transfer-leg-withdrawal",
+        )
+        val transfer = TransactionRead("transactions", "29", attributes, ObjectLink())
+        val other = transfer.copy(
+            id = "30",
+            attributes = attributes.copy(transactions = listOf(
+                attributes.transactions.single().copy(internalReference = "plaid-transfer-leg-withdrawal-extra"),
+            )),
+        )
+        val mapper = jacksonObjectMapper().apply(ApiClient.JSON_DEFAULT)
+        val headers = headersOf(HttpHeaders.ContentType, "application/json")
+        val engine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals("/api/v1/search/transactions", request.url.encodedPath)
+            assertEquals("internal_reference_is:plaid-transfer-leg-withdrawal", request.url.parameters["query"])
+            val body = TransactionArray(listOf(transfer, other), Meta(), PageLink())
+            respond(mapper.writeValueAsString(body), headers = headers)
+        }
+        val config = ApiConfiguration().getFireflyClientConfig(60_000)
+        val helper = SyncHelper(
+            AccountConfigs(emptyList()), "testToken", mock(), mock(), mock(),
+            FireflyApiWrapper(RetryProperties(maxAttempts = 1)), SearchApi("https://firefly.test", engine, config),
+        )
+
+        val matches = helper.findTransactionsByInternalReference("plaid-transfer-leg-withdrawal")
+
+        assertEquals(listOf("29"), matches.map { it.id })
     }
 
     @Test

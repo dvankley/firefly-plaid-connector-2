@@ -74,6 +74,7 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
         vararg exchanges: PlaidExchange,
         fireflyUrl: String = firefly.baseUrl,
         expectPollFailure: Boolean = false,
+        allowSplits: Boolean = false,
     ): Map<String, SmokeTransaction> {
         println(name)
         PlaidStub(exchanges.toList(), plaidToken).use { stub ->
@@ -88,7 +89,7 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
             ), fireflyUrl = fireflyUrl, expectPollFailure = expectPollFailure)
             stub.verifyRequests()
         }
-        return firefly.transactions()
+        return firefly.transactions(allowSplits)
     }
 
     val cursor = run.work.resolve("plaid_sync_cursors.txt")
@@ -98,7 +99,8 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
     expect("Batch external IDs", batch.keys, setOf("plaid-smoke-income", "plaid-smoke-purchase", "plaid-smoke-transfer-in"))
     checkTransaction(batch, "purchase", "withdrawal", "18.75", "source_id" to checking.toString())
     checkTransaction(batch, "income", "deposit", "48", "destination_id" to checking.toString())
-    checkTransaction(batch, "transfer-in", "transfer", "30", "source_id" to checking.toString(), "destination_id" to savings.toString())
+    checkTransaction(batch, "transfer-in", "transfer", "30", "source_id" to checking.toString(),
+        "destination_id" to savings.toString(), "internal_reference" to "plaid-transfer-leg-smoke-transfer-out")
     val tags = batch.getValue("plaid-smoke-purchase").split.required("tags").map(JsonNode::asText)
     expect("Purchase has the Plaid category tag", "plaid-primary-cat-food-and-drink" in tags, true)
 
@@ -138,7 +140,8 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
         expect("Transfer replacement journal after response loss", journal.exists(), true)
         expect("Replacement external IDs", afterFailure.keys, delta.keys - "plaid-smoke-later-out" + "plaid-smoke-later-in")
         checkTransaction(afterFailure, "later-in", "transfer", "65",
-            "source_id" to checking.toString(), "destination_id" to savings.toString())
+            "source_id" to checking.toString(), "destination_id" to savings.toString(),
+            "internal_reference" to "plaid-transfer-leg-smoke-later-out")
 
         val afterRestart = phase("Polled transfer replacement recovery", "polled", replacementPage, fireflyUrl = proxy.url)
         expect("Replacement POSTs after restart", proxy.transactionPosts, 1)
@@ -151,6 +154,43 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
     val noop = phase("Polled restart with no changes", "polled", syncPage("replacement-complete", "replacement-complete"))
     expect("Firefly transactions after empty poll", noop, recovered)
     expect("Cursor after empty poll", cursor.readText(), "$plaidToken|replacement-complete")
+
+    firefly.request("POST", "/transactions", mapOf(
+        "group_title" to "Smoke split withdrawal",
+        "transactions" to listOf("split-first", "split-second").map { leg ->
+            mapOf("type" to "withdrawal", "date" to date, "amount" to "3.00", "description" to leg,
+                "source_id" to checking.toString(), "destination_name" to "Smoke Split Merchant",
+                "external_id" to "plaid-smoke-$leg", "currency_code" to "USD")
+        },
+    ))
+    val beforeReview = firefly.transactions(allowSplits = true)
+    expect("Split group ID", beforeReview.getValue("plaid-smoke-split-first").id,
+        beforeReview.getValue("plaid-smoke-split-second").id)
+    val afterReview = phase("Polled transfer and split corrections", "polled",
+        syncPage("replacement-complete", "review-complete",
+            modified = listOf(transferOut + ("amount" to 31), laterIn + ("amount" to -66)),
+            removed = listOf("transfer-in" to "bbb", "later-out" to "aaa", "split-first" to "aaa").map { (id, account) ->
+                mapOf("transaction_id" to "smoke-$id", "account_id" to account)
+            }),
+        allowSplits = true,
+    )
+    expect("Firefly transactions after deferred corrections", afterReview, beforeReview)
+    expect("Cursor after deferred corrections", cursor.readText(), "$plaidToken|review-complete")
+    val queue = smokeJson.readTree(run.work.resolve("plaid_unresolved_changes.json").readText()).required("entries")
+    val expectedTargets = mapOf(
+        "transfer-in" to "transfer-in", "transfer-out" to "transfer-in",
+        "later-in" to "later-in", "later-out" to "later-in", "split-first" to "split-first",
+    ).mapKeys { (id, _) -> "smoke-$id" }
+    expect("Deferred Plaid IDs", queue.map { it.required("transactionId").asText() }.toSet(), expectedTargets.keys)
+    for (entry in queue) {
+        val id = entry.required("transactionId").asText()
+        val expected = beforeReview.getValue("plaid-smoke-${expectedTargets.getValue(id)}")
+        expect("Correction status for $id", entry.required("status").asText(), "needs_review")
+        val target = entry.required("reviewTargets").single()
+        expect("Review group ID for $id", target.required("groupId").asText(), expected.id)
+        expect("Review journal ID for $id", target.required("journalId").asText(),
+            expected.split.required("transaction_journal_id").asText())
+    }
 }
 
 private class FireflyResponseDropper(private val baseUrl: String) : AutoCloseable {

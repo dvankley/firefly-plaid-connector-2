@@ -10,6 +10,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionSplitId
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Location
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.PaymentMeta
@@ -18,7 +22,9 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionCounterparty
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
+import net.djvk.fireflyPlaidConnector2.transactions.isPlaidTransferReference
 import net.djvk.fireflyPlaidConnector2.transactions.plaidExternalId
+import net.djvk.fireflyPlaidConnector2.transactions.plaidTransferReference
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.nio.file.Files
@@ -57,6 +63,8 @@ class PlaidCorrectionQueue(
     private enum class Change { modified, removed }
     private enum class Status { pending, needs_review, applied }
 
+    private data class ReviewTarget(val groupId: FireflyTransactionId, val journalId: FireflyTransactionSplitId?)
+
     private data class Entry(
         val accountId: PlaidAccountId,
         val transactionId: String,
@@ -68,6 +76,7 @@ class PlaidCorrectionQueue(
         val nextRetry: Instant? = firstSeen,
         val lastFailure: String? = null,
         val removalMatched: Boolean = false,
+        val reviewTargets: List<ReviewTarget> = emptyList(),
     ) {
         fun key() = accountId to transactionId
     }
@@ -160,27 +169,42 @@ class PlaidCorrectionQueue(
         }
         val accountId = accountMap[entry.accountId]?.toString()
             ?: return retry(entry, now, "unmapped_account", needsReview = true)
-        val matches = fireflyRequest { syncHelper.findTransactionsByExternalId(externalId) }
-            ?: return retry(entry, now, "lookup_failed")
+        val reference = plaidTransferReference(entry.transactionId)
+        val matches = fireflyRequest {
+            syncHelper.findTransactionsByExternalId(externalId) + syncHelper.findTransactionsByInternalReference(reference)
+        } ?: return retry(entry, now, "lookup_failed")
         if (matches.isEmpty()) {
             // An earlier delete may have succeeded before its response or queue checkpoint was saved.
             if (entry.removalMatched) return entry.copy(status = Status.applied, nextRetry = null)
             return retry(entry, now, "no_match")
         }
-        val target = matches.singleOrNull() ?: return retry(entry, now, "ambiguous_match", needsReview = true)
+        val matchesLeg: (TransactionSplit) -> Boolean = { it.externalId == externalId || it.internalReference == reference }
+        val groupId = matches.map { it.id }.distinct().singleOrNull() ?: return retry(
+            entry.copy(reviewTargets = matches.correctionTargets(matchesLeg)), now, "ambiguous_match", needsReview = true,
+        )
+        // Search can return only the matching journal of a split group.
+        val target = fireflyRequest { syncHelper.getTransactionGroup(groupId) }
+            ?: return retry(entry, now, "lookup_failed")
+        val reviewEntry = entry.copy(reviewTargets = listOf(target).correctionTargets(matchesLeg))
+        if (target.id != groupId || reviewEntry.reviewTargets.isEmpty()) {
+            return retry(reviewEntry, now, "target_changed", needsReview = true)
+        }
         val split = target.attributes.transactions.singleOrNull()
-            ?: return retry(entry, now, "unsupported_target", needsReview = true)
+            ?: return retry(reviewEntry, now, "unsupported_target", needsReview = true)
+        if (isPlaidTransferReference(split.internalReference)) {
+            return retry(reviewEntry, now, "unsupported_target", needsReview = true)
+        }
         val targetAccount = when (split.type) {
             TransactionTypeProperty.withdrawal -> split.sourceId
             TransactionTypeProperty.deposit -> split.destinationId
-            else -> return retry(entry, now, "unsupported_target", needsReview = true)
+            else -> return retry(reviewEntry, now, "unsupported_target", needsReview = true)
         }
-        if (targetAccount != accountId) return retry(entry, now, "account_mismatch", needsReview = true)
+        if (targetAccount != accountId) return retry(reviewEntry, now, "account_mismatch", needsReview = true)
 
         var attempt = entry
         val applied = if (entry.change == Change.modified) {
             val update = converter.convertPlaidModification(requireNotNull(entry.transaction), target, accountMap)
-            if (update.tx.type != split.type) return retry(entry, now, "type_change", needsReview = true)
+            if (update.tx.type != split.type) return retry(reviewEntry, now, "type_change", needsReview = true)
             fireflyRequest { syncHelper.updateBatchInFirefly(listOf(update)) }
         } else {
             if (!entry.removalMatched) {
@@ -192,6 +216,11 @@ class PlaidCorrectionQueue(
         return if (applied != null) attempt.copy(status = Status.applied, nextRetry = null)
         else retry(attempt, now, "write_failed")
     }
+
+    private fun List<TransactionRead>.correctionTargets(matchesLeg: (TransactionSplit) -> Boolean): List<ReviewTarget> =
+        flatMap { group ->
+            group.attributes.transactions.filter(matchesLeg).map { ReviewTarget(group.id, it.transactionJournalId) }
+        }.distinct()
 
     private suspend fun <T : Any> fireflyRequest(request: suspend () -> T): T? =
         try {

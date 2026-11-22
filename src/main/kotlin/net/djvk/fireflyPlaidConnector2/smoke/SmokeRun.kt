@@ -268,7 +268,7 @@ internal class SmokeFirefly(
         "name" to name, "type" to "asset", "account_role" to "defaultAsset", "currency_code" to "USD",
     )).required("data").required("id").asText().toInt()
 
-    fun transactions(): Map<String, SmokeTransaction> {
+    fun transactions(allowSplits: Boolean = false): Map<String, SmokeTransaction> {
         val transactions = mutableMapOf<String, SmokeTransaction>()
         var page = 1
         while (true) {
@@ -276,13 +276,14 @@ internal class SmokeFirefly(
             for (group in response.required("data")) {
                 val id = group.required("id").asText()
                 val splits = group.required("attributes").required("transactions")
-                expect("Split count for Firefly transaction $id", splits.size(), 1)
-                val split = splits[0]
-                val externalId = split.path("external_id").asText("")
-                if (externalId.isBlank() || externalId in transactions) {
-                    throw SmokeFailure("Missing or duplicate external ID on Firefly transaction $id.")
+                if (!allowSplits) expect("Split count for Firefly transaction $id", splits.size(), 1)
+                for (split in splits) {
+                    val externalId = split.path("external_id").asText("")
+                    if (externalId.isBlank() || externalId in transactions) {
+                        throw SmokeFailure("Missing or duplicate external ID on Firefly transaction $id.")
+                    }
+                    transactions[externalId] = SmokeTransaction(id, split)
                 }
-                transactions[externalId] = SmokeTransaction(id, split)
             }
             if (page >= response.required("meta").required("pagination").required("total_pages").asInt()) {
                 return transactions

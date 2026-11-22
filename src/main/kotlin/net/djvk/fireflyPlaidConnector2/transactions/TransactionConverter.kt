@@ -366,6 +366,7 @@ class TransactionConverter(
                 ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${sourceTx.accountId}"),
             destinationId = accountMap[destinationTx.accountId]?.toString()
                 ?: throw RuntimeException("Failed to find Firefly account mapping for Plaid account ${destinationTx.accountId}"),
+            internalReference = plaidTransferReference(sourceTx.transactionId),
         )
     }
 
@@ -425,6 +426,7 @@ class TransactionConverter(
             destinationId = destinationId,
             destinationName = destinationName,
             fireflyTx = fireflyTx,
+            internalReference = plaidTransactionId(fireflyTx.tx.externalId)?.let(::plaidTransferReference),
         )
     }
 
@@ -439,6 +441,7 @@ class TransactionConverter(
         destinationId: String? = null,
         destinationName: String? = null,
         fireflyTx: FireflyTransactionDto? = null,
+        internalReference: String? = null,
     ): FireflyTransactionDto {
         val postedTime = getTxPostedTimestamp(tx)
         val authorizedTime = getTxAuthorizedTimestamp(tx)
@@ -474,6 +477,7 @@ class TransactionConverter(
             longitude = tx.location.lon,
             externalUrl = externalUrl,
             externalId = plaidExternalId(tx.transactionId),
+            internalReference = internalReference,
             order = 0,
             reconciled = false,
             // These are all explicitly required, but only for updates

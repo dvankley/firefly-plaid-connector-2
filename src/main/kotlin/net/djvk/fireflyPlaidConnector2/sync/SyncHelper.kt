@@ -11,6 +11,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.apis.SearchApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.FireflyApiError
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionStore
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
@@ -113,21 +114,38 @@ class SyncHelper(
         }
     }
 
-    suspend fun findTransactionsByExternalId(externalId: String): List<TransactionRead> {
-        require(externalId.matches(fireflySearchExternalIdPattern)) { "Invalid external ID for Firefly search" }
+    suspend fun findTransactionsByExternalId(externalId: String): List<TransactionRead> =
+        searchTransactions("external_id_is", externalId) { it.externalId == externalId }
+
+    suspend fun findTransactionsByInternalReference(reference: String): List<TransactionRead> =
+        searchTransactions("internal_reference_is", reference) { it.internalReference == reference }
+
+    private suspend fun searchTransactions(
+        operator: String,
+        value: String,
+        matchesSplit: (TransactionSplit) -> Boolean,
+    ): List<TransactionRead> {
+        require(value.matches(fireflySearchExternalIdPattern)) { "Invalid value for Firefly search" }
         val matches = mutableListOf<TransactionRead>()
         for (page in 1..20) {
-            val result = fireflyApiWrapper.executeRequest("search Firefly transactions for $externalId, page $page") {
-                val response = fireflySearchApi.searchTransactions("external_id_is:$externalId", page)
-                check(response.success) { "Firefly search failed for $externalId (HTTP ${response.status})" }
+            val result = fireflyApiWrapper.executeRequest("search Firefly transactions for $value, page $page") {
+                val response = fireflySearchApi.searchTransactions("$operator:$value", page)
+                check(response.success) { "Firefly search failed for $value (HTTP ${response.status})" }
                 response.body()
             }
-            matches += result.data.filter { group -> group.attributes.transactions.any { it.externalId == externalId } }
+            matches += result.data.filter { group -> group.attributes.transactions.any(matchesSplit) }
             val pagination = result.meta.pagination
             if (pagination == null || pagination.currentPage >= pagination.totalPages) return matches
         }
-        error("Exceeded Firefly search page limit for $externalId")
+        error("Exceeded Firefly search page limit for $value")
     }
+
+    suspend fun getTransactionGroup(id: FireflyTransactionId): TransactionRead =
+        fireflyApiWrapper.executeRequest("get Firefly transaction group $id") {
+            val response = fireflyTxApi.getTransaction(id)
+            check(response.success) { "Could not get Firefly transaction group $id (HTTP ${response.status})" }
+            response.body().data
+        }
 
     suspend fun insertIntoFirefly(fireflyTx: FireflyTransactionDto) {
         if (fireflyTx.tx.amount.toDouble() == 0.0) {
