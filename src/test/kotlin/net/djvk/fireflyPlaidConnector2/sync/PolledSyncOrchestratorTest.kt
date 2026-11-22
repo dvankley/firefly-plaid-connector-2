@@ -9,11 +9,13 @@ import net.djvk.fireflyPlaidConnector2.lib.defaultOffsetNow
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -32,6 +34,15 @@ internal class PolledSyncOrchestratorTest {
     private val plaidSyncService: PlaidSyncService = mock()
     private val fireflyTransactionService: FireflyTransactionService = mock()
     private val converter: TransactionConverter = mock()
+    private val replacementJournal: TransferReplacementJournal = mock()
+
+    @BeforeEach
+    fun stubJournal() {
+        runBlocking {
+            whenever(replacementJournal.pendingFor(any())).thenReturn(emptyList())
+            whenever(replacementJournal.prepareCursorCommit(any())).thenReturn(false)
+        }
+    }
 
     /**
      * Test that the orchestrator correctly initializes cursors.
@@ -56,7 +67,8 @@ internal class PolledSyncOrchestratorTest {
             cursorManager,
             plaidSyncService,
             fireflyTransactionService,
-            converter
+            converter,
+            replacementJournal,
         )
 
         // Call the method we want to test
@@ -245,7 +257,8 @@ internal class PolledSyncOrchestratorTest {
         whenever(cursorManager.readCursorMap()).thenReturn(cursorMap)
         whenever(syncHelper.getAllPlaidAccessTokenAccountIdSets()).thenReturn(Pair(accountMap, accountAccessTokenSequence))
         whenever(fireflyTransactionService.fetchExistingFireflyTransactions()).thenReturn(existingFireflyTxs)
-        whenever(plaidSyncService.processPlaidTransactions(eq(accountAccessTokenSequence), eq(cursorMap))).thenReturn(plaidTransactionResult)
+        whenever(plaidSyncService.processPlaidTransactions(eq(accountAccessTokenSequence), eq(cursorMap), eq(false)))
+            .thenReturn(plaidTransactionResult)
         whenever(converter.convertPollSync(
             eq(accountMap),
             eq(plaidTransactionResult.created),
@@ -261,7 +274,8 @@ internal class PolledSyncOrchestratorTest {
             cursorManager,
             plaidSyncService,
             fireflyTransactionService,
-            converter
+            converter,
+            replacementJournal,
         )
 
         // Call the method we want to test
@@ -269,7 +283,7 @@ internal class PolledSyncOrchestratorTest {
 
         // Verify interactions
         verify(fireflyTransactionService).fetchExistingFireflyTransactions()
-        verify(plaidSyncService).processPlaidTransactions(eq(accountAccessTokenSequence), eq(cursorMap))
+        verify(plaidSyncService).processPlaidTransactions(eq(accountAccessTokenSequence), eq(cursorMap), eq(false))
         verify(converter).convertPollSync(
             eq(accountMap),
             eq(plaidTransactionResult.created),
@@ -280,7 +294,8 @@ internal class PolledSyncOrchestratorTest {
         verify(fireflyTransactionService).processFireflyTransactionUpdates(
             eq(convertResult.creates),
             eq(convertResult.updates),
-            eq(convertResult.deletes)
+            eq(convertResult.deletes),
+            eq(existingFireflyTxs),
         )
         verify(cursorManager).writeCursorMap(eq(cursorMap))
     }

@@ -5,6 +5,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
+import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionExternalIdIndexer
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
@@ -34,6 +35,7 @@ class PolledSyncOrchestrator(
     private val plaidSyncService: PlaidSyncService,
     private val fireflyTransactionService: FireflyTransactionService,
     private val converter: TransactionConverter,
+    private val replacementJournal: TransferReplacementJournal,
 ) : Runner, DisposableBean {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
@@ -46,9 +48,11 @@ class PolledSyncOrchestrator(
     suspend fun initializeCursors() {
         // Read cursor map from storage
         val cursorMap = cursorManager.readCursorMap()
+        // Recover any unfinished poll before writing initialization cursors.
+        if (replacementJournal.pendingFor(cursorMap).isNotEmpty()) return
 
         // Get account mappings
-        val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
+        val (_, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
 
         // Initialize cursors for access tokens that don't have one yet
         plaidSyncService.initializeCursors(accountAccessTokenSequence, cursorMap)
@@ -63,20 +67,30 @@ class PolledSyncOrchestrator(
         accountAccessTokenSequence: Sequence<Pair<PlaidAccessToken, List<PlaidAccountId>>>,
         cursorMap: MutableMap<PlaidAccessToken, PlaidSyncCursor>
     ) {
+        val pending = replacementJournal.pendingFor(cursorMap)
+        val nextCursors = cursorMap.toMutableMap()
+        fireflyTransactionService.recoverTransferReplacements(pending)
+        val recoveredExternalIds = pending.flatMap {
+            listOfNotNull(it.original.externalId, it.replacement.transactions.single().externalId)
+        }.toSet()
+
         // Fetch existing Firefly transactions
         val existingFireflyTxs = fireflyTransactionService.fetchExistingFireflyTransactions()
 
         // Process Plaid transactions
         val plaidTransactions = plaidSyncService.processPlaidTransactions(
             accountAccessTokenSequence,
-            cursorMap
+            nextCursors,
+            requireComplete = pending.isNotEmpty(),
         )
 
         // Convert Plaid transactions to Firefly format
         logger.trace("Converting Plaid transactions to Firefly transactions")
         val convertResult = converter.convertPollSync(
             accountMap,
-            plaidTransactions.created,
+            plaidTransactions.created.filter {
+                FireflyTransactionExternalIdIndexer.getExternalId(it.transactionId) !in recoveredExternalIds
+            },
             plaidTransactions.updated,
             plaidTransactions.deleted,
             existingFireflyTxs,
@@ -91,11 +105,15 @@ class PolledSyncOrchestrator(
         fireflyTransactionService.processFireflyTransactionUpdates(
             convertResult.creates,
             convertResult.updates,
-            convertResult.deletes
+            convertResult.deletes,
+            existingFireflyTxs,
         )
 
         // Update cursor map after successful processing
-        cursorManager.writeCursorMap(cursorMap)
+        val hasReplacements = replacementJournal.prepareCursorCommit(nextCursors)
+        cursorManager.writeCursorMap(nextCursors)
+        cursorMap.putAll(nextCursors)
+        if (hasReplacements) replacementJournal.finishCursorCommit()
     }
 
     override fun run() {

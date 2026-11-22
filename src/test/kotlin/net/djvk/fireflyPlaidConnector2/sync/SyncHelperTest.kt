@@ -36,6 +36,7 @@ internal class SyncHelperTest {
             fireflyTxApi = fireflyTxApi,
             fireflyAccountsApi = fireflyAccountsApi,
             fireflyApiWrapper = FireflyApiWrapper(RetryProperties(maxAttempts = maxAttempts, initialDelayMs = 0)),
+            fireflySearchApi = mock(),
         )
     }
 
@@ -177,6 +178,7 @@ internal class SyncHelperTest {
                 fireflyTxApi = realTxApi,
                 fireflyAccountsApi = fireflyAccountsApi,
                 fireflyApiWrapper = FireflyApiWrapper(RetryProperties(maxAttempts = 3, initialDelayMs = 0)),
+                fireflySearchApi = mock(),
             )
 
             helper.deleteBatchInFirefly(listOf("tx-id-1"))

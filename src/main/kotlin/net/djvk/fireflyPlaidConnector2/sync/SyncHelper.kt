@@ -7,8 +7,11 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.FireflyApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AboutApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AccountsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
+import net.djvk.fireflyPlaidConnector2.api.firefly.apis.SearchApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.FireflyApiError
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionStore
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
@@ -32,6 +35,7 @@ class SyncHelper(
     private val fireflyTxApi: TransactionsApi,
     private val fireflyAccountsApi: AccountsApi,
     private val fireflyApiWrapper: FireflyApiWrapper,
+    private val fireflySearchApi: SearchApi,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
@@ -41,6 +45,7 @@ class SyncHelper(
         fireflyTxApi.setAccessToken(fireflyAccessToken)
         fireflyAccountsApi.setAccessToken(fireflyAccessToken)
         fireflyAboutApi.setAccessToken(fireflyAccessToken)
+        fireflySearchApi.setAccessToken(fireflyAccessToken)
         validateFireflyApiVersion()
     }
 
@@ -97,25 +102,29 @@ class SyncHelper(
         }
     }
 
-    /**
-     * The only difference between this and [optimisticInsertBatchIntoFirefly] is that this doesn't expect or tolerate
-     *  duplicate errors.
-     */
-    suspend fun pessimisticInsertBatchIntoFirefly(fireflyTxs: List<FireflyTransactionDto>) {
-        if (fireflyTxs.isNotEmpty()) {
-            logger.debug("Pessimistic insert of ${fireflyTxs.size} txs into Firefly")
+    suspend fun insertTransferReplacement(replacement: TransactionStore) {
+        val externalId = replacement.transactions.single().externalId
+        // An ambiguous POST must go through journal reconciliation before another attempt.
+        fireflyApiWrapper.executeRequest("insert transfer replacement $externalId", isRetryable = { false }) {
+            val response = fireflyTxApi.storeTransaction(replacement)
+            check(response.success) { "Firefly rejected transfer replacement $externalId (HTTP ${response.status})" }
         }
-        for (fireflyTx in fireflyTxs) {
-            try {
-                insertIntoFirefly(fireflyTx)
-            } catch (cre: ClientRequestException) {
-                val error = cre.response.body<FireflyApiError>()
-                if (cre.response.status == HttpStatusCode.UnprocessableEntity) {
-                    logger.error("Firefly transaction insert $error for tx: $fireflyTx")
-                    throw cre
-                }
+    }
+
+    suspend fun findTransactionsByExternalId(externalId: String): List<TransactionRead> {
+        require(externalId.matches(Regex("[A-Za-z0-9_-]+"))) { "Invalid external ID for Firefly search" }
+        val matches = mutableListOf<TransactionRead>()
+        for (page in 1..20) {
+            val result = fireflyApiWrapper.executeRequest("search Firefly transactions for $externalId, page $page") {
+                val response = fireflySearchApi.searchTransactions("external_id_is:$externalId", page)
+                check(response.success) { "Firefly search failed for $externalId (HTTP ${response.status})" }
+                response.body()
             }
+            matches += result.data.filter { group -> group.attributes.transactions.any { it.externalId == externalId } }
+            val pagination = result.meta.pagination
+            if (pagination == null || pagination.currentPage >= pagination.totalPages) return matches
         }
+        error("Exceeded Firefly search page limit for $externalId")
     }
 
     suspend fun insertIntoFirefly(fireflyTx: FireflyTransactionDto) {

@@ -23,6 +23,7 @@ import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import java.time.LocalDate
 import java.util.stream.Stream
+import kotlin.test.assertFailsWith
 
 /**
  * Tests for the PlaidSyncService class.
@@ -91,6 +92,20 @@ class PlaidSyncServiceTest {
         val result = service.processPlaidTransactions(sequenceOf("token" to listOf("configured")), cursors)
         assertEquals(listOf("included1", "included2"), result.deleted)
         assertEquals("done", cursors["token"])
+    }
+
+    @Test
+    fun recoveryRequiresPlaidItemsToSucceedEvenWithAllowItemToFail() = runBlocking {
+        val service = spy(PlaidSyncService(mock(), 100, true))
+        doReturn(null).whenever(service).executeTransactionSyncRequest("token", "saved", 100)
+        val accounts = sequenceOf("token" to listOf("configured"))
+        val cursors = mutableMapOf("token" to "saved")
+
+        service.processPlaidTransactions(accounts, cursors)
+        assertFailsWith<IllegalStateException> {
+            service.processPlaidTransactions(accounts, cursors, requireComplete = true)
+        }
+        assertEquals(mapOf("token" to "saved"), cursors)
     }
 
     companion object {

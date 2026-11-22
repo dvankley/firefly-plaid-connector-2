@@ -77,7 +77,7 @@ class PlaidSyncService(
         } catch (cre: ClientRequestException) {
             logger.error("Error requesting Plaid transactions. Request: $request; ")
             if (allowItemToFail) {
-                logger.warn("Querying transactions for access token $accessToken failed, allowing failure and continuing on to the next access token")
+                logger.warn("Plaid item query failed with allowItemToFail enabled")
                 return null
             } else throw cre
         }
@@ -89,7 +89,8 @@ class PlaidSyncService(
      */
     suspend fun processPlaidTransactions(
         accountAccessTokenSequence: Sequence<Pair<PlaidAccessToken, List<PlaidAccountId>>>,
-        cursorMap: MutableMap<PlaidAccessToken, PlaidSyncCursor>
+        cursorMap: MutableMap<PlaidAccessToken, PlaidSyncCursor>,
+        requireComplete: Boolean = false,
     ): PlaidTransactionResult {
         val plaidCreatedTxs = mutableListOf<PlaidTransaction>()
         val plaidUpdatedTxs = mutableListOf<PlaidTransaction>()
@@ -115,7 +116,12 @@ class PlaidSyncService(
                     accessToken,
                     cursor,
                     plaidBatchSize
-                ) ?: continue@accessTokenLoop
+                ) ?: if (requireComplete) {
+                    // Clearing a recovered replacement requires replay to reach the item's next cursor.
+                    error("Plaid replay is incomplete while transfer replacements are pending")
+                } else {
+                    continue@accessTokenLoop
+                }
 
                 cursor = response.nextCursor
                 logger.debug(

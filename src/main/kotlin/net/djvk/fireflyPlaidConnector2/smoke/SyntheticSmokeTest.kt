@@ -5,9 +5,15 @@ import com.fasterxml.jackson.databind.node.NullNode
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.ArrayDeque
+import kotlin.io.path.exists
 import kotlin.io.path.readText
 
 private val plaidAccountIds = listOf("aaa", "bbb")
@@ -39,6 +45,8 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
     val transferIn = transaction("transfer-in", -30, "Smoke Savings Transfer", "TRANSFER_IN", "TRANSFER_IN_ACCOUNT_TRANSFER", "bbb")
     val history = transaction("history", 8, "Smoke History", "FOOD_AND_DRINK", "FOOD_AND_DRINK_GROCERIES")
     val new = transaction("new", 4.5, "Smoke Coffee", "FOOD_AND_DRINK", "FOOD_AND_DRINK_COFFEE")
+    val laterOut = transaction("later-out", 65, "Late Savings Transfer", "TRANSFER_OUT", "TRANSFER_OUT_ACCOUNT_TRANSFER")
+    val laterIn = transaction("later-in", -65, "Late Savings Transfer", "TRANSFER_IN", "TRANSFER_IN_ACCOUNT_TRANSFER", "bbb")
 
     fun batchPage(offset: Int, transactions: List<Map<String, Any>>) = PlaidExchange(
         "/transactions/get", mapOf("offset" to offset, "count" to 3, "account_ids" to plaidAccountIds), mapOf(
@@ -59,7 +67,13 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
         "transactions_update_status" to "HISTORICAL_UPDATE_COMPLETE",
     ))
 
-    fun phase(name: String, mode: String, vararg exchanges: PlaidExchange): Map<String, SmokeTransaction> {
+    fun phase(
+        name: String,
+        mode: String,
+        vararg exchanges: PlaidExchange,
+        fireflyUrl: String = firefly.baseUrl,
+        expectPollFailure: Boolean = false,
+    ): Map<String, SmokeTransaction> {
         println(name)
         PlaidStub(exchanges.toList(), plaidToken).use { stub ->
             run.connector(firefly, mapOf(
@@ -70,7 +84,7 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
                     mapOf("plaidAccountId" to plaidId, "fireflyAccountId" to fireflyId, "plaidItemAccessToken" to plaidToken)
                 },
                 "polled" to mapOf("syncFrequencyMinutes" to POLL_INTERVAL_MINUTES, "cursorFileDirectoryPath" to run.work.toString()),
-            ))
+            ), fireflyUrl = fireflyUrl, expectPollFailure = expectPollFailure)
             stub.verifyRequests()
         }
         return firefly.transactions()
@@ -98,20 +112,83 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
     expect("Initialized cursor", cursor.readText(), "$plaidToken|baseline")
 
     val delta = phase("Polled delta after restart", "polled",
-        syncPage("baseline", "delta-page-2", added = listOf(new), hasMore = true),
+        syncPage("baseline", "delta-page-2", added = listOf(new, laterOut), hasMore = true),
         syncPage("delta-page-2", "delta-complete", modified = listOf(purchase + ("amount" to 21.25)),
             removed = listOf(mapOf("account_id" to "aaa", "transaction_id" to "smoke-income"))))
-    expect("Delta external IDs", delta.keys, setOf("plaid-smoke-new", "plaid-smoke-purchase", "plaid-smoke-transfer-in"))
+    expect("Delta external IDs", delta.keys, setOf(
+        "plaid-smoke-new", "plaid-smoke-purchase", "plaid-smoke-transfer-in", "plaid-smoke-later-out",
+    ))
     for (id in listOf("plaid-smoke-purchase", "plaid-smoke-transfer-in")) {
         expect("Firefly ID for $id after delta", delta.getValue(id).id, batch.getValue(id).id)
     }
     checkTransaction(delta, "purchase", "withdrawal", "21.25", "source_id" to checking.toString())
     checkTransaction(delta, "new", "withdrawal", "4.50", "source_id" to checking.toString())
+    checkTransaction(delta, "later-out", "withdrawal", "65", "source_id" to checking.toString())
     expect("Cursor after delta", cursor.readText(), "$plaidToken|delta-complete")
 
-    val noop = phase("Polled restart with no changes", "polled", syncPage("delta-complete", "delta-complete"))
-    expect("Firefly transactions after empty poll", noop, delta)
-    expect("Cursor after empty poll", cursor.readText(), "$plaidToken|delta-complete")
+    val journal = run.work.resolve("pending_transfer_replacements.json")
+    val replacementPage = syncPage("delta-complete", "replacement-complete", added = listOf(laterIn))
+    val recovered = FireflyResponseDropper(firefly.baseUrl).use { proxy ->
+        val afterFailure = phase("Polled transfer replacement with a lost Firefly response", "polled",
+            replacementPage, fireflyUrl = proxy.url, expectPollFailure = true)
+        expect("Successful replacement response dropped", proxy.droppedResponse, true)
+        expect("Replacement POSTs after response loss", proxy.transactionPosts, 1)
+        expect("Cursor after the failed replacement poll", cursor.readText(), "$plaidToken|delta-complete")
+        expect("Transfer replacement journal after response loss", journal.exists(), true)
+        expect("Replacement external IDs", afterFailure.keys, delta.keys - "plaid-smoke-later-out" + "plaid-smoke-later-in")
+        checkTransaction(afterFailure, "later-in", "transfer", "65",
+            "source_id" to checking.toString(), "destination_id" to savings.toString())
+
+        val afterRestart = phase("Polled transfer replacement recovery", "polled", replacementPage, fireflyUrl = proxy.url)
+        expect("Replacement POSTs after restart", proxy.transactionPosts, 1)
+        expect("Firefly transactions after recovery", afterRestart, afterFailure)
+        expect("Cursor after replacement recovery", cursor.readText(), "$plaidToken|replacement-complete")
+        expect("Transfer replacement journal after recovery", journal.exists(), false)
+        afterRestart
+    }
+
+    val noop = phase("Polled restart with no changes", "polled", syncPage("replacement-complete", "replacement-complete"))
+    expect("Firefly transactions after empty poll", noop, recovered)
+    expect("Cursor after empty poll", cursor.readText(), "$plaidToken|replacement-complete")
+}
+
+private class FireflyResponseDropper(private val baseUrl: String) : AutoCloseable {
+    private val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build()
+    private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+        createContext("/", ::handle)
+        start()
+    }
+    val url = "http://127.0.0.1:${server.address.port}"
+    @Volatile var droppedResponse = false
+        private set
+    @Volatile var transactionPosts = 0
+        private set
+
+    private fun handle(exchange: HttpExchange) {
+        exchange.use {
+            val isTransactionPost = exchange.requestMethod == "POST" && exchange.requestURI.path == "/api/v1/transactions"
+            if (isTransactionPost) transactionPosts++
+            val body = exchange.requestBody.readAllBytes()
+            val request = HttpRequest.newBuilder(URI("$baseUrl${exchange.requestURI}"))
+                .timeout(Duration.ofSeconds(15))
+                .method(exchange.requestMethod, HttpRequest.BodyPublishers.ofByteArray(body))
+            for (header in listOf("Accept", "Authorization", "Content-Type")) {
+                exchange.requestHeaders.getFirst(header)?.let { request.header(header, it) }
+            }
+            val response = client.send(request.build(), HttpResponse.BodyHandlers.ofByteArray())
+            if (isTransactionPost && !droppedResponse && response.statusCode() in 200..299) {
+                droppedResponse = true
+                // Firefly committed the transfer. Close the client connection before sending HTTP headers.
+                return
+            }
+            response.headers().firstValue("Content-Type").ifPresent { exchange.responseHeaders.set("Content-Type", it) }
+            val bytes = response.body()
+            exchange.sendResponseHeaders(response.statusCode(), if (bytes.isEmpty()) -1 else bytes.size.toLong())
+            if (bytes.isNotEmpty()) exchange.responseBody.write(bytes)
+        }
+    }
+
+    override fun close() = server.stop(0)
 }
 
 private fun checkTransaction(

@@ -11,24 +11,33 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypePropert
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.*
 import java.net.URI
-import java.time.LocalDate
-import java.time.OffsetDateTime
+import kotlin.test.assertFailsWith
 
 class FireflyTransactionServiceTest {
 
     private val fireflyTxApi: TransactionsApi = mock()
     private val syncHelper: SyncHelper = mock()
+    private val replacementJournal: TransferReplacementJournal = mock()
     private val existingFireflyPullWindowDays = 30
 
     private val fireflyTransactionService = FireflyTransactionService(
         fireflyTxApi,
         syncHelper,
         FireflyApiWrapper(RetryProperties(maxAttempts = 1)),
+        replacementJournal,
         existingFireflyPullWindowDays
     )
+
+    @BeforeEach
+    fun stubSearch() {
+        runBlocking {
+            whenever(syncHelper.findTransactionsByExternalId(any())).thenReturn(emptyList())
+        }
+    }
 
     @Test
     fun retriesDnsFailureWithoutAdvancingPage() = runBlocking {
@@ -37,6 +46,7 @@ class FireflyTransactionServiceTest {
         val service = FireflyTransactionService(
             fireflyTxApi, syncHelper,
             FireflyApiWrapper(RetryProperties(maxAttempts = 3, initialDelayMs = 0)),
+            replacementJournal,
             existingFireflyPullWindowDays,
         )
         val thrown = kotlin.test.assertFailsWith<java.nio.channels.UnresolvedAddressException> {
@@ -55,7 +65,9 @@ class FireflyTransactionServiceTest {
             val creates = listOf(FireflyTransactionDto(null, createTxSplit))
 
             // Create a transfer update
-            val transferTransaction = FireflyFixtures.getTransaction(type = TransactionTypeProperty.transfer)
+            val transferTransaction = FireflyFixtures.getTransaction(
+                type = TransactionTypeProperty.transfer, sourceId = "1", destinationId = "2", externalId = "plaid-new",
+            )
             val transferTxSplit = transferTransaction.transactions.first()
             val transferUpdate = FireflyTransactionDto("transfer-update-id", transferTxSplit)
 
@@ -68,14 +80,18 @@ class FireflyTransactionServiceTest {
             val deletes = listOf("1", "2")
 
             // Execute
-            fireflyTransactionService.processFireflyTransactionUpdates(creates, updates, deletes)
+            fireflyTransactionService.processFireflyTransactionUpdates(creates, updates, deletes, listOf(originalTransferLeg()))
 
             // Verify
             verify(syncHelper).optimisticInsertBatchIntoFirefly(eq(creates))
 
             // Verify transfer update is handled with delete and create
-            verify(syncHelper).deleteBatchInFirefly(eq(listOf("transfer-update-id")))
-            verify(syncHelper).pessimisticInsertBatchIntoFirefly(eq(listOf(transferUpdate)))
+            inOrder(replacementJournal, syncHelper) {
+                verify(replacementJournal).append(any())
+                verify(syncHelper).deleteBatchInFirefly(eq(listOf("transfer-update-id")))
+                verify(syncHelper).insertTransferReplacement(eq(transferUpdate.toTransactionStore()))
+                verify(replacementJournal).complete("transfer-update-id")
+            }
 
             // Verify non-transfer update is handled with direct update
             verify(syncHelper).updateBatchInFirefly(eq(listOf(nonTransferUpdate)))
@@ -89,24 +105,27 @@ class FireflyTransactionServiceTest {
     fun testProcessFireflyTransactionUpdatesHandlesDeleteFailure() {
         runBlocking {
             // Setup a transfer update
-            val transferTransaction = FireflyFixtures.getTransaction(type = TransactionTypeProperty.transfer)
+            val transferTransaction = FireflyFixtures.getTransaction(
+                type = TransactionTypeProperty.transfer, sourceId = "1", destinationId = "2", externalId = "plaid-new",
+            )
             val transferTxSplit = transferTransaction.transactions.first()
             val transferUpdate = FireflyTransactionDto("transfer-update-id", transferTxSplit)
 
             // Mock delete to throw exception
-            whenever(syncHelper.deleteBatchInFirefly(eq(listOf("transfer-update-id")))).thenThrow(RuntimeException("Delete failed"))
+            whenever(syncHelper.deleteBatchInFirefly(eq(listOf("transfer-update-id"))))
+                .thenThrow(IllegalStateException("Delete failed"))
 
             // Execute
-            fireflyTransactionService.processFireflyTransactionUpdates(
-                emptyList(),
-                listOf(transferUpdate),
-                emptyList()
-            )
+            assertFailsWith<IllegalStateException> {
+                fireflyTransactionService.processFireflyTransactionUpdates(
+                    emptyList(), listOf(transferUpdate), emptyList(), listOf(originalTransferLeg())
+                )
+            }
 
             // Verify
             verify(syncHelper).deleteBatchInFirefly(eq(listOf("transfer-update-id")))
-            // Verify that pessimisticInsertBatchIntoFirefly is not called due to delete failure
-            verify(syncHelper, never()).pessimisticInsertBatchIntoFirefly(any())
+            verify(syncHelper, never()).insertTransferReplacement(any())
+            verify(replacementJournal, never()).complete(any())
         }
     }
 
@@ -122,14 +141,14 @@ class FireflyTransactionServiceTest {
             fireflyTransactionService.processFireflyTransactionUpdates(
                 emptyList(),
                 listOf(nonTransferUpdate),
-                emptyList()
+                emptyList(),
+                emptyList(),
             )
 
             // Verify that updateBatchInFirefly is called with the non-transfer update
             verify(syncHelper).updateBatchInFirefly(eq(listOf(nonTransferUpdate)))
-            // Verify that deleteBatchInFirefly and pessimisticInsertBatchIntoFirefly are not called
             verify(syncHelper, never()).deleteBatchInFirefly(eq(listOf("non-transfer-update-id")))
-            verify(syncHelper, never()).pessimisticInsertBatchIntoFirefly(any())
+            verify(syncHelper, never()).insertTransferReplacement(any())
         }
     }
 
@@ -181,4 +200,11 @@ class FireflyTransactionServiceTest {
             )
         }
     }
+
+    private fun originalTransferLeg() = TransactionRead(
+        type = "transactions",
+        id = "transfer-update-id",
+        attributes = FireflyFixtures.getTransaction(sourceId = "1", externalId = "plaid-old"),
+        links = ObjectLink(self = URI("https://firefly.test/api/v1/transactions/transfer-update-id")),
+    )
 }

@@ -426,8 +426,10 @@ connector output, and Firefly database on exit.
 
 The command seeds two USD asset accounts and uses a local Plaid HTTP stub with synthetic transactions.
 It verifies a paginated batch import, a duplicate-free rerun, transfer matching, category tagging,
-and a paginated polled delta with creates, updates, and deletes across connector restarts. It reads
-the results back through Firefly's API. On failure, it prints the failed check and recent logs.
+and a paginated polled delta with creates, updates, and deletes across connector restarts. It also
+drops the response after Firefly creates a transfer replacement, then verifies recovery advances
+the cursor without issuing a second create. It reads the results back through Firefly's API. On
+failure, it prints the failed check and recent logs.
 
 GitHub Actions runs this mode on pull requests from a JAR built with `./gradlew -PsmokeTestJar bootJar`.
 You can run that JAR locally with `java -jar build/smoke/connector.jar smoke-test`. The mocked run

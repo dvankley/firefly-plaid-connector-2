@@ -19,6 +19,7 @@ class FireflyTransactionService(
     private val fireflyTxApi: TransactionsApi,
     private val syncHelper: SyncHelper,
     private val fireflyApiWrapper: FireflyApiWrapper,
+    private val replacementJournal: TransferReplacementJournal,
     
     @Value("\${fireflyPlaidConnector2.polled.existingFireflyPullWindowDays}")
     private val existingFireflyPullWindowDays: Int
@@ -76,7 +77,8 @@ class FireflyTransactionService(
     suspend fun processFireflyTransactionUpdates(
         creates: List<FireflyTransactionDto>,
         updates: List<FireflyTransactionDto>,
-        deletes: List<String>
+        deletes: List<String>,
+        existing: List<TransactionRead>,
     ) {
         // Insert new transactions
         syncHelper.optimisticInsertBatchIntoFirefly(creates)
@@ -89,7 +91,7 @@ class FireflyTransactionService(
          * Split them here so we can handle them separately.
          */
         val (transferUpdates, nonTransferUpdates) = updates.partition { it.tx.type == TransactionTypeProperty.transfer }
-        processFireflyTransferUpdates(transferUpdates)
+        processFireflyTransferUpdates(transferUpdates, existing)
         processFireflyNonTransferUpdates(nonTransferUpdates)
 
         // Process deletes
@@ -104,28 +106,50 @@ class FireflyTransactionService(
      * I'm not crazy about this because any other reference to the existing record will be
      *  broken, but such is life (and this behavior has been around for a while at this point).
      */
-    private suspend fun processFireflyTransferUpdates(updates: List<FireflyTransactionDto>) {
-        for (update in updates) {
-            update.id ?: throw IllegalArgumentException("Unexpected transfer update tx missing id: $update")
-
-            /**
-             * Delete first, if that fails, don't do the create.
-             */
-            try {
-                syncHelper.deleteBatchInFirefly(listOf(update.id))
-            } catch (e: Exception) {
-                logger.error(
-                    "Failed to execute delete as first part of updating transaction ${update.id}; " +
-                            "aborting create part of update operation", e
-                )
-                continue
+    private suspend fun processFireflyTransferUpdates(
+        updates: List<FireflyTransactionDto>,
+        existing: List<TransactionRead>,
+    ) {
+        if (updates.isEmpty()) return
+        val originals = existing.associateBy { it.id }
+        val replacements = updates.map { update ->
+            val id = requireNotNull(update.id) { "Transfer replacement is missing its original Firefly ID" }
+            val original = requireNotNull(originals[id]) { "Missing original Firefly transaction $id" }
+            require(update.tx.amount.toBigDecimal().signum() > 0) { "Transfer replacement $id must have a positive amount" }
+            require(!update.tx.externalId.isNullOrBlank()) { "Transfer replacement $id is missing its external ID" }
+            require(update.tx.sourceId != null || !update.tx.sourceName.isNullOrBlank()) { "Missing transfer source for $id" }
+            require(update.tx.destinationId != null || !update.tx.destinationName.isNullOrBlank()) {
+                "Missing transfer destination for $id"
             }
-
-            /**
-             * This should not be a duplicate, so allow an exception to propagate if it is
-             */
-            syncHelper.pessimisticInsertBatchIntoFirefly(listOf(update))
+            TransferReplacement(id, original.attributes.transactions.single(), update.toTransactionStore())
         }
+        replacementJournal.append(replacements)
+        for (replacement in replacements) reconcileTransferReplacement(replacement)
+    }
+
+    internal suspend fun recoverTransferReplacements(replacements: List<TransferReplacement>) {
+        for (replacement in replacements) {
+            if (!replacement.completed) reconcileTransferReplacement(replacement)
+        }
+    }
+
+    private suspend fun reconcileTransferReplacement(entry: TransferReplacement) {
+        val intended = entry.replacement.transactions.single()
+        val externalId = requireNotNull(intended.externalId)
+        val matches = syncHelper.findTransactionsByExternalId(externalId).filter { it.id != entry.originalId }
+        if (matches.isNotEmpty()) {
+            val actual = matches.singleOrNull()?.attributes?.transactions?.singleOrNull()
+            check(
+                actual != null && actual.type == TransactionTypeProperty.transfer &&
+                    actual.amount.toBigDecimal().compareTo(intended.amount.toBigDecimal()) == 0 &&
+                    (intended.sourceId?.let { it == actual.sourceId } ?: (intended.sourceName == actual.sourceName)) &&
+                    (intended.destinationId?.let { it == actual.destinationId } ?:
+                        (intended.destinationName == actual.destinationName))
+            ) { "Conflicting Firefly transaction for transfer replacement $externalId" }
+        }
+        syncHelper.deleteBatchInFirefly(listOf(entry.originalId))
+        if (matches.isEmpty()) syncHelper.insertTransferReplacement(entry.replacement)
+        replacementJournal.complete(entry.originalId)
     }
 
     /**

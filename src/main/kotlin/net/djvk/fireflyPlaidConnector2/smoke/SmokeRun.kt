@@ -87,11 +87,17 @@ internal class SmokeRun(private val showDetails: Boolean) : AutoCloseable {
         }
     }
 
-    fun connector(firefly: SmokeFirefly, settings: Map<String, Any?>, arguments: List<String> = emptyList()): Int? {
+    fun connector(
+        firefly: SmokeFirefly,
+        settings: Map<String, Any?>,
+        arguments: List<String> = emptyList(),
+        fireflyUrl: String = firefly.baseUrl,
+        expectPollFailure: Boolean = false,
+    ): Int? {
         val config = work.resolve("smoke.yml")
         val polled = settings["syncMode"] == "polled"
         val configData = mutableMapOf<String, Any>("fireflyPlaidConnector2" to (settings + ("firefly" to mapOf(
-            "url" to firefly.baseUrl, "personalAccessToken" to fireflyToken,
+            "url" to fireflyUrl, "personalAccessToken" to fireflyToken,
         ))))
         if (!showDetails) {
             val levels = mutableMapOf("net.djvk" to "WARN")
@@ -123,11 +129,14 @@ internal class SmokeRun(private val showDetails: Boolean) : AutoCloseable {
                     waitFor("the first poll to finish", timeout) {
                         if (!process.isAlive) {
                             val status = process.exitValue()
+                            if (expectPollFailure && status != 0) return@waitFor true
                             if (!showDetails) checkLiveOutput(log.readText(), status, "polled connector")
                             throw SmokeFailure("Polled connector exited early with status $status.")
                         }
                         // The runner logs this after the Firefly writes and cursor update.
-                        log.readText().lineSequence().any { it.endsWith(" : Sleeping $POLL_INTERVAL_MINUTES") }
+                        val finished = log.readText().lineSequence().any { it.endsWith(" : Sleeping $POLL_INTERVAL_MINUTES") }
+                        if (finished && expectPollFailure) throw SmokeFailure("The poll completed after the Firefly response was lost.")
+                        finished
                     }
                     val output = log.readText()
                     if (!showDetails) checkLiveOutput(output, 0, "polled connector")

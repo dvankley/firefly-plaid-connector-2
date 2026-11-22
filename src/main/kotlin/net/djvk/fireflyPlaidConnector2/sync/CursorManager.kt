@@ -48,15 +48,10 @@ class CursorManager(
     suspend fun writeCursorMap(map: Map<PlaidAccessToken, PlaidSyncCursor>) {
         logger.trace("Writing ${map.size} Plaid sync cursors to map $cursorFilePath")
         return withContext(Dispatchers.IO) {
-            cursorFilePath
-                .toFile()
-                .writeText(
-                    map.entries
-                        .filter { it.value != "" }
-                        .joinToString("\n") { (token, cursor) ->
-                            "$token|$cursor"
-                        }
-                )
+            writeSyncStateFile(cursorFilePath, serializeCursorMap(map).toByteArray())
         }
     }
 }
+
+internal fun serializeCursorMap(map: Map<PlaidAccessToken, PlaidSyncCursor>): String =
+    map.entries.filter { it.value.isNotEmpty() }.joinToString("\n") { (token, cursor) -> "$token|$cursor" }
