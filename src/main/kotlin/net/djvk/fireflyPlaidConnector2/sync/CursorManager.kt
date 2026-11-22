@@ -5,6 +5,8 @@ import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import java.security.MessageDigest
+import java.util.HexFormat
 import kotlin.io.path.Path
 
 /**
@@ -55,3 +57,8 @@ class CursorManager(
 
 internal fun serializeCursorMap(map: Map<PlaidAccessToken, PlaidSyncCursor>): String =
     map.entries.filter { it.value.isNotEmpty() }.joinToString("\n") { (token, cursor) -> "$token|$cursor" }
+
+internal fun cursorFingerprint(cursors: Map<PlaidAccessToken, PlaidSyncCursor>): String {
+    val bytes = serializeCursorMap(cursors.toSortedMap()).toByteArray()
+    return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))
+}

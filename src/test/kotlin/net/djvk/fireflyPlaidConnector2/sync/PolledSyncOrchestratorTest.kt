@@ -2,12 +2,9 @@ package net.djvk.fireflyPlaidConnector2.sync
 
 import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
-import net.djvk.fireflyPlaidConnector2.lib.defaultOffsetNow
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
-import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -17,6 +14,7 @@ import org.junit.jupiter.params.provider.MethodSource
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.util.stream.Stream
@@ -35,6 +33,7 @@ internal class PolledSyncOrchestratorTest {
     private val fireflyTransactionService: FireflyTransactionService = mock()
     private val converter: TransactionConverter = mock()
     private val replacementJournal: TransferReplacementJournal = mock()
+    private val correctionQueue: PlaidCorrectionQueue = mock()
 
     @BeforeEach
     fun stubJournal() {
@@ -69,6 +68,7 @@ internal class PolledSyncOrchestratorTest {
             fireflyTransactionService,
             converter,
             replacementJournal,
+            correctionQueue,
         )
 
         // Call the method we want to test
@@ -82,17 +82,6 @@ internal class PolledSyncOrchestratorTest {
     }
 
     companion object {
-        /**
-         * Provides test cases for the processTransactions test.
-         * Each test case includes different combinations of:
-         * - Created Plaid transactions
-         * - Updated Plaid transactions
-         * - Deleted Plaid transaction IDs
-         * - Existing Firefly transactions
-         * - Expected FireflyTransactionDto creates
-         * - Expected FireflyTransactionDto updates
-         * - Expected FireflyTransactionId deletes
-         */
         @JvmStatic
         fun provideProcessTransactionsTestCases(): Stream<Arguments> {
             // Standard account mapping for all test cases
@@ -110,7 +99,6 @@ internal class PolledSyncOrchestratorTest {
             val emptyConvertResult = TransactionConverter.ConvertPollSyncResult(
                 creates = emptyList(),
                 updates = emptyList(),
-                deletes = emptyList()
             )
 
             // Test case 2: Created transactions only
@@ -136,62 +124,6 @@ internal class PolledSyncOrchestratorTest {
             val createdConvertResult = TransactionConverter.ConvertPollSyncResult(
                 creates = listOf(createdFireflyTxDto),
                 updates = emptyList(),
-                deletes = emptyList()
-            )
-
-            // Test case 3: Updated transactions only
-            val updatedPlaidTx = PlaidFixtures.getPaymentTransaction(
-                name = "Updated Transaction",
-                accountId = "account1",
-                amount = 200.0,
-                transactionId = "updated1"
-            )
-            val existingFireflyTx = FireflyFixtures.getTransaction(
-                description = "Existing Transaction",
-                amount = "150.0",
-                sourceId = "1"
-            )
-            val updatedPlaidResult = PlaidTransactionResult(
-                created = emptyList(),
-                updated = listOf(updatedPlaidTx),
-                deleted = emptyList()
-            )
-            val updatedFireflyTxDto = FireflyTransactionDto(
-                id = "1", // Assuming this is the ID of the existing transaction
-                tx = FireflyFixtures.getTransaction(
-                    description = "Updated Transaction",
-                    amount = "200.0",
-                    sourceId = "1"
-                ).transactions.first()
-            )
-            val updatedConvertResult = TransactionConverter.ConvertPollSyncResult(
-                creates = emptyList(),
-                updates = listOf(updatedFireflyTxDto),
-                deletes = emptyList()
-            )
-
-            // Test case 4: Deleted transactions only
-            val deletedPlaidResult = PlaidTransactionResult(
-                created = emptyList(),
-                updated = emptyList(),
-                deleted = listOf("deleted1")
-            )
-            val deletedConvertResult = TransactionConverter.ConvertPollSyncResult(
-                creates = emptyList(),
-                updates = emptyList(),
-                deletes = listOf("1") // Assuming this is the ID of the transaction to delete
-            )
-
-            // Test case 5: Combination of created, updated, and deleted transactions
-            val combinedPlaidResult = PlaidTransactionResult(
-                created = listOf(createdPlaidTx),
-                updated = listOf(updatedPlaidTx),
-                deleted = listOf("deleted1")
-            )
-            val combinedConvertResult = TransactionConverter.ConvertPollSyncResult(
-                creates = listOf(createdFireflyTxDto),
-                updates = listOf(updatedFireflyTxDto),
-                deletes = listOf("1")
             )
 
             return Stream.of(
@@ -209,27 +141,6 @@ internal class PolledSyncOrchestratorTest {
                     createdPlaidResult,
                     createdConvertResult
                 ),
-                Arguments.of(
-                    "Updated transactions only",
-                    accountMap,
-                    listOf(existingFireflyTx),
-                    updatedPlaidResult,
-                    updatedConvertResult
-                ),
-                Arguments.of(
-                    "Deleted transactions only",
-                    accountMap,
-                    listOf(existingFireflyTx),
-                    deletedPlaidResult,
-                    deletedConvertResult
-                ),
-                Arguments.of(
-                    "Combination of created, updated, and deleted transactions",
-                    accountMap,
-                    listOf(existingFireflyTx),
-                    combinedPlaidResult,
-                    combinedConvertResult
-                )
             )
         }
     }
@@ -262,8 +173,6 @@ internal class PolledSyncOrchestratorTest {
         whenever(converter.convertPollSync(
             eq(accountMap),
             eq(plaidTransactionResult.created),
-            eq(plaidTransactionResult.updated),
-            eq(plaidTransactionResult.deleted),
             eq(existingFireflyTxs)
         )).thenReturn(convertResult)
 
@@ -276,6 +185,7 @@ internal class PolledSyncOrchestratorTest {
             fireflyTransactionService,
             converter,
             replacementJournal,
+            correctionQueue,
         )
 
         // Call the method we want to test
@@ -287,16 +197,17 @@ internal class PolledSyncOrchestratorTest {
         verify(converter).convertPollSync(
             eq(accountMap),
             eq(plaidTransactionResult.created),
-            eq(plaidTransactionResult.updated),
-            eq(plaidTransactionResult.deleted),
             eq(existingFireflyTxs)
         )
-        verify(fireflyTransactionService).processFireflyTransactionUpdates(
+        verify(fireflyTransactionService).processFireflyCreatesAndTransfers(
             eq(convertResult.creates),
             eq(convertResult.updates),
-            eq(convertResult.deletes),
             eq(existingFireflyTxs),
         )
-        verify(cursorManager).writeCursorMap(eq(cursorMap))
+        inOrder(correctionQueue, cursorManager) {
+            verify(correctionQueue).process(eq(accountMap), eq(plaidTransactionResult), eq(cursorMap), eq(cursorMap), any())
+            verify(cursorManager).writeCursorMap(eq(cursorMap))
+            verify(correctionQueue).finishCursorCommit(eq(cursorMap))
+        }
     }
 }

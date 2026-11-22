@@ -31,7 +31,7 @@ sealed interface PlaidFireflyTransaction {
             fireflyTxs: List<FireflyTransactionDto>,
             accountMap: Map<String, Int>
         ): List<PlaidFireflyTransaction> {
-            val plaidById = plaidTxs.groupBy { FireflyTransactionExternalIdIndexer.getExternalId(it.transactionId) }
+            val plaidById = plaidTxs.groupBy { plaidExternalId(it.transactionId) }
             val fireflyByExtId = fireflyTxs.groupBy { it.tx.externalId }
             val externalIds = plaidById.keys.union(fireflyByExtId.keys)
 

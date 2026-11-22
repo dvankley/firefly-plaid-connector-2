@@ -26,6 +26,18 @@ When started in this mode, the connector will not pull any past transactions, bu
 
 The last sync position of each account will be stored in `persistence/plaid_sync_cursors.txt`.
 
+Polled mode finds modified and removed transactions in Firefly by their Plaid external ID
+regardless of date. Unresolved changes are saved in `plaid_unresolved_changes.json` in the
+configured cursor directory before the cursor advances. Failed lookups and writes are retried
+on later polls, with up to four attempts per change. Ambiguous matches and unsupported
+targets, including merged transfers and split groups, go directly to `needs_review`.
+These entries stay in the file for reconciliation while regular polls continue.
+
+The queue can contain transaction details. To retry a `needs_review` entry after resolving
+its cause, stop the connector, back up the queue, and set the entry's `status` to `pending`,
+`attempts` to `0`, and `nextRetry` to a UTC timestamp in the past. Restart the connector to
+pick it up on the next poll.
+
 ## Firefly Transfers
 The most complex part of the connector by far is the transfer matching logic.
 Firefly has a notion of [transfers](https://docs.firefly-iii.org/firefly-iii/concepts/transactions/#transfers),

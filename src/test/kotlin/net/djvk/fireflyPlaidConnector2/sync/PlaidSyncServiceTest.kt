@@ -103,7 +103,7 @@ class PlaidSyncServiceTest {
         doReturn(second).whenever(service).executeTransactionSyncRequest("token", "page2", 100)
         val cursors = mutableMapOf("token" to "saved")
         val result = service.processPlaidTransactions(sequenceOf("token" to listOf("configured")), cursors)
-        assertEquals(listOf("included1", "included2"), result.deleted)
+        assertEquals(listOf("included1", "included2"), result.deleted.map { it.transactionId })
         assertEquals("done", cursors["token"])
     }
 
@@ -126,7 +126,7 @@ class PlaidSyncServiceTest {
 
         assertEquals(listOf("keep-add"), result.created.map { it.transactionId })
         assertEquals(emptyList<Transaction>(), result.updated)
-        assertEquals(emptyList<String>(), result.deleted)
+        assertEquals(0, result.deleted.size)
         assertEquals(mapOf("failed" to "saved", "healthy" to "healthy-next"), cursors)
     }
 

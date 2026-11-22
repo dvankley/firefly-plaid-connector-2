@@ -23,6 +23,8 @@ import org.springframework.stereotype.Component
 typealias PlaidAccessToken = String
 typealias PlaidAccountId = String
 
+internal val fireflySearchExternalIdPattern = Regex("[A-Za-z0-9_-]+")
+
 const val MINIMUM_FIREFLY_VERSION = "6.1.2"
 
 @Component
@@ -112,7 +114,7 @@ class SyncHelper(
     }
 
     suspend fun findTransactionsByExternalId(externalId: String): List<TransactionRead> {
-        require(externalId.matches(Regex("[A-Za-z0-9_-]+"))) { "Invalid external ID for Firefly search" }
+        require(externalId.matches(fireflySearchExternalIdPattern)) { "Invalid external ID for Firefly search" }
         val matches = mutableListOf<TransactionRead>()
         for (page in 1..20) {
             val result = fireflyApiWrapper.executeRequest("search Firefly transactions for $externalId, page $page") {

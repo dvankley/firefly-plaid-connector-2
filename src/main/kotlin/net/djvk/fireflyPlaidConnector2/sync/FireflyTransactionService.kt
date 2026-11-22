@@ -48,16 +48,8 @@ class FireflyTransactionService(
             }
             val pagination = response.meta.pagination
 
-            /**
-             * Don't do any more filtering here, we will need all transactions for potentially matching
-             *  up to update and delete requests.
-             *
-             * See [TransactionConverter.filterFireflyCandidateTransferTxs] for the filtering we do
-             *  before trying to match up transfers.
-             */
-            val filteredTxs = response.data
-            logger.debug("Fetched ${filteredTxs.size} existing Firefly single-split, non transfer transactions with window starting at $transferWindowStart")
-            existingFireflyTxs.addAll(filteredTxs)
+            logger.debug("Fetched ${response.data.size} recent Firefly transactions")
+            existingFireflyTxs.addAll(response.data)
         } while (pagination != null &&
             pagination.currentPage < pagination.totalPages &&
             // This condition is a failsafe to avoid an infinite loop
@@ -71,31 +63,13 @@ class FireflyTransactionService(
         return existingFireflyTxs
     }
 
-    /**
-     * Processes transaction updates in Firefly.
-     */
-    suspend fun processFireflyTransactionUpdates(
+    suspend fun processFireflyCreatesAndTransfers(
         creates: List<FireflyTransactionDto>,
-        updates: List<FireflyTransactionDto>,
-        deletes: List<String>,
+        transferUpdates: List<FireflyTransactionDto>,
         existing: List<TransactionRead>,
     ) {
-        // Insert new transactions
         syncHelper.optimisticInsertBatchIntoFirefly(creates)
-        
-        // Process updates
-        /**
-         * All updates here will either be updates of existing Firefly transactions that have been
-         *  paired with incoming Plaid creates to become transfers, or updates coming in directly from Plaid.
-         *
-         * Split them here so we can handle them separately.
-         */
-        val (transferUpdates, nonTransferUpdates) = updates.partition { it.tx.type == TransactionTypeProperty.transfer }
         processFireflyTransferUpdates(transferUpdates, existing)
-        processFireflyNonTransferUpdates(nonTransferUpdates)
-
-        // Process deletes
-        syncHelper.deleteBatchInFirefly(deletes)
     }
 
     /**
@@ -150,16 +124,5 @@ class FireflyTransactionService(
         syncHelper.deleteBatchInFirefly(listOf(entry.originalId))
         if (matches.isEmpty()) syncHelper.insertTransferReplacement(entry.replacement)
         replacementJournal.complete(entry.originalId)
-    }
-
-    /**
-     * Updates direct from Plaid will always be non-transfers (see comment a few lines down
-     *  in [TransactionConverter.convertPollSync]) because we're currently not trying to handle
-     *  the complexity of Plaid updates being applied to Firefly transfers (which themselves
-     *  originated as two distinct Plaid transactions).
-     * Because Plaid direct updates are not transfers, we can update them directly in Firefly.
-     */
-    private suspend fun processFireflyNonTransferUpdates(updates: List<FireflyTransactionDto>) {
-        syncHelper.updateBatchInFirefly(updates)
     }
 }

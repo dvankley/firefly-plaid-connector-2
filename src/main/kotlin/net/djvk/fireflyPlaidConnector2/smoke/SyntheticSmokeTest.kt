@@ -39,8 +39,9 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
         "personal_finance_category" to mapOf("primary" to primary, "detailed" to detailed),
     )
 
-    val purchase = transaction("purchase", 18.75, "Smoke Groceries", "FOOD_AND_DRINK", "FOOD_AND_DRINK_GROCERIES")
-    val income = transaction("income", -48, "Smoke Pay", "INCOME", "INCOME_SALARY")
+    val oldDate = LocalDate.now(ZoneOffset.UTC).minusDays(30).toString()
+    val purchase = transaction("purchase", 18.75, "Smoke Groceries", "FOOD_AND_DRINK", "FOOD_AND_DRINK_GROCERIES") + ("date" to oldDate)
+    val income = transaction("income", -48, "Smoke Pay", "INCOME", "INCOME_SALARY") + ("date" to oldDate)
     val transferOut = transaction("transfer-out", 30, "Smoke Savings Transfer", "TRANSFER_OUT", "TRANSFER_OUT_ACCOUNT_TRANSFER")
     val transferIn = transaction("transfer-in", -30, "Smoke Savings Transfer", "TRANSFER_IN", "TRANSFER_IN_ACCOUNT_TRANSFER", "bbb")
     val history = transaction("history", 8, "Smoke History", "FOOD_AND_DRINK", "FOOD_AND_DRINK_GROCERIES")

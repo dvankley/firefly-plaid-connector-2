@@ -30,8 +30,7 @@ fireflyPlaidConnector2:
     # How often to run the poll sync process
     syncFrequencyMinutes: 10
     # How many days in the past we should pull existing Firefly transactions for.
-    # These Firefly transactions are used for searching for targets for Plaid updates and deletes, as well as for
-    #   searching for transfer matches.
+    # Used to find transfer candidates. Plaid corrections are looked up by external ID.
     # Must be more than fireflyPlaidConnector2.transferMatchWindowDays
     existingFireflyPullWindowDays: 5
     # Path to a directory that the application can use to store a file that tracks the state of the Plaid sync cursors.

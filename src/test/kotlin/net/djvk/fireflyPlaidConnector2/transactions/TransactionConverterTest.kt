@@ -4,7 +4,6 @@ import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
-import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.CounterpartyType
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Location
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionCode
@@ -43,10 +42,6 @@ internal class TransactionConverterTest {
                             amount = -1111.22,
                         ),
                     ),
-//                    plaidUpdatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(),
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf(
                         TransactionRead(
@@ -116,7 +111,6 @@ internal class TransactionConverterTest {
                                 ).transactions.first()
                             )
                         ),
-                        deletes = listOf(),
                     ),
                 ),
                 Arguments.of(
@@ -132,10 +126,6 @@ internal class TransactionConverterTest {
                             amount = 1111.22,
                         ),
                     ),
-//                    plaidUpdatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(),
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf(
                         TransactionRead(
@@ -162,7 +152,6 @@ internal class TransactionConverterTest {
                                 ).transactions.first()
                             )
                         ),
-                        deletes = listOf(),
                     ),
                 ),
                 Arguments.of(
@@ -185,10 +174,6 @@ internal class TransactionConverterTest {
                             amount = -1111.22,
                         ),
                     ),
-//                    plaidUpdatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(),
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf(
                         TransactionRead(
@@ -216,162 +201,6 @@ internal class TransactionConverterTest {
                             ),
                         ),
                         updates = listOf(),
-                        deletes = listOf(),
-                    ),
-                ),
-                Arguments.of(
-//                    testName: String,
-                    "Update without matching Firefly Transaction",
-//                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
-                    PlaidFixtures.getStandardAccountMapping(),
-//                    plaidCreatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidUpdatedTxs: List<PlaidTransaction>,
-                    listOf(
-                        PlaidFixtures.getPaymentTransaction(
-                            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            transactionId = "plaidUpdateId",
-                            amount = 1111.22,
-                        ),
-                    ),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(),
-//                    existingFireflyTxs: List<TransactionRead>,
-                    listOf(
-                        TransactionRead(
-                            "thing", "unrelatedFireflyTransactionId",
-                            FireflyFixtures.getTransaction(
-                                type = TransactionTypeProperty.deposit,
-                                amount = "123.45",
-                                destinationId = "2",
-                                externalId = "unrelated"
-                            ), ObjectLink()
-                        ),
-                    ),
-//                    expectedResult: TransactionConverter.ConvertPollSyncResult,
-                    TransactionConverter.ConvertPollSyncResult(
-                        creates = listOf(),
-                        updates = listOf(),
-                        deletes = listOf(),
-                    ),
-                ),
-                Arguments.of(
-//                    testName: String,
-                    "Update with matching Firefly Transaction",
-//                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
-                    PlaidFixtures.getStandardAccountMapping(),
-//                    plaidCreatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidUpdatedTxs: List<PlaidTransaction>,
-                    listOf(
-                        PlaidFixtures.getPaymentTransaction(
-                            accountId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            name = "Updated transaction name",
-                            transactionId = "plaidUpdateId",
-                            amount = 1111.22,
-                        ),
-                    ),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(),
-//                    existingFireflyTxs: List<TransactionRead>,
-                    listOf(
-                        TransactionRead(
-                            "thing", "updatedFireflyId",
-                            FireflyFixtures.getTransaction(
-                                type = TransactionTypeProperty.deposit,
-                                description = "Old transaction name",
-                                amount = "123.45",
-                                sourceId = "1",
-                                destinationName = "Unknown Transfer Recipient",
-                                externalId = "plaid-plaidUpdateId",
-                            ), ObjectLink()
-                        ),
-                    ),
-//                    expectedResult: TransactionConverter.ConvertPollSyncResult,
-                    TransactionConverter.ConvertPollSyncResult(
-                        creates = listOf(),
-                        updates = listOf(
-                            FireflyTransactionDto(
-                                "updatedFireflyId",
-                                FireflyFixtures.getTransaction(
-                                    type = TransactionTypeProperty.withdrawal,
-                                    description = "Updated transaction name",
-                                    amount = "1111.22",
-                                    sourceId = "1",
-                                    destinationName = "Unknown Transfer Recipient",
-                                    externalId = "plaid-plaidUpdateId",
-                                ).transactions.first()
-                            ),
-                        ),
-                        deletes = listOf(),
-                    ),
-                ),
-                Arguments.of(
-//                    testName: String,
-                    "Delete without matching Firefly Transaction",
-//                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
-                    PlaidFixtures.getStandardAccountMapping(),
-//                    plaidCreatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidUpdatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(
-                        "deletedTransactionId",
-                    ),
-//                    existingFireflyTxs: List<TransactionRead>,
-                    listOf(
-                        TransactionRead(
-                            "thing", "updatedFireflyId",
-                            FireflyFixtures.getTransaction(
-                                type = TransactionTypeProperty.deposit,
-                                amount = "123.45",
-                                destinationId = "2",
-                                externalId = "unrelated"
-                            ), ObjectLink()
-                        ),
-                    ),
-//                    expectedResult: TransactionConverter.ConvertPollSyncResult,
-                    TransactionConverter.ConvertPollSyncResult(
-                        creates = listOf(),
-                        updates = listOf(),
-                        deletes = listOf(),
-                    ),
-                ),
-                Arguments.of(
-//                    testName: String,
-                    "Delete with matching Firefly Transaction",
-//                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
-                    PlaidFixtures.getStandardAccountMapping(),
-//                    plaidCreatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidUpdatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(
-                        "deletedTransactionId",
-                    ),
-//                    existingFireflyTxs: List<TransactionRead>,
-                    listOf(
-                        TransactionRead(
-                            "thing", "deletedFireflyId",
-                            FireflyFixtures.getTransaction(
-                                type = TransactionTypeProperty.deposit,
-                                description = "Old transaction name",
-                                amount = "123.45",
-                                sourceId = "1",
-                                destinationName = "Unknown Transfer Recipient",
-                                externalId = "plaid-deletedTransactionId",
-                            ), ObjectLink()
-                        ),
-                    ),
-//                    expectedResult: TransactionConverter.ConvertPollSyncResult,
-                    TransactionConverter.ConvertPollSyncResult(
-                        creates = listOf(),
-                        updates = listOf(),
-                        deletes = listOf(
-                            "deletedFireflyId",
-                        ),
                     ),
                 ),
                 Arguments.of(
@@ -400,10 +229,6 @@ internal class TransactionConverterTest {
                             amount = 234.56,
                         ),
                     ),
-//                    plaidUpdatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(),
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf<TransactionRead>(
                         TransactionRead(
@@ -445,7 +270,6 @@ internal class TransactionConverterTest {
                             ),
                         ),
                         updates = listOf(),
-                        deletes = listOf(),
                     ),
                 ),
 
@@ -494,10 +318,6 @@ internal class TransactionConverterTest {
                             date = defaultLocalNow,
                         ),
                     ),
-//                    plaidUpdatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(),
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf<TransactionRead>(),
 //                    expectedResult: TransactionConverter.ConvertPollSyncResult,
@@ -557,7 +377,6 @@ internal class TransactionConverterTest {
                             ),
                         ),
                         updates = listOf(),
-                        deletes = listOf(),
                     ),
                 ),
                 Arguments.of(
@@ -610,10 +429,6 @@ internal class TransactionConverterTest {
                             ),
                         ),
                     ),
-//                    plaidUpdatedTxs: List<PlaidTransaction>,
-                    listOf<PlaidTransaction>(),
-//                    plaidDeletedTxs: List<PlaidTransactionId>,
-                    listOf<PlaidTransactionId>(),
 //                    existingFireflyTxs: List<TransactionRead>,
                     listOf<TransactionRead>(),
 //                    expectedResult: TransactionConverter.ConvertPollSyncResult,
@@ -637,7 +452,6 @@ internal class TransactionConverterTest {
                             ),
                         ),
                         updates = listOf(),
-                        deletes = listOf(),
                     ),
                 ),
             )
@@ -679,11 +493,8 @@ internal class TransactionConverterTest {
                         accountMap,
                         inputPlaidTxs,
                         listOf(),
-                        listOf(),
-                        listOf(),
                     )
                     // Since this isn't passing-in any existing Plaid transactions, these should always be empty
-                    assertThat(result.deletes).isEmpty()
                     assertThat(result.updates).isEmpty()
                     return@runBlocking result.creates
                 } else {
@@ -828,8 +639,6 @@ internal class TransactionConverterTest {
         testName: String,
         accountMap: Map<PlaidAccountId, FireflyAccountId>,
         plaidCreatedTxs: List<PlaidTransaction>,
-        plaidUpdatedTxs: List<PlaidTransaction>,
-        plaidDeletedTxs: List<PlaidTransactionId>,
         existingFireflyTxs: List<TransactionRead>,
         expectedResult: TransactionConverter.ConvertPollSyncResult,
     ) {
@@ -847,8 +656,6 @@ internal class TransactionConverterTest {
             val actual = converter.convertPollSync(
                 accountMap,
                 plaidCreatedTxs,
-                plaidUpdatedTxs,
-                plaidDeletedTxs,
                 existingFireflyTxs,
             )
 

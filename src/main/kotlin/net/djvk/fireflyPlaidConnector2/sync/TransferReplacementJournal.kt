@@ -13,8 +13,6 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionStore
 import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
-import java.security.MessageDigest
-import java.util.HexFormat
 
 internal data class TransferReplacement(
     val originalId: FireflyTransactionId,
@@ -41,7 +39,7 @@ class TransferReplacementJournal(cursorManager: CursorManager) {
     internal suspend fun pendingFor(cursors: Map<PlaidAccessToken, PlaidSyncCursor>): List<TransferReplacement> =
         withContext(Dispatchers.IO) {
             val state = read() ?: return@withContext emptyList()
-            if (state.commitFingerprint == fingerprint(cursors)) {
+            if (state.commitFingerprint == cursorFingerprint(cursors)) {
                 deleteSyncStateFile(path)
                 return@withContext emptyList()
             }
@@ -69,7 +67,7 @@ class TransferReplacementJournal(cursorManager: CursorManager) {
         withContext(Dispatchers.IO) {
             val state = read() ?: return@withContext false
             check(state.replacements.all { it.completed }) { "Cannot commit cursors with unfinished transfer replacements" }
-            write(state.copy(commitFingerprint = fingerprint(cursors)))
+            write(state.copy(commitFingerprint = cursorFingerprint(cursors)))
             true
         }
 
@@ -89,9 +87,4 @@ class TransferReplacementJournal(cursorManager: CursorManager) {
     }
 
     private fun write(state: State) = writeSyncStateFile(path, mapper.writeValueAsBytes(state))
-
-    private fun fingerprint(cursors: Map<PlaidAccessToken, PlaidSyncCursor>): String {
-        val bytes = serializeCursorMap(cursors.toSortedMap()).toByteArray()
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))
-    }
 }

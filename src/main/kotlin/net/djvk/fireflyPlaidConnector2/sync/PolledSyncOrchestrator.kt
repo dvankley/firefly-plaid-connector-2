@@ -5,7 +5,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
-import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionExternalIdIndexer
+import net.djvk.fireflyPlaidConnector2.transactions.plaidExternalId
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
@@ -36,6 +36,7 @@ class PolledSyncOrchestrator(
     private val fireflyTransactionService: FireflyTransactionService,
     private val converter: TransactionConverter,
     private val replacementJournal: TransferReplacementJournal,
+    private val correctionQueue: PlaidCorrectionQueue,
 ) : Runner, DisposableBean {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
@@ -89,31 +90,24 @@ class PolledSyncOrchestrator(
         val convertResult = converter.convertPollSync(
             accountMap,
             plaidTransactions.created.filter {
-                FireflyTransactionExternalIdIndexer.getExternalId(it.transactionId) !in recoveredExternalIds
+                plaidExternalId(it.transactionId) !in recoveredExternalIds
             },
-            plaidTransactions.updated,
-            plaidTransactions.deleted,
             existingFireflyTxs,
         )
-        logger.debug(
-            "Conversion result: ${convertResult.creates.size} creates; " +
-                    "${convertResult.updates.size} updates; " +
-                    "${convertResult.deletes.size} deletes;"
-        )
-
-        // Process transaction updates in Firefly
-        fireflyTransactionService.processFireflyTransactionUpdates(
+        logger.debug("Conversion result: {} creates, {} transfer updates", convertResult.creates.size, convertResult.updates.size)
+        fireflyTransactionService.processFireflyCreatesAndTransfers(
             convertResult.creates,
             convertResult.updates,
-            convertResult.deletes,
             existingFireflyTxs,
         )
+        correctionQueue.process(accountMap, plaidTransactions, cursorMap, nextCursors)
 
         // Update cursor map after successful processing
         val hasReplacements = replacementJournal.prepareCursorCommit(nextCursors)
         cursorManager.writeCursorMap(nextCursors)
         cursorMap.putAll(nextCursors)
         if (hasReplacements) replacementJournal.finishCursorCommit()
+        correctionQueue.finishCursorCommit(nextCursors)
     }
 
     override fun run() {

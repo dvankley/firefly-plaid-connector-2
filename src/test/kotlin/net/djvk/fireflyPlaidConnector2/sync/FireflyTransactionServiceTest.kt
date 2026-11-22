@@ -57,7 +57,7 @@ class FireflyTransactionServiceTest {
     }
 
     @Test
-    fun testProcessFireflyTransactionUpdates() {
+    fun testProcessFireflyCreatesAndTransfers() {
         runBlocking {
             // Setup
             val createTransaction = FireflyFixtures.getTransaction()
@@ -71,16 +71,9 @@ class FireflyTransactionServiceTest {
             val transferTxSplit = transferTransaction.transactions.first()
             val transferUpdate = FireflyTransactionDto("transfer-update-id", transferTxSplit)
 
-            // Create a non-transfer update
-            val nonTransferTransaction = FireflyFixtures.getTransaction(type = TransactionTypeProperty.withdrawal)
-            val nonTransferTxSplit = nonTransferTransaction.transactions.first()
-            val nonTransferUpdate = FireflyTransactionDto("non-transfer-update-id", nonTransferTxSplit)
-
-            val updates = listOf(transferUpdate, nonTransferUpdate)
-            val deletes = listOf("1", "2")
-
-            // Execute
-            fireflyTransactionService.processFireflyTransactionUpdates(creates, updates, deletes, listOf(originalTransferLeg()))
+            fireflyTransactionService.processFireflyCreatesAndTransfers(
+                creates, listOf(transferUpdate), listOf(originalTransferLeg())
+            )
 
             // Verify
             verify(syncHelper).optimisticInsertBatchIntoFirefly(eq(creates))
@@ -93,16 +86,11 @@ class FireflyTransactionServiceTest {
                 verify(replacementJournal).complete("transfer-update-id")
             }
 
-            // Verify non-transfer update is handled with direct update
-            verify(syncHelper).updateBatchInFirefly(eq(listOf(nonTransferUpdate)))
-
-            // Verify deletes
-            verify(syncHelper).deleteBatchInFirefly(eq(deletes))
         }
     }
 
     @Test
-    fun testProcessFireflyTransactionUpdatesHandlesDeleteFailure() {
+    fun testProcessFireflyCreatesAndTransfersHandlesDeleteFailure() {
         runBlocking {
             // Setup a transfer update
             val transferTransaction = FireflyFixtures.getTransaction(
@@ -117,8 +105,8 @@ class FireflyTransactionServiceTest {
 
             // Execute
             assertFailsWith<IllegalStateException> {
-                fireflyTransactionService.processFireflyTransactionUpdates(
-                    emptyList(), listOf(transferUpdate), emptyList(), listOf(originalTransferLeg())
+                fireflyTransactionService.processFireflyCreatesAndTransfers(
+                    emptyList(), listOf(transferUpdate), listOf(originalTransferLeg())
                 )
             }
 
@@ -126,29 +114,6 @@ class FireflyTransactionServiceTest {
             verify(syncHelper).deleteBatchInFirefly(eq(listOf("transfer-update-id")))
             verify(syncHelper, never()).insertTransferReplacement(any())
             verify(replacementJournal, never()).complete(any())
-        }
-    }
-
-    @Test
-    fun testProcessFireflyNonTransferUpdates() {
-        runBlocking {
-            // Setup non-transfer updates
-            val nonTransferTransaction = FireflyFixtures.getTransaction(type = TransactionTypeProperty.withdrawal)
-            val nonTransferTxSplit = nonTransferTransaction.transactions.first()
-            val nonTransferUpdate = FireflyTransactionDto("non-transfer-update-id", nonTransferTxSplit)
-
-            // Execute
-            fireflyTransactionService.processFireflyTransactionUpdates(
-                emptyList(),
-                listOf(nonTransferUpdate),
-                emptyList(),
-                emptyList(),
-            )
-
-            // Verify that updateBatchInFirefly is called with the non-transfer update
-            verify(syncHelper).updateBatchInFirefly(eq(listOf(nonTransferUpdate)))
-            verify(syncHelper, never()).deleteBatchInFirefly(eq(listOf("non-transfer-update-id")))
-            verify(syncHelper, never()).insertTransferReplacement(any())
         }
     }
 

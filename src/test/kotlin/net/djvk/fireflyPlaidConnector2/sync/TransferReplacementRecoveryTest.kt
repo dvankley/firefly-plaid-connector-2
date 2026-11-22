@@ -194,13 +194,13 @@ internal class TransferReplacementRecoveryTest {
             it.getArgument<MutableMap<PlaidAccessToken, PlaidSyncCursor>>(1).putAll(nextCursors)
             PlaidTransactionResult(if (alreadyCommitted) emptyList() else added, emptyList(), emptyList())
         }
-        whenever(converter.convertPollSync(any(), any(), any(), any(), any())).thenAnswer {
+        whenever(converter.convertPollSync(any(), any(), any())).thenAnswer {
             assertEquals(if (alreadyCommitted || restoring) emptyList() else added, it.getArgument(1))
             TransactionConverter.ConvertPollSyncResult(
-                emptyList(), if (alreadyCommitted || restoring) emptyList() else listOf(update), emptyList(),
+                emptyList(), if (alreadyCommitted || restoring) emptyList() else listOf(update),
             )
         }
-        PolledSyncOrchestrator(30, helper, cursor, plaid, service, converter, journal)
+        PolledSyncOrchestrator(30, helper, cursor, plaid, service, converter, journal, PlaidCorrectionQueue(cursor, helper, converter))
             .processTransactions(emptyMap(), emptySequence(), cursorMap)
     }
 

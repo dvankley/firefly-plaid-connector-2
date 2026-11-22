@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.statement.bodyAsText
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
-import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequestOptions
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncResponse
@@ -91,7 +91,7 @@ class PlaidSyncService(
     ): PlaidTransactionResult {
         val plaidCreatedTxs = mutableListOf<PlaidTransaction>()
         val plaidUpdatedTxs = mutableListOf<PlaidTransaction>()
-        val plaidDeletedTxs = mutableListOf<PlaidTransactionId>()
+        val plaidDeletedTxs = mutableListOf<RemovedTransaction>()
         var backfillCount: Int? = null
 
         for ((accessToken, accountIds) in accountAccessTokenSequence) {
@@ -152,7 +152,7 @@ class PlaidSyncService(
             var cursor = startingCursor
             val added = mutableListOf<PlaidTransaction>()
             val modified = mutableListOf<PlaidTransaction>()
-            val removed = mutableListOf<PlaidTransactionId>()
+            val removed = mutableListOf<RemovedTransaction>()
 
             try {
                 do {
@@ -173,9 +173,7 @@ class PlaidSyncService(
                     } else {
                         page.added.filterTo(added) { it.accountId in accountIds }
                         page.modified.filterTo(modified) { it.accountId in accountIds }
-                        page.removed.mapNotNullTo(removed) { (transactionId, accountId) ->
-                            if (accountId in accountIds) transactionId else null
-                        }
+                        page.removed.filterTo(removed) { it.accountId in accountIds }
                     }
                 } while (page.hasMore)
             } catch (failure: ClientRequestException) {
@@ -215,5 +213,5 @@ class PlaidSyncService(
 data class PlaidTransactionResult(
     val created: List<PlaidTransaction>,
     val updated: List<PlaidTransaction>,
-    val deleted: List<PlaidTransactionId>
+    val deleted: List<RemovedTransaction>
 )
