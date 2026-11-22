@@ -79,3 +79,15 @@ tasks.withType<KotlinCompile> {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+if (providers.gradleProperty("smokeTestJar").isPresent) {
+    val profileConfigs = listOf("**/application-*.yml", "**/application-*.yaml", "**/application-*.properties")
+    tasks.processResources {
+        exclude(profileConfigs)
+    }
+    tasks.bootJar {
+        destinationDirectory.set(layout.buildDirectory.dir("smoke"))
+        archiveFileName.set("connector.jar")
+        exclude(profileConfigs)
+    }
+}

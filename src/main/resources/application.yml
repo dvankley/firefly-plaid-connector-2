@@ -2,8 +2,8 @@ fireflyPlaidConnector2:
   # "batch" or "polled"
   #   - "batch" runs once, attempting to sync all data up to maxSyncDays, and then exits
   #   - "polled" runs forever, syncing all new data every "syncFrequencyMinutes", storing
-  #     its current state in persistence/plaid_sync_cursors.txt. On first run, it will only pull
-  #     transactions that occurred after the run started.
+  #     its current state in persistence/plaid_sync_cursors.txt. By default the first run starts
+  #     tracking changes from its initial cursor, skipping history.
   syncMode: batch
   # PlaidTransaction.merchantName will always be used, if available, as the name of a transaction's
   #   destination (or source, for some transfers) account in Firefly.
@@ -22,6 +22,11 @@ fireflyPlaidConnector2:
   # Must be less than fireflyPlaidConnector2.polled.existingFireflyPullWindowDays.
   transferMatchWindowDays: 3
   polled:
+    # Optional ISO date (YYYY-MM-DD). For items without a saved cursor, the first poll imports
+    # transactions with a Plaid date strictly after this date and saves the cursor after the writes.
+#    initialBackfillAfter: 2026-01-01
+    # Optional inclusive end date for the initial backfill when initialBackfillAfter is set.
+#    initialBackfillThrough: 2026-01-05
     # How often to run the poll sync process
     syncFrequencyMinutes: 10
     # How many days in the past we should pull existing Firefly transactions for.
@@ -37,7 +42,9 @@ fireflyPlaidConnector2:
     # has failed to fetch from Plaid for any reason.
     allowItemToFail: false
   batch:
-    # The number of days in the past to pull data for.
+    # Optional inclusive batch end date (YYYY-MM-DD), defaulting to today.
+#    endDate: 2026-01-01
+    # The number of days to look back from the batch end date.
     maxSyncDays: 5
     # NOTE: Given that the balance endpoint is now $0.10 per call, this feature isn't really worth using anymore
     # and is no longer officially supported because it costs me money every time I want to QA a change to it.

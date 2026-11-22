@@ -378,6 +378,62 @@ profile (i.e. `dev`) to allow you to persist and iterate on your local configura
 I recommend setting up a local copy of Firefly for development purposes, especially one that you can easily backup
 and restore the database for to minimize your feedback loop on testing things.
 
+## End-to-end smoke test
+
+The smoke test requires a running Docker engine, Docker Compose v2+, and JDK 17+.
+Both modes start a fresh Firefly III and MySQL stack and remove the run's containers, volumes,
+and temporary configuration on exit.
+
+### Live Plaid smoke test
+
+Every live run requires `--profile=PATH`, `--batch-lookback-days=N`, and `--polled-lookback-days=N`.
+Both lookbacks count calendar days from today in the profile's time zone. The batch lookback sets
+the start date. The polled lookback sets the shared cutoff. Both values must be positive, and the
+batch lookback must be at least as large as the polled lookback. The smoke command passes the
+derived dates and batch window to the connector as Spring Boot arguments. The connector's
+`batch.maxSyncDays` is the difference between the two lookbacks because it counts back from the cutoff.
+
+```sh
+./gradlew -PsmokeTestJar bootRun --args='smoke-test --live --profile=/path/to/application-dev.yml --batch-lookback-days=14 --polled-lookback-days=4'
+```
+
+This example batches transactions from 14 days ago through 4 days ago, inclusive. The poll
+imports newer dates through today. The smoke build excludes local profiles from its classpath
+and JAR.
+
+Live mode uses the profile's `plaid` credentials and `accounts` mappings. The Plaid URL defaults to
+Production when omitted. The command creates one fresh USD asset account per mapping and uses the
+temporary Firefly URL and token. It runs batch mode twice with initial balance lookups disabled.
+The first run must import at least one transaction. The second run checks that the original rows
+are intact and that every Plaid external ID is unique. If the source gains transactions during the
+test, the command reports the new rows by count.
+
+The command then runs one poll from an empty cursor against the same Firefly stack. The poll reads
+Plaid's initial history and imports transactions dated after the batch cutoff through today. It
+checks the saved cursor for each Plaid item and the uniqueness of Firefly external IDs. If Plaid has
+no nonzero transactions in the polled window, the write check is inconclusive. When Plaid returns
+eligible transactions, the poll must add or update at least one Firefly row. The cursor directory
+is temporary.
+
+The command prints counts and error summaries for live runs. It discards the temporary credentials,
+connector output, and Firefly database on exit.
+
+### Mocked Plaid smoke test
+
+```sh
+./gradlew -PsmokeTestJar bootRun --args='smoke-test'
+```
+
+The command seeds two USD asset accounts and uses a local Plaid HTTP stub with synthetic transactions.
+It verifies a paginated batch import, a duplicate-free rerun, transfer matching, category tagging,
+and a paginated polled delta with creates, updates, and deletes across connector restarts. It reads
+the results back through Firefly's API. On failure, it prints the failed check and recent logs.
+
+GitHub Actions runs this mode on pull requests from a JAR built with `./gradlew -PsmokeTestJar bootJar`.
+You can run that JAR locally with `java -jar build/smoke/connector.jar smoke-test`. The mocked run
+requires no Plaid credentials. The first run downloads the Docker images and any missing Gradle
+dependencies.
+
 # FAQ
 * Why did you make a new program rather than contributing to [firefly-plaid-connector](https://gitlab.com/GeorgeHahn/firefly-plaid-connector/)?
   * I initially tried firefly-plaid-connector, but I had a few issues with it, and it didn't fully support Plaid categories.

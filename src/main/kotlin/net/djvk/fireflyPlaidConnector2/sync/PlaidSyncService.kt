@@ -8,8 +8,12 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequestO
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncResponse
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.stereotype.Component
+import java.time.LocalDate
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
+
+internal const val INITIAL_BACKFILL_COUNT_MESSAGE = "Initial polled backfill eligible transactions"
 
 /**
  * Service for handling Plaid transaction synchronization.
@@ -23,6 +27,14 @@ class PlaidSyncService(
 
     @Value("\${fireflyPlaidConnector2.polled.allowItemToFail:false}")
     private val allowItemToFail: Boolean,
+
+    @Value("\${fireflyPlaidConnector2.polled.initialBackfillAfter:}")
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private val initialBackfillAfter: LocalDate? = null,
+
+    @Value("\${fireflyPlaidConnector2.polled.initialBackfillThrough:}")
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private val initialBackfillThrough: LocalDate? = null,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
@@ -82,6 +94,7 @@ class PlaidSyncService(
         val plaidCreatedTxs = mutableListOf<PlaidTransaction>()
         val plaidUpdatedTxs = mutableListOf<PlaidTransaction>()
         val plaidDeletedTxs = mutableListOf<PlaidTransactionId>()
+        var backfillCount: Int? = null
 
         accessTokenLoop@ for ((accessToken, accountIds) in accountAccessTokenSequence) {
             logger.debug(
@@ -89,6 +102,10 @@ class PlaidSyncService(
                         " and account ids ${accountIds.joinToString("; ")}"
             )
             val accountIdSet = accountIds.toSet()
+            var cursor = cursorMap[accessToken]
+            val cutoff = initialBackfillAfter.takeIf { cursor.isNullOrBlank() }
+            val backfill = cutoff?.let { mutableListOf<PlaidTransaction>() }
+            if (backfill != null && backfillCount == null) backfillCount = 0
 
             // Plaid transaction batch loop
             do {
@@ -96,46 +113,63 @@ class PlaidSyncService(
                 // In sync mode we fetch and retain all Plaid transactions that have changed since the last poll.
                 val response = executeTransactionSyncRequest(
                     accessToken,
-                    cursorMap[accessToken],
+                    cursor,
                     plaidBatchSize
                 ) ?: continue@accessTokenLoop
 
-                cursorMap[accessToken] = response.nextCursor
+                cursor = response.nextCursor
                 logger.debug(
                     "Received batch of sync updates for access token $accessToken: " +
                             "${response.added.size} created; ${response.modified.size} updated; " +
                             "${response.removed.size} deleted; next cursor ${response.nextCursor}"
                 )
 
-                // The transaction sync endpoint doesn't take accountId as a parameter, so do that filtering here
-                val added = response.added.filter { accountIdSet.contains(it.accountId) }
-                val modified = response.modified.filter { accountIdSet.contains(it.accountId) }
-                val removed = response.removed.filter { accountIdSet.contains(it.accountId) }
-                plaidCreatedTxs.addAll(added)
-                plaidUpdatedTxs.addAll(modified)
-                plaidDeletedTxs.addAll(removed.mapNotNull { it.transactionId })
-                added.forEach {
-                    logger.debug(
-                        "Adding transaction: (id={}; account={}; desc={}; merchant={}; date={}; amount={}; pending={}; pendingId={})",
-                        it.transactionId, it.accountId, it.originalDescription, it.merchantName, it.date, it.amount,
-                        it.pending, it.pendingTransactionId
-                    )
-                }
-                modified.forEach {
-                    logger.debug(
-                        "Modifying transaction: (id={}; account={}; desc={}; merchant={}; date={}; amount={}; pending={}; pendingId={})",
-                        it.transactionId, it.accountId, it.originalDescription, it.merchantName, it.date, it.amount,
-                        it.pending, it.pendingTransactionId
-                    )
-                }
-                removed.forEach {
-                    logger.debug("Removing transaction: (id={}; account={})", it.transactionId, it.accountId)
+                if (cutoff != null && backfill != null) {
+                    // Plaid returns an initial snapshot as adds. Retain recent rows for mapped accounts.
+                    response.added.filterTo(backfill) {
+                        it.accountId in accountIdSet && it.date.isAfter(cutoff) &&
+                            (initialBackfillThrough == null || it.date <= initialBackfillThrough)
+                    }
+                } else {
+                    cursorMap[accessToken] = response.nextCursor
+                    // The transaction sync endpoint doesn't take accountId as a parameter, so do that filtering here.
+                    val added = response.added.filter { it.accountId in accountIdSet }
+                    val modified = response.modified.filter { it.accountId in accountIdSet }
+                    val removed = response.removed.filter { it.accountId in accountIdSet }
+                    plaidCreatedTxs.addAll(added)
+                    plaidUpdatedTxs.addAll(modified)
+                    plaidDeletedTxs.addAll(removed.mapNotNull { it.transactionId })
+                    added.forEach {
+                        logger.debug(
+                            "Adding transaction: (id={}; account={}; desc={}; merchant={}; date={}; amount={}; pending={}; pendingId={})",
+                            it.transactionId, it.accountId, it.originalDescription, it.merchantName, it.date, it.amount,
+                            it.pending, it.pendingTransactionId
+                        )
+                    }
+                    modified.forEach {
+                        logger.debug(
+                            "Modifying transaction: (id={}; account={}; desc={}; merchant={}; date={}; amount={}; pending={}; pendingId={})",
+                            it.transactionId, it.accountId, it.originalDescription, it.merchantName, it.date, it.amount,
+                            it.pending, it.pendingTransactionId
+                        )
+                    }
+                    removed.forEach {
+                        logger.debug("Removing transaction: (id={}; account={})", it.transactionId, it.accountId)
+                    }
                 }
 
                 // Keep going until we get all the transactions
             } while (response.hasMore)
+
+            if (backfill != null && !cursor.isNullOrBlank()) {
+                // Commit the complete item's history and cursor together after all pages arrive.
+                cursorMap[accessToken] = cursor
+                plaidCreatedTxs.addAll(backfill)
+                backfillCount = (backfillCount ?: 0) + backfill.count { it.amount != 0.0 }
+            }
         }
 
+        backfillCount?.let { logger.info("$INITIAL_BACKFILL_COUNT_MESSAGE: {}", it) }
         return PlaidTransactionResult(
             plaidCreatedTxs,
             plaidUpdatedTxs,
@@ -150,6 +184,8 @@ class PlaidSyncService(
         accountAccessTokenSequence: Sequence<Pair<PlaidAccessToken, List<PlaidAccountId>>>,
         cursorMap: MutableMap<PlaidAccessToken, PlaidSyncCursor>
     ) {
+        // Let the first poll process the selected history before saving cursors for fresh items.
+        if (initialBackfillAfter != null) return
         logger.debug("Beginning Plaid sync endpoint cursor initialization")
         cursorCatchupLoop@ for ((accessToken, _) in accountAccessTokenSequence) {
             // If we already have a cursor for this access token, then move on

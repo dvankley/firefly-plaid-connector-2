@@ -15,6 +15,7 @@ import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.stereotype.Component
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -46,14 +47,18 @@ class BatchSyncRunner(
 
     private val converter: TransactionConverter,
 
+    @Value("\${fireflyPlaidConnector2.batch.endDate:}")
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    private val batchEndDate: LocalDate? = null,
+
     ) : Runner {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     override fun run() {
         val allPlaidTxs = mutableMapOf<PlaidAccessToken, MutableList<Transaction>>()
 
-        val startDate = LocalDate.now().minusDays(syncDays.toLong())
-        val endDate = LocalDate.now()
+        val endDate = batchEndDate ?: LocalDate.now()
+        val startDate = endDate.minusDays(syncDays.toLong())
 
         runBlocking {
             syncHelper.setApiCreds()

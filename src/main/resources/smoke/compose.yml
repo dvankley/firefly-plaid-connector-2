@@ -1,0 +1,38 @@
+services:
+  db:
+    image: mysql:8.0.46
+    environment:
+      MYSQL_DATABASE: smoke
+      MYSQL_USER: smoke
+      MYSQL_PASSWORD: ${SMOKE_DB_PASSWORD:?}
+      MYSQL_ROOT_PASSWORD: ${SMOKE_DB_ROOT_PASSWORD:?}
+    healthcheck:
+      test: [CMD-SHELL, 'mysql --protocol=tcp -h 127.0.0.1 -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE" -e "SELECT 1"']
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    volumes:
+      - database:/var/lib/mysql
+
+  firefly:
+    image: fireflyiii/core:version-6.7.9
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      APP_KEY: ${SMOKE_APP_KEY:?}
+      TZ: UTC
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: '3306'
+      DB_DATABASE: smoke
+      DB_USERNAME: smoke
+      DB_PASSWORD: ${SMOKE_DB_PASSWORD:?}
+      MAIL_MAILER: log
+      SEND_ERROR_MESSAGE: 'false'
+    ports:
+      - '127.0.0.1::8080'
+
+volumes:
+  database:

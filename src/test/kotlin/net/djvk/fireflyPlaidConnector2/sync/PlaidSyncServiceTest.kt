@@ -1,26 +1,70 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Test
-import org.mockito.kotlin.spy
-import org.mockito.kotlin.whenever
-import org.mockito.kotlin.doReturn
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
-import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncResponse
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequestOptions
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncResponse
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsUpdateStatus
+import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
+import net.djvk.fireflyPlaidConnector2.lib.PlaidMock
+import net.djvk.fireflyPlaidConnector2.lib.createPlaidResponse
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.spy
+import org.mockito.kotlin.verifyNoInteractions
+import org.mockito.kotlin.whenever
+import java.time.LocalDate
 import java.util.stream.Stream
 
 /**
  * Tests for the PlaidSyncService class.
  */
 class PlaidSyncServiceTest {
+    @Test
+    fun `initial backfill respects both date boundaries while saved cursors still get incremental updates`() = runBlocking {
+        val cutoff = LocalDate.of(2025, 1, 10)
+        val through = cutoff.plusDays(4)
+        val plaid = PlaidMock()
+        val service = PlaidSyncService(plaid.wrapper, 100, false, initialBackfillAfter = cutoff, initialBackfillThrough = through)
+        val accounts = sequenceOf("fresh-item" to listOf("mapped"), "saved-item" to listOf("mapped"))
+        val cursors = mutableMapOf("saved-item" to "saved-cursor")
+
+        service.initializeCursors(accounts, cursors)
+        verifyNoInteractions(plaid.api)
+
+        val boundary = PlaidFixtures.getPaymentTransaction(accountId = "mapped", transactionId = "boundary", date = cutoff)
+        val recent = boundary.copy(transactionId = "recent", date = cutoff.plusDays(1))
+        val lastDay = recent.copy(transactionId = "last-day", date = through)
+        val future = recent.copy(transactionId = "future", date = through.plusDays(1))
+        val oldUpdate = boundary.copy(transactionId = "old-update", date = cutoff.minusDays(1))
+        fun response(nextCursor: String, added: List<Transaction>, modified: List<Transaction> = emptyList(), more: Boolean = false) =
+            createPlaidResponse(TransactionsSyncResponse(
+                transactionsUpdateStatus = TransactionsUpdateStatus.HISTORICAL_UPDATE_COMPLETE,
+                accounts = emptyList(), added = added, modified = modified, removed = emptyList(),
+                nextCursor = nextCursor, hasMore = more, requestId = "request",
+            ))
+
+        val firstPage = response("page-two", listOf(boundary, recent), more = true)
+        val secondPage = response("final-cursor", listOf(lastDay, future, recent.copy(accountId = "unmapped")))
+        val savedPage = response("next-saved-cursor", emptyList(), modified = listOf(oldUpdate))
+        whenever(plaid.api.transactionsSync(service.getTransactionSyncRequest("fresh-item", null))).thenReturn(firstPage)
+        whenever(plaid.api.transactionsSync(service.getTransactionSyncRequest("fresh-item", "page-two"))).thenReturn(secondPage)
+        whenever(plaid.api.transactionsSync(service.getTransactionSyncRequest("saved-item", "saved-cursor"))).thenReturn(savedPage)
+
+        val result = service.processPlaidTransactions(accounts, cursors)
+
+        assertEquals(listOf(recent, lastDay), result.created)
+        assertEquals(listOf(oldUpdate), result.updated)
+        assertEquals(mapOf("fresh-item" to "final-cursor", "saved-item" to "next-saved-cursor"), cursors)
+    }
 
     @Test
     fun removedTransactionsAreFilteredByConfiguredAccountAcrossPages() = runBlocking {
