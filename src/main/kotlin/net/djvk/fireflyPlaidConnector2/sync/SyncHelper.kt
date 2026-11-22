@@ -1,9 +1,9 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
 import io.ktor.client.call.*
-import io.ktor.client.network.sockets.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
+import net.djvk.fireflyPlaidConnector2.api.firefly.FireflyApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AboutApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.AccountsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
@@ -31,6 +31,7 @@ class SyncHelper(
     private val fireflyAboutApi: AboutApi,
     private val fireflyTxApi: TransactionsApi,
     private val fireflyAccountsApi: AccountsApi,
+    private val fireflyApiWrapper: FireflyApiWrapper,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
@@ -44,7 +45,9 @@ class SyncHelper(
     }
 
     protected suspend fun validateFireflyApiVersion() {
-        val fireflyVersion = fireflyAboutApi.getAbout().body().data.version
+        val fireflyVersion = fireflyApiWrapper.executeRequest("get Firefly system info") {
+            fireflyAboutApi.getAbout()
+        }.body().data.version
         if (!VersionComparison.isVersionSufficient(MINIMUM_FIREFLY_VERSION, fireflyVersion)) {
             throw RuntimeException("This version of the connector requires at least version $MINIMUM_FIREFLY_VERSION " +
                 "of Firefly; version $fireflyVersion found")
@@ -90,8 +93,6 @@ class SyncHelper(
                 } else {
                     throw cre
                 }
-            } catch (e: ConnectTimeoutException) {
-                logger.error("Timeout inserting firefly tx; skipping for now: $fireflyTx", e)
             }
         }
     }
@@ -122,16 +123,18 @@ class SyncHelper(
             logger.info("Skipped transaction ${fireflyTx.tx.externalId} with amount 0.0")
             return
         }
-        fireflyTxApi.storeTransaction(fireflyTx.toTransactionStore())
+        fireflyApiWrapper.executeRequest("insert transaction ${fireflyTx.tx.externalId}") {
+            fireflyTxApi.storeTransaction(fireflyTx.toTransactionStore())
+        }
     }
 
     suspend fun updateBatchInFirefly(fireflyTxs: List<FireflyTransactionDto>) {
         for (fireflyTx in fireflyTxs) {
-            fireflyTxApi.updateTransaction(
-                fireflyTx.id
-                    ?: throw IllegalArgumentException("Can't update Firefly transaction without id: $fireflyTx"),
-                fireflyTx.toTransactionUpdate(),
-            )
+            val id = fireflyTx.id
+                ?: throw IllegalArgumentException("Can't update Firefly transaction without id: $fireflyTx")
+            fireflyApiWrapper.executeRequest("update transaction $id") {
+                fireflyTxApi.updateTransaction(id, fireflyTx.toTransactionUpdate())
+            }
         }
     }
 
@@ -140,7 +143,27 @@ class SyncHelper(
             logger.debug("Delete batch of ${fireflyTxIds.size} txs in Firefly")
         }
         for (fireflyTxId in fireflyTxIds) {
-            fireflyTxApi.deleteTransaction(fireflyTxId)
+            try {
+                fireflyApiWrapper.executeRequest("delete transaction $fireflyTxId") {
+                    fireflyTxApi.deleteTransaction(fireflyTxId)
+                }
+            } catch (cre: ClientRequestException) {
+                if (cre.response.status == HttpStatusCode.NotFound) {
+                    /**
+                     * A delete can succeed on the server but still throw here if the response never made
+                     *  it back (e.g. a connection drop right after Firefly processed it), triggering a
+                     *  retry against an already-deleted transaction, which Firefly reports as not found.
+                     * A delete's desired end state is "the transaction doesn't exist", so a 404 here means
+                     *  that goal is already met; treat it as success rather than a failure.
+                     */
+                    logger.info(
+                        "Transaction $fireflyTxId not found while deleting; treating as already deleted, " +
+                                "possibly due to a retried request whose earlier success wasn't acknowledged"
+                    )
+                } else {
+                    throw cre
+                }
+            }
         }
     }
 }

@@ -25,6 +25,7 @@ import io.ktor.client.*
 import io.ktor.client.engine.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.infrastructure.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.*
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 
@@ -33,6 +34,7 @@ open class AccountsApi(
     @Value("\${fireflyPlaidConnector2.firefly.url}")
     baseUrl: String = ApiClient.BASE_URL,
     httpClientEngine: HttpClientEngine? = null,
+    @Qualifier("fireflyClientConfig")
     httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,
     jsonBlock: ObjectMapper.() -> Unit = ApiClient.JSON_DEFAULT,
 ) : ApiClient(baseUrl, httpClientEngine, httpClientConfig, jsonBlock) {

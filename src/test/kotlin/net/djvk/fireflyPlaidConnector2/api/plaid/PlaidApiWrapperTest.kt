@@ -6,6 +6,7 @@ import io.ktor.http.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.ApiConfiguration
+import net.djvk.fireflyPlaidConnector2.api.RetryProperties
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -61,10 +62,15 @@ internal class PlaidApiWrapperTest {
             .getResource("plaid/response-balance.json")!!
             .readText(Charsets.UTF_8)
 
-        fun mockPlaid(engine: MockEngine): PlaidApiWrapper {
+        fun mockPlaid(
+            engine: MockEngine,
+            retryProperties: RetryProperties = RetryProperties(maxAttempts = 1, initialDelayMs = 0),
+            legacyMaxRetries: Int? = null,
+        ): PlaidApiWrapper {
             return PlaidApiWrapper(
                 baseUrl = testBaseUrl,
-                maxRetries = 1,
+                plaidRetryProperties = retryProperties,
+                legacyMaxRetries = legacyMaxRetries,
                 plaidClientId = testClientId,
                 plaidSecret = testSecret,
                 httpClientEngine = engine,
@@ -329,6 +335,103 @@ internal class PlaidApiWrapperTest {
             val body = response.body()
             assertEquals(2, body.accounts.size, "number of accounts")
             assertNotNull(body.item, "item")
+        }
+    }
+
+    @Test
+    fun plaidRetriesOn5xxThenSucceeds() {
+        runBlocking {
+            var callCount = 0
+            val plaid = mockPlaid(
+                MockEngine { request ->
+                    callCount++
+                    if (callCount < 3) {
+                        respond(content = "", status = HttpStatusCode.InternalServerError)
+                    } else {
+                        respond(
+                            content = ByteReadChannel(getTransactionsResponseStr),
+                            status = HttpStatusCode.OK,
+                            headers = headersOf(HttpHeaders.ContentType, "application/json")
+                        )
+                    }
+                },
+                retryProperties = RetryProperties(maxAttempts = 3, initialDelayMs = 0),
+            )
+
+            val response = plaid.executeRequest(
+                { plaidApi -> plaidApi.transactionsGet(getTransactionsRequest) },
+                "transaction get request"
+            )
+            assertEquals(HttpStatusCode.OK, response.response.status)
+            assertEquals(3, callCount, "number of attempts")
+        }
+    }
+
+    @Test
+    fun plaidExhaustedRetriesRethrowsOriginalException() {
+        runBlocking {
+            var callCount = 0
+            val plaid = mockPlaid(
+                MockEngine { request ->
+                    callCount++
+                    respond(content = "", status = HttpStatusCode.InternalServerError)
+                },
+                retryProperties = RetryProperties(maxAttempts = 2, initialDelayMs = 0),
+            )
+
+            assertFailsWith<ServerResponseException> {
+                plaid.executeRequest(
+                    { plaidApi -> plaidApi.transactionsGet(getTransactionsRequest) },
+                    "transaction get request"
+                )
+            }
+            assertEquals(2, callCount, "number of attempts")
+        }
+    }
+
+    @Test
+    fun plaidMaxAttemptsWinsOverLegacyMaxRetries() {
+        runBlocking {
+            var callCount = 0
+            val plaid = mockPlaid(
+                MockEngine { request ->
+                    callCount++
+                    respond(content = "", status = HttpStatusCode.InternalServerError)
+                },
+                retryProperties = RetryProperties(maxAttempts = 2, initialDelayMs = 0),
+                legacyMaxRetries = 10,
+            )
+
+            assertFailsWith<ServerResponseException> {
+                plaid.executeRequest(
+                    { plaidApi -> plaidApi.transactionsGet(getTransactionsRequest) },
+                    "transaction get request"
+                )
+            }
+            assertEquals(2, callCount, "explicit maxAttempts should win over legacy maxRetries")
+        }
+    }
+
+    @Test
+    fun plaidLegacyMaxRetriesInfersMaxAttemptsPlusOne() {
+        runBlocking {
+            var callCount = 0
+            val plaid = mockPlaid(
+                MockEngine { request ->
+                    callCount++
+                    respond(content = "", status = HttpStatusCode.InternalServerError)
+                },
+                retryProperties = RetryProperties(maxAttempts = null, initialDelayMs = 0),
+                legacyMaxRetries = 2,
+            )
+
+            assertFailsWith<ServerResponseException> {
+                plaid.executeRequest(
+                    { plaidApi -> plaidApi.transactionsGet(getTransactionsRequest) },
+                    "transaction get request"
+                )
+            }
+            assertEquals(3, callCount, "maxAttempts should be inferred as maxRetries + 1")
         }
     }
 }

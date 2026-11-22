@@ -30,6 +30,7 @@ internal class BatchSyncRunnerTest {
                 fireflyAboutApi = firefly.aboutApi,
                 fireflyTxApi = firefly.transactionsApi,
                 fireflyAccountsApi = firefly.accountsApi,
+                fireflyApiWrapper = firefly.wrapper,
             )
             val defaultTransactionConverter = TransactionConverter(
                 useNameForDestination = false,

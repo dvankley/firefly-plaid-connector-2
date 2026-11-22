@@ -27,6 +27,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.infrastructure.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.CronResult
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.SystemInfo
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.UserSingle
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 
@@ -35,6 +36,7 @@ open class AboutApi(
     @Value("\${fireflyPlaidConnector2.firefly.url}")
     baseUrl: String = ApiClient.BASE_URL,
     httpClientEngine: HttpClientEngine? = null,
+    @Qualifier("fireflyClientConfig")
     httpClientConfig: ((HttpClientConfig<*>) -> Unit)? = null,
     jsonBlock: ObjectMapper.() -> Unit = ApiClient.JSON_DEFAULT,
 ) : ApiClient(baseUrl, httpClientEngine, httpClientConfig, jsonBlock) {
