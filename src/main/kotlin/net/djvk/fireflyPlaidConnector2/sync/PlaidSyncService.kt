@@ -1,6 +1,9 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
-import io.ktor.client.plugins.*
+import com.fasterxml.jackson.core.JsonProcessingException
+import com.fasterxml.jackson.databind.ObjectMapper
+import io.ktor.client.plugins.ClientRequestException
+import io.ktor.client.statement.bodyAsText
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
@@ -14,6 +17,8 @@ import java.time.LocalDate
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 
 internal const val INITIAL_BACKFILL_COUNT_MESSAGE = "Initial polled backfill eligible transactions"
+private const val PAGINATION_MUTATION = "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
+private const val MAX_PAGINATION_RESTARTS = 2
 
 /**
  * Service for handling Plaid transaction synchronization.
@@ -37,6 +42,7 @@ class PlaidSyncService(
     private val initialBackfillThrough: LocalDate? = null,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
+    private val errorJson = ObjectMapper()
 
     /**
      * Creates a transaction sync request for Plaid API.
@@ -61,26 +67,17 @@ class PlaidSyncService(
 
     /**
      * Executes a transaction sync request to Plaid API.
-     * Returns null if the request fails and allowItemToFail is true.
      */
     suspend fun executeTransactionSyncRequest(
         accessToken: PlaidAccessToken,
         cursor: PlaidSyncCursor?,
         batchSize: Int = plaidBatchSize
-    ): TransactionsSyncResponse? {
+    ): TransactionsSyncResponse {
         val request = getTransactionSyncRequest(accessToken, cursor, batchSize)
-        try {
-            return plaidApiWrapper.executeRequest(
-                { plaidApi -> plaidApi.transactionsSync(request) },
-                "transaction sync request"
-            ).body()
-        } catch (cre: ClientRequestException) {
-            logger.error("Error requesting Plaid transactions. Request: $request; ")
-            if (allowItemToFail) {
-                logger.warn("Plaid item query failed with allowItemToFail enabled")
-                return null
-            } else throw cre
-        }
+        return plaidApiWrapper.executeRequest(
+            { plaidApi -> plaidApi.transactionsSync(request) },
+            "transaction sync request"
+        ).body()
     }
 
     /**
@@ -97,90 +94,31 @@ class PlaidSyncService(
         val plaidDeletedTxs = mutableListOf<PlaidTransactionId>()
         var backfillCount: Int? = null
 
-        accessTokenLoop@ for ((accessToken, accountIds) in accountAccessTokenSequence) {
-            logger.debug(
-                "Querying Plaid transaction sync endpoint for access token $accessToken " +
-                        " and account ids ${accountIds.joinToString("; ")}"
-            )
-            val accountIdSet = accountIds.toSet()
-            var cursor = cursorMap[accessToken]
-            val cutoff = initialBackfillAfter.takeIf { cursor.isNullOrBlank() }
-            val backfill = cutoff?.let { mutableListOf<PlaidTransaction>() }
-            if (backfill != null && backfillCount == null) backfillCount = 0
+        for ((accessToken, accountIds) in accountAccessTokenSequence) {
+            val startingCursor = cursorMap[accessToken]?.takeUnless { it.isBlank() }
+            val cutoff = initialBackfillAfter.takeIf { startingCursor == null }
+            if (cutoff != null && backfillCount == null) backfillCount = 0
+            // A failed or not-yet-ready initialization can leave the item cursorless on later polls.
+            val skipHistory = startingCursor == null && cutoff == null
+            val update = fetchItemUpdate(
+                accessToken,
+                startingCursor,
+                accountIds = if (skipHistory) null else accountIds.toSet(),
+                backfillAfter = cutoff,
+                requireComplete = requireComplete,
+            ) ?: continue
 
-            // Plaid transaction batch loop
-            do {
-                // Iterate through batches of Plaid transactions
-                // In sync mode we fetch and retain all Plaid transactions that have changed since the last poll.
-                val response = executeTransactionSyncRequest(
-                    accessToken,
-                    cursor,
-                    plaidBatchSize
-                ) ?: if (requireComplete) {
-                    // Clearing a recovered replacement requires replay to reach the item's next cursor.
-                    error("Plaid replay is incomplete while transfer replacements are pending")
-                } else {
-                    continue@accessTokenLoop
-                }
-
-                cursor = response.nextCursor
-                logger.debug(
-                    "Received batch of sync updates for access token $accessToken: " +
-                            "${response.added.size} created; ${response.modified.size} updated; " +
-                            "${response.removed.size} deleted; next cursor ${response.nextCursor}"
-                )
-
-                if (cutoff != null && backfill != null) {
-                    // Plaid returns an initial snapshot as adds. Retain recent rows for mapped accounts.
-                    response.added.filterTo(backfill) {
-                        it.accountId in accountIdSet && it.date.isAfter(cutoff) &&
-                            (initialBackfillThrough == null || it.date <= initialBackfillThrough)
-                    }
-                } else {
-                    cursorMap[accessToken] = response.nextCursor
-                    // The transaction sync endpoint doesn't take accountId as a parameter, so do that filtering here.
-                    val added = response.added.filter { it.accountId in accountIdSet }
-                    val modified = response.modified.filter { it.accountId in accountIdSet }
-                    val removed = response.removed.filter { it.accountId in accountIdSet }
-                    plaidCreatedTxs.addAll(added)
-                    plaidUpdatedTxs.addAll(modified)
-                    plaidDeletedTxs.addAll(removed.mapNotNull { it.transactionId })
-                    added.forEach {
-                        logger.debug(
-                            "Adding transaction: (id={}; account={}; desc={}; merchant={}; date={}; amount={}; pending={}; pendingId={})",
-                            it.transactionId, it.accountId, it.originalDescription, it.merchantName, it.date, it.amount,
-                            it.pending, it.pendingTransactionId
-                        )
-                    }
-                    modified.forEach {
-                        logger.debug(
-                            "Modifying transaction: (id={}; account={}; desc={}; merchant={}; date={}; amount={}; pending={}; pendingId={})",
-                            it.transactionId, it.accountId, it.originalDescription, it.merchantName, it.date, it.amount,
-                            it.pending, it.pendingTransactionId
-                        )
-                    }
-                    removed.forEach {
-                        logger.debug("Removing transaction: (id={}; account={})", it.transactionId, it.accountId)
-                    }
-                }
-
-                // Keep going until we get all the transactions
-            } while (response.hasMore)
-
-            if (backfill != null && !cursor.isNullOrBlank()) {
-                // Commit the complete item's history and cursor together after all pages arrive.
-                cursorMap[accessToken] = cursor
-                plaidCreatedTxs.addAll(backfill)
-                backfillCount = (backfillCount ?: 0) + backfill.count { it.amount != 0.0 }
+            cursorMap[accessToken] = update.cursor
+            plaidCreatedTxs.addAll(update.transactions.created)
+            plaidUpdatedTxs.addAll(update.transactions.updated)
+            plaidDeletedTxs.addAll(update.transactions.deleted)
+            if (cutoff != null) {
+                backfillCount = (backfillCount ?: 0) + update.transactions.created.count { it.amount != 0.0 }
             }
         }
 
         backfillCount?.let { logger.info("$INITIAL_BACKFILL_COUNT_MESSAGE: {}", it) }
-        return PlaidTransactionResult(
-            plaidCreatedTxs,
-            plaidUpdatedTxs,
-            plaidDeletedTxs
-        )
+        return PlaidTransactionResult(plaidCreatedTxs, plaidUpdatedTxs, plaidDeletedTxs)
     }
 
     /**
@@ -190,30 +128,83 @@ class PlaidSyncService(
         accountAccessTokenSequence: Sequence<Pair<PlaidAccessToken, List<PlaidAccountId>>>,
         cursorMap: MutableMap<PlaidAccessToken, PlaidSyncCursor>
     ) {
-        // Let the first poll process the selected history before saving cursors for fresh items.
+        // Let the first poll process the selected history for fresh items.
         if (initialBackfillAfter != null) return
         logger.debug("Beginning Plaid sync endpoint cursor initialization")
-        cursorCatchupLoop@ for ((accessToken, _) in accountAccessTokenSequence) {
-            // If we already have a cursor for this access token, then move on
-            if (cursorMap.contains(accessToken)) {
-                logger.debug("Cursor map contains $accessToken, skipping initialization for it")
-                continue
+        for ((accessToken, _) in accountAccessTokenSequence) {
+            if (!cursorMap[accessToken].isNullOrBlank()) continue
+            val update = fetchItemUpdate(accessToken, startingCursor = null) ?: continue
+            cursorMap[accessToken] = update.cursor
+        }
+    }
+
+    private data class ItemUpdate(val cursor: PlaidSyncCursor, val transactions: PlaidTransactionResult)
+
+    private suspend fun fetchItemUpdate(
+        accessToken: PlaidAccessToken,
+        startingCursor: PlaidSyncCursor?,
+        accountIds: Set<PlaidAccountId>? = null,
+        backfillAfter: LocalDate? = null,
+        requireComplete: Boolean = false,
+    ): ItemUpdate? {
+        var restarts = 0
+        while (true) {
+            var cursor = startingCursor
+            val added = mutableListOf<PlaidTransaction>()
+            val modified = mutableListOf<PlaidTransaction>()
+            val removed = mutableListOf<PlaidTransactionId>()
+
+            try {
+                do {
+                    val page = executeTransactionSyncRequest(accessToken, cursor)
+                    cursor = page.nextCursor
+                    logger.debug(
+                        "Received Plaid sync page with {} adds, {} modifications and {} removals",
+                        page.added.size, page.modified.size, page.removed.size,
+                    )
+                    if (accountIds == null) continue
+
+                    if (backfillAfter != null) {
+                        // The initial snapshot contains adds. Apply the configured date range.
+                        page.added.filterTo(added) {
+                            it.accountId in accountIds && it.date.isAfter(backfillAfter) &&
+                                (initialBackfillThrough == null || it.date <= initialBackfillThrough)
+                        }
+                    } else {
+                        page.added.filterTo(added) { it.accountId in accountIds }
+                        page.modified.filterTo(modified) { it.accountId in accountIds }
+                        page.removed.mapNotNullTo(removed) { (transactionId, accountId) ->
+                            if (accountId in accountIds) transactionId else null
+                        }
+                    }
+                } while (page.hasMore)
+            } catch (failure: ClientRequestException) {
+                if (restarts < MAX_PAGINATION_RESTARTS && isPaginationMutation(failure)) {
+                    restarts++
+                    logger.warn(
+                        "Plaid transactions changed during pagination. Restarting item update ({}/{})",
+                        restarts, MAX_PAGINATION_RESTARTS,
+                    )
+                    continue
+                }
+                if (!allowItemToFail) throw failure
+                if (requireComplete) {
+                    throw IllegalStateException("Plaid replay is incomplete while transfer replacements are pending", failure)
+                }
+                logger.warn("Plaid item query failed with allowItemToFail enabled (HTTP {})", failure.response.status)
+                return null
             }
 
-            // For access tokens that we don't have cursors for, iterate through historical data and ignore it
-            // to get current cursors
-            do {
-                val response =
-                    executeTransactionSyncRequest(accessToken, cursorMap[accessToken], plaidBatchSize)
-                        ?: continue@cursorCatchupLoop
-                logger.debug(
-                    "Received initial batch of sync updates for access token $accessToken. " +
-                            "Updating cursor map to next cursor: ${response.nextCursor}"
-                )
-                if (response.nextCursor.isNotBlank()) {
-                    cursorMap[accessToken] = response.nextCursor
-                }
-            } while (response.hasMore)
+            val finalCursor = cursor?.takeUnless { it.isBlank() } ?: return null
+            return ItemUpdate(finalCursor, PlaidTransactionResult(added, modified, removed))
+        }
+    }
+
+    private suspend fun isPaginationMutation(failure: ClientRequestException): Boolean {
+        return try {
+            errorJson.readTree(failure.response.bodyAsText())?.path("error_code")?.asText() == PAGINATION_MUTATION
+        } catch (_: JsonProcessingException) {
+            false
         }
     }
 }

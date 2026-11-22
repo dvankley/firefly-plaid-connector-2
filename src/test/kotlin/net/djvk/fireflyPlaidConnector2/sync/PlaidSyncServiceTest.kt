@@ -1,7 +1,16 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
+import io.ktor.client.plugins.ClientRequestException
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
+import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapperTest.Companion.mockPlaid
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
@@ -16,6 +25,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
+import org.junit.jupiter.params.provider.NullSource
+import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.spy
@@ -29,6 +40,8 @@ import kotlin.test.assertFailsWith
  * Tests for the PlaidSyncService class.
  */
 class PlaidSyncServiceTest {
+    private val mapper = ObjectMapper()
+
     @Test
     fun `initial backfill respects both date boundaries while saved cursors still get incremental updates`() = runBlocking {
         val cutoff = LocalDate.of(2025, 1, 10)
@@ -95,20 +108,165 @@ class PlaidSyncServiceTest {
     }
 
     @Test
-    fun recoveryRequiresPlaidItemsToSucceedEvenWithAllowItemToFail() = runBlocking {
-        val service = spy(PlaidSyncService(mock(), 100, true))
-        doReturn(null).whenever(service).executeTransactionSyncRequest("token", "saved", 100)
-        val accounts = sequenceOf("token" to listOf("configured"))
-        val cursors = mutableMapOf("token" to "saved")
+    fun `second-page failure discards all staged changes and lets the healthy item advance`() = runBlocking {
+        val service = syncService(
+            syncPage(
+                "failed", "saved", "page-two", hasMore = true,
+                added = listOf("discard-add"),
+                modified = listOf("discard-modification"),
+                removed = listOf("discard-removal"),
+            ),
+            syncError("failed", "page-two"),
+            syncPage("healthy", "healthy-saved", "healthy-next", added = listOf("keep-add")),
+        )
+        val items = sequenceOf("failed" to listOf("mapped"), "healthy" to listOf("mapped"))
+        val cursors = mutableMapOf("failed" to "saved", "healthy" to "healthy-saved")
 
-        service.processPlaidTransactions(accounts, cursors)
-        assertFailsWith<IllegalStateException> {
-            service.processPlaidTransactions(accounts, cursors, requireComplete = true)
+        val result = service.processPlaidTransactions(items, cursors)
+
+        assertEquals(listOf("keep-add"), result.created.map { it.transactionId })
+        assertEquals(emptyList<Transaction>(), result.updated)
+        assertEquals(emptyList<String>(), result.deleted)
+        assertEquals(mapOf("failed" to "saved", "healthy" to "healthy-next"), cursors)
+    }
+
+    @Test
+    fun `interrupted catch-up retries on a later poll and skips history`() = runBlocking {
+        val service = syncService(
+            syncPage("fresh", null, "page-two", hasMore = true, added = listOf("history")),
+            syncError("fresh", "page-two"),
+            syncPage("healthy", null, "healthy-started", added = listOf("history")),
+            syncPage("fresh", null, ""),
+            syncPage("healthy", "healthy-started", "healthy-next"),
+            syncPage("fresh", null, "retry-page-two", hasMore = true, added = listOf("history")),
+            syncPage("fresh", "retry-page-two", "fresh-started", added = listOf("history-two")),
+            syncPage("healthy", "healthy-next", "healthy-final", added = listOf("current")),
+        )
+        val items = sequenceOf("fresh" to listOf("mapped"), "healthy" to listOf("mapped"))
+        val cursors = mutableMapOf<String, String>()
+
+        service.initializeCursors(items, cursors)
+        assertEquals(mapOf("healthy" to "healthy-started"), cursors)
+
+        assertEquals(PlaidTransactionResult(emptyList(), emptyList(), emptyList()), service.processPlaidTransactions(items, cursors))
+        assertEquals(mapOf("healthy" to "healthy-next"), cursors)
+
+        val result = service.processPlaidTransactions(items, cursors)
+        assertEquals(listOf("current"), result.created.map { it.transactionId })
+        assertEquals(mapOf("fresh" to "fresh-started", "healthy" to "healthy-final"), cursors)
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = ["saved"])
+    fun `pagination mutation discards the first attempt and restarts from the original cursor`(startingCursor: String?) = runBlocking {
+        val service = syncService(
+            syncPage("item", startingCursor, "stale-page-two", hasMore = true, added = listOf("stale")),
+            syncError("item", "stale-page-two", MUTATION_ERROR),
+            syncPage("item", startingCursor, "replay-page-two", hasMore = true, added = listOf("replayed")),
+            syncPage("item", "replay-page-two", "complete"),
+            allowItemToFail = false,
+            initialBackfillAfter = LocalDate.of(2025, 1, 10),
+        )
+        val cursors = mutableMapOf<String, String>()
+        if (startingCursor != null) cursors["item"] = startingCursor
+
+        val result = service.processPlaidTransactions(sequenceOf("item" to listOf("mapped")), cursors)
+
+        assertEquals(listOf("replayed"), result.created.map { it.transactionId })
+        assertEquals(mapOf("item" to "complete"), cursors)
+    }
+
+    @Test
+    fun `repeated pagination mutations exhaust the restart limit and skip the item`() = runBlocking {
+        val page = syncPage("item", "saved", "page-two", hasMore = true, added = listOf("stale"))
+        val mutation = syncError("item", "page-two", MUTATION_ERROR)
+        val service = syncService(page, mutation, page, mutation, page, mutation)
+        val cursors = mutableMapOf("item" to "saved")
+
+        val result = service.processPlaidTransactions(sequenceOf("item" to listOf("mapped")), cursors)
+
+        assertEquals(PlaidTransactionResult(emptyList(), emptyList(), emptyList()), result)
+        assertEquals(mapOf("item" to "saved"), cursors)
+    }
+
+    @Test
+    fun recoveryRequiresPlaidItemsToSucceedEvenWithAllowItemToFail() = runBlocking {
+        val service = syncService(
+            syncPage("item", "saved", "page-two", hasMore = true, added = listOf("first")),
+            syncError("item", "page-two"),
+        )
+        val cursors = mutableMapOf("item" to "saved")
+
+        val failure = assertFailsWith<IllegalStateException> {
+            service.processPlaidTransactions(sequenceOf("item" to listOf("mapped")), cursors, requireComplete = true)
         }
-        assertEquals(mapOf("token" to "saved"), cursors)
+        assertEquals(HttpStatusCode.BadRequest, (failure.cause as ClientRequestException).response.status)
+        assertEquals(mapOf("item" to "saved"), cursors)
+    }
+
+    private fun transactionJson(id: String) = mapOf(
+        "account_id" to "mapped",
+        "amount" to 1.0,
+        "date" to "2025-01-11",
+        "location" to emptyMap<String, String>(),
+        "name" to id,
+        "payment_meta" to emptyMap<String, String>(),
+        "pending" to false,
+        "transaction_id" to id,
+        "payment_channel" to "other",
+    )
+
+    private data class SyncExchange(
+        val item: String,
+        val cursor: String?,
+        val status: HttpStatusCode,
+        val body: String,
+    )
+
+    private fun syncPage(
+        item: String,
+        cursor: String?,
+        nextCursor: String,
+        hasMore: Boolean = false,
+        added: List<String> = emptyList(),
+        modified: List<String> = emptyList(),
+        removed: List<String> = emptyList(),
+    ): SyncExchange {
+        val body = mapper.writeValueAsString(mapOf(
+            "transactions_update_status" to "HISTORICAL_UPDATE_COMPLETE",
+            "accounts" to emptyList<Any>(),
+            "added" to added.map(::transactionJson),
+            "modified" to modified.map(::transactionJson),
+            "removed" to removed.map { mapOf("account_id" to "mapped", "transaction_id" to it) },
+            "next_cursor" to nextCursor,
+            "has_more" to hasMore,
+            "request_id" to "request",
+        ))
+        return SyncExchange(item, cursor, HttpStatusCode.OK, body)
+    }
+
+    private fun syncError(item: String, cursor: String, code: String = "ITEM_LOGIN_REQUIRED") =
+        SyncExchange(item, cursor, HttpStatusCode.BadRequest, """{"error_code":"$code"}""")
+
+    private fun syncService(
+        vararg exchanges: SyncExchange,
+        allowItemToFail: Boolean = true,
+        initialBackfillAfter: LocalDate? = null,
+    ): PlaidSyncService {
+        val remaining = exchanges.iterator()
+        val engine = MockEngine { request ->
+            val expected = remaining.next()
+            val body = mapper.readTree(request.body.toByteArray())
+            assertEquals(expected.item, body.path("access_token").asText())
+            assertEquals(expected.cursor, body.path("cursor").asText(null))
+            respond(expected.body, expected.status, headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        return PlaidSyncService(mockPlaid(engine), 100, allowItemToFail, initialBackfillAfter = initialBackfillAfter)
     }
 
     companion object {
+        private const val MUTATION_ERROR = "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
         private const val PLAID_BATCH_SIZE = 100
         private const val ALLOW_ITEM_TO_FAIL = true
 
