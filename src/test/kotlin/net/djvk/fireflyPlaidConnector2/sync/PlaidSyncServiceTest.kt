@@ -1,5 +1,12 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Test
+import org.mockito.kotlin.spy
+import org.mockito.kotlin.whenever
+import org.mockito.kotlin.doReturn
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
+import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncResponse
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequestOptions
@@ -14,6 +21,33 @@ import java.util.stream.Stream
  * Tests for the PlaidSyncService class.
  */
 class PlaidSyncServiceTest {
+
+    @Test
+    fun removedTransactionsAreFilteredByConfiguredAccountAcrossPages() = runBlocking {
+        val wrapper: PlaidApiWrapper = mock()
+        val service = spy(PlaidSyncService(wrapper, 100, false))
+        fun page(cursor: String, hasMore: Boolean, vararg removed: RemovedTransaction): TransactionsSyncResponse {
+            val response: TransactionsSyncResponse = mock()
+            whenever(response.added).thenReturn(emptyList())
+            whenever(response.modified).thenReturn(emptyList())
+            whenever(response.removed).thenReturn(removed.toList())
+            whenever(response.nextCursor).thenReturn(cursor)
+            whenever(response.hasMore).thenReturn(hasMore)
+            return response
+        }
+        val first = page("page2", true,
+            RemovedTransaction("included1", "configured"),
+            RemovedTransaction("excluded1", "other"))
+        val second = page("done", false,
+            RemovedTransaction("excluded2", "other"),
+            RemovedTransaction("included2", "configured"))
+        doReturn(first).whenever(service).executeTransactionSyncRequest("token", "saved", 100)
+        doReturn(second).whenever(service).executeTransactionSyncRequest("token", "page2", 100)
+        val cursors = mutableMapOf("token" to "saved")
+        val result = service.processPlaidTransactions(sequenceOf("token" to listOf("configured")), cursors)
+        assertEquals(listOf("included1", "included2"), result.deleted)
+        assertEquals("done", cursors["token"])
+    }
 
     companion object {
         private const val PLAID_BATCH_SIZE = 100
