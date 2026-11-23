@@ -1,8 +1,10 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import java.math.BigDecimal
 import java.time.ZoneId
 import kotlin.math.abs
 
@@ -30,14 +32,12 @@ class TransferMatcher(
         )
 
     /**
-     * Identify matching transaction pairs that can be converted to a single "transfer" in Firefly.
-     *
-     * Note that this method will not perform any filtering. The caller is expected to filter-out any transactions
-     * that it would not make sense to act on, such as matching pairs of Firefly transactions that do not have
-     * corresponding Plaid transactions.
+     * Match transactions that are each other's uniquely closest eligible partner.
      */
     fun match(txs: List<PlaidFireflyTransaction>): List<PlaidFireflyTransaction> {
         logger.trace("Starting ${::match.name}")
+
+        if (transferMatchWindowSeconds <= 0) return txs
 
         // Split-out the transactions that are unlikely to be transfers based on their category. If we're not sure,
         // we'll try to match it as a transfer anyway.
@@ -48,89 +48,124 @@ class TransferMatcher(
 
         val results = nonTransfers.toMutableList()
 
-        val amountIndexedTxs = possibleTransfers.groupBy { it.amount }
-        // The loop below will process an amount value and its inverse, so we use this to mark the inverse
-        //  as processed so we don't double process amount sets
-        val processedAmounts = mutableSetOf<Double>()
-
-        for ((amount, groupTxs) in amountIndexedTxs) {
-            if (processedAmounts.contains(amount)) {
+        val candidateCounts = txs.groupingBy(::candidateId).eachCount()
+        val groups = mutableMapOf<MatchKey, MutableList<Candidate>>()
+        for (tx in possibleTransfers) {
+            val id = candidateId(tx)
+            val currency = matchCurrency(tx)
+            val amount = matchAmount(tx)
+            if (id == null || candidateCounts.getValue(id) > 1 ||
+                currency == null || amount == null || amount.signum() == 0
+            ) {
+                results.add(tx)
                 continue
             }
-            logger.trace("${::match.name} processing amount $amount with ${groupTxs.size} transactions")
 
-            // Get all transfer txs that all have a currency amount inverse to groupTxs, which should theoretically be matching txs
-            val matchingGroupTxs = amountIndexedTxs[-amount]
-            processedAmounts.add(-amount)
+            val key = MatchKey(currency, amount.abs().stripTrailingZeros())
+            groups.getOrPut(key) { mutableListOf() }.add(
+                Candidate(tx, amount.signum() > 0, tx.getTimestamp(zoneId).toEpochSecond())
+            )
+        }
 
-            // If there are no matching txs, then this group has no soulmates and we should move on
-            if (matchingGroupTxs == null) {
-                results.addAll(groupTxs)
-                continue
-            }
-            val txsSecondsDiff = mutableListOf<CandidatePair>()
-
-            // Index txs by their temporal difference from each other so we can match up the closest pairs
-            logger.trace("${::match.name} indexing transactions by time diff for amount $amount")
-            for (aTx in groupTxs) {
-                for (bTx in matchingGroupTxs) {
-                    txsSecondsDiff.add(
-                        CandidatePair(
-                            abs(
-                                aTx.getTimestamp(zoneId).toEpochSecond() -
-                                        bTx.getTimestamp(zoneId).toEpochSecond()
-                            ),
-                            aTx,
-                            bTx
-                        )
+        for (group in groups.values) {
+            findClosestPartners(group)
+            for (candidate in group) {
+                val tiedDistance = candidate.closestTieDistance
+                if (tiedDistance != null) {
+                    logger.warn(
+                        "Leaving transaction {} separate because its closest eligible transfer candidates are tied at {} seconds",
+                        candidateId(candidate.tx),
+                        tiedDistance,
                     )
                 }
-            }
 
-            val sortedPairs = txsSecondsDiff
-                .filter { it.secondsDiff < transferMatchWindowSeconds }
-                .sortedBy { it.secondsDiff }
-
-            /**
-             * Ids of transactions we've already used from either group so we don't use them again.
-             * This is an issue because the [CandidatePair] array we make matches every A transaction to every B
-             *  transaction, so each transaction appears more than once in the array.
-             */
-            val usedATxIds = mutableSetOf<String>()
-            val usedBTxIds = mutableSetOf<String>()
-
-            sortedPairs.filter { (_, aTx, bTx) ->
-                // Skip any pairs where we've already successfully matched one of the transactions
-                val match = !usedATxIds.contains(aTx.transactionId)
-                        && !usedBTxIds.contains(bTx.transactionId)
-
-                        // The transfers we're looking for are from one account to another; skip any pairs where both
-                        // transactions are for the same account.
-                        && aTx.fireflyAccountId != bTx.fireflyAccountId
-
-                if (match) {
-                    usedATxIds.add(aTx.transactionId)
-                    usedBTxIds.add(bTx.transactionId)
+                val partner = candidate.closest
+                if (partner == null || partner.closest !== candidate) {
+                    results.add(candidate.tx)
+                } else if (candidate.isWithdrawal) {
+                    results.add(PlaidFireflyTransaction.Transfer.create(candidate.tx, partner.tx))
                 }
-
-                match
-            }.forEach { (_, aTx, bTx) ->
-                logger.trace("${::match.name} found valid pair with timestamps ${aTx.getTimestamp(zoneId)};" +
-                        "${bTx.getTimestamp(zoneId)} and amount $amount")
-                results.add(PlaidFireflyTransaction.Transfer.create(aTx, bTx))
             }
-
-            // Output all leftover transactions as singles
-            results.addAll(groupTxs.filter { !usedATxIds.contains(it.transactionId) })
-            results.addAll(matchingGroupTxs.filter { !usedBTxIds.contains(it.transactionId) })
         }
 
         return results
     }
 
-    private data class CandidatePair(
-        val secondsDiff: Long,
-        val aTx: PlaidFireflyTransaction,
-        val bTx: PlaidFireflyTransaction,
-    )
+    private fun candidateId(tx: PlaidFireflyTransaction): String? {
+        val fireflyId = tx.fireflyTransaction?.id
+        if (fireflyId != null) return "firefly:$fireflyId"
+        return tx.plaidTransaction?.transactionId?.let { "plaid:$it" }
+    }
+
+    private fun findClosestPartners(group: List<Candidate>) {
+        val (withdrawals, deposits) = group.sortedBy { it.timestamp }.partition { it.isWithdrawal }
+        var firstDepositInWindow = 0
+        for (withdrawal in withdrawals) {
+            while (firstDepositInWindow < deposits.size &&
+                withdrawal.timestamp - deposits[firstDepositInWindow].timestamp >= transferMatchWindowSeconds
+            ) {
+                firstDepositInWindow++
+            }
+            for (index in firstDepositInWindow until deposits.size) {
+                val deposit = deposits[index]
+                val secondsDiff = deposit.timestamp - withdrawal.timestamp
+                if (secondsDiff >= transferMatchWindowSeconds) break
+
+                // A replacement can use at most one existing Firefly entry.
+                if (withdrawal.tx.fireflyTransaction != null && deposit.tx.fireflyTransaction != null) continue
+                if (withdrawal.tx.fireflyAccountId == deposit.tx.fireflyAccountId) continue
+
+                val distance = abs(secondsDiff)
+                withdrawal.consider(deposit, distance)
+                deposit.consider(withdrawal, distance)
+            }
+        }
+    }
+
+    private fun matchCurrency(tx: PlaidFireflyTransaction): String? {
+        val firefly = tx.fireflyTransaction
+        val fireflyCurrency = firefly?.tx?.currencyCode?.takeUnless { it.isBlank() }
+        val plaid = tx.plaidTransaction ?: return fireflyCurrency
+        val plaidCurrency = (plaid.isoCurrencyCode ?: plaid.unofficialCurrencyCode)?.takeUnless { it.isBlank() }
+
+        // The replacement retains the existing Firefly currency when this entry is already synced.
+        return plaidCurrency?.takeIf { firefly == null || it == fireflyCurrency }
+    }
+
+    private fun matchAmount(tx: PlaidFireflyTransaction): BigDecimal? {
+        val plaid = tx.plaidTransaction
+        if (plaid != null) return plaid.amount.takeIf { it.isFinite() }?.toBigDecimal()
+
+        val firefly = tx.fireflyTransaction?.tx ?: return null
+        val amount = firefly.amount.toBigDecimalOrNull() ?: return null
+        return when (firefly.type) {
+            TransactionTypeProperty.withdrawal -> amount
+            TransactionTypeProperty.deposit -> amount.negate()
+            else -> null
+        }
+    }
+
+    private data class MatchKey(val currency: String, val amount: BigDecimal)
+
+    private class Candidate(
+        val tx: PlaidFireflyTransaction,
+        val isWithdrawal: Boolean,
+        val timestamp: Long,
+    ) {
+        var closest: Candidate? = null
+            private set
+        private var closestDistance = Long.MAX_VALUE
+
+        val closestTieDistance: Long?
+            get() = closestDistance.takeIf { closest == null && it != Long.MAX_VALUE }
+
+        fun consider(partner: Candidate, distance: Long) {
+            if (distance < closestDistance) {
+                closest = partner
+                closestDistance = distance
+            } else if (distance == closestDistance) {
+                closest = null
+            }
+        }
+    }
 }

@@ -16,6 +16,7 @@ import net.djvk.fireflyPlaidConnector2.lib.defaultOffsetNow
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
@@ -31,7 +32,7 @@ internal class TransactionConverterTest {
             return listOf(
                 Arguments.of(
 //                    testName: String,
-                    "Existing Firefly withdrawal",
+                    "Existing Firefly withdrawal with ineligible competitors",
 //                    accountMap: Map<PlaidAccountId, FireflyAccountId>,
                     PlaidFixtures.getStandardAccountMapping(),
 //                    plaidCreatedTxs: List<PlaidTransaction>,
@@ -69,15 +70,27 @@ internal class TransactionConverterTest {
                                 type = TransactionTypeProperty.withdrawal,
                                 amount = "1111.22",
                                 sourceId = "1",
+                                currencyCode = "USD",
                             ), ObjectLink()
                         ),
-                        // This is identical to the expected matching transaction, except that it's a deposit.
+                        // This deposit shares the matching withdrawal's timestamp. Both already exist in Firefly.
                         TransactionRead(
-                            "thing", "wrongTypeFireflyDepositTransactionId",
+                            "thing", "existingFireflyDepositTransactionId",
                             FireflyFixtures.getTransaction(
                                 type = TransactionTypeProperty.deposit,
                                 amount = "1111.22",
-                                destinationId = "2",
+                                destinationId = "3",
+                                currencyCode = "USD",
+                                dateSubtractHours = 12,
+                            ), ObjectLink()
+                        ),
+                        TransactionRead(
+                            "thing", "otherCurrencyFireflyWithdrawalTransactionId",
+                            FireflyFixtures.getTransaction(
+                                type = TransactionTypeProperty.withdrawal,
+                                amount = "1111.22",
+                                sourceId = "2",
+                                currencyCode = "EUR",
                             ), ObjectLink()
                         ),
                         // This is the transaction that we expect to match with the Plaid transaction to be converted
@@ -88,11 +101,8 @@ internal class TransactionConverterTest {
                                 type = TransactionTypeProperty.withdrawal,
                                 amount = "1111.22",
                                 sourceId = "2",
+                                currencyCode = "USD",
                                 externalId = "plaid-existingWithdrawal",
-                                // The transfer matching logic attempts to find the closest (by date) matching
-                                // transaction. Offset this date compared to the other Firefly transactions above so
-                                // that when this one "wins" we know it's not incidental just because this one was
-                                // processed first.
                                 dateSubtractHours = 12
                             ), ObjectLink()
                         ),
@@ -110,6 +120,7 @@ internal class TransactionConverterTest {
                                     internalReference = "plaid-transfer-leg-existingWithdrawal",
                                     sourceId = "2",
                                     destinationId = "1",
+                                    currencyCode = "USD",
                                 ).transactions.first()
                             )
                         ),
@@ -136,6 +147,7 @@ internal class TransactionConverterTest {
                                 type = TransactionTypeProperty.deposit,
                                 amount = "1111.22",
                                 destinationId = "2",
+                                currencyCode = "USD",
                             ), ObjectLink()
                         ),
                     ),
@@ -151,6 +163,7 @@ internal class TransactionConverterTest {
                                     externalId = "plaid-plaidTransactionId",
                                     sourceId = "1",
                                     destinationId = "2",
+                                    currencyCode = "USD",
                                 ).transactions.first()
                             )
                         ),
@@ -663,6 +676,45 @@ internal class TransactionConverterTest {
             )
 
             assertEquals(expectedResult, actual)
+        }
+    }
+
+    @Test
+    fun `batch sync keeps cross currency and tied candidates separate`() = runBlocking {
+        val converter = TransactionConverter(
+            useNameForDestination = false,
+            enablePrimaryCategorization = false,
+            primaryCategoryPrefix = "a",
+            enableDetailedCategorization = false,
+            detailedCategoryPrefix = "b",
+            timeZoneString = "America/New_York",
+            transferMatchWindowDays = 3L,
+            txStyle = defaultStyle,
+        )
+        val crossCurrencyWithdrawal = PlaidFixtures.getPaymentTransaction(
+            accountId = "checking", transactionId = "usd-withdrawal", amount = 100.0,
+        )
+        val crossCurrencyDeposit = PlaidFixtures.getPaymentTransaction(
+            accountId = "savings", transactionId = "eur-deposit", amount = -100.0, isoCurrencyCode = "EUR",
+        )
+        val withdrawal = crossCurrencyWithdrawal.copy(transactionId = "withdrawal", amount = 200.0)
+        val deposit = withdrawal.copy(accountId = "savings", transactionId = "deposit", amount = -200.0)
+        val tiedDeposit = deposit.copy(transactionId = "tied-deposit")
+        val input = listOf(crossCurrencyWithdrawal, crossCurrencyDeposit, withdrawal, deposit, tiedDeposit)
+        val accountMap = mapOf("checking" to 1, "savings" to 2)
+
+        for (transactions in listOf(input, input.reversed())) {
+            val result = converter.convertBatchSync(transactions, accountMap)
+
+            assertThat(result.map { it.tx.externalId })
+                .containsExactlyInAnyOrderElementsOf(input.map { plaidExternalId(it.transactionId) })
+            assertThat(result.map { it.tx.type }).containsExactlyInAnyOrder(
+                TransactionTypeProperty.withdrawal,
+                TransactionTypeProperty.withdrawal,
+                TransactionTypeProperty.deposit,
+                TransactionTypeProperty.deposit,
+                TransactionTypeProperty.deposit,
+            )
         }
     }
 

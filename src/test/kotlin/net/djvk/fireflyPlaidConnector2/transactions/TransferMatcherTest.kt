@@ -1,12 +1,18 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
+import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
@@ -23,6 +29,7 @@ internal class TransferMatcherTest {
             sourceId: String? = null,
             destinationId: String? = null,
             description: String = "TestTx",
+            currencyCode: String? = "USD",
         ): FireflyTransactionDto {
             val tx = FireflyFixtures.getTransaction(
                 type = type,
@@ -31,6 +38,7 @@ internal class TransferMatcherTest {
                 sourceId = sourceId,
                 destinationId = destinationId,
                 description = description,
+                currencyCode = currencyCode,
             )
             val txSplit = tx.transactions.getOrNull(0) ?: throw RuntimeException("Missing transaction")
             return FireflyTransactionDto("tx-${transactionIndex++}", txSplit)
@@ -203,12 +211,135 @@ internal class TransferMatcherTest {
         input: List<PlaidFireflyTransaction>,
         expected: List<PlaidFireflyTransaction>,
     ) {
-        val matcher = TransferMatcher(
-            timeZoneString = "America/New_York",
-            transferMatchWindowDays = matchWindowDays,
-        )
-
         val actual = matcher.match(input)
         assertThat(actual).containsExactlyInAnyOrderElementsOf(expected)
     }
+
+    @Test
+    fun `matches exact decimal amounts across Plaid and Firefly`() {
+        val incoming = plaidCandidate("incoming", 1, -100.0)
+        val differentAmount = PlaidFireflyTransaction.FireflyTransaction(
+            getFireflyDto(TransactionTypeProperty.withdrawal, "100.0000000000000001", sourceId = "2")
+        )
+        val sameAmount = PlaidFireflyTransaction.FireflyTransaction(
+            getFireflyDto(TransactionTypeProperty.withdrawal, "100.0000", sourceId = "2")
+        )
+
+        assertThat(matcher.match(listOf(incoming, differentAmount, sameAmount))).containsExactlyInAnyOrder(
+            differentAmount,
+            PlaidFireflyTransaction.Transfer.create(sameAmount, incoming),
+        )
+    }
+
+    @Test
+    fun `keeps entries with unknown currency separate`() {
+        val incoming = plaidCandidate("incoming", 1, -100.0, currencyCode = null)
+        val existing = PlaidFireflyTransaction.FireflyTransaction(
+            getFireflyDto(TransactionTypeProperty.withdrawal, "100.00", sourceId = "2", currencyCode = null)
+        )
+
+        assertThat(matcher.match(listOf(incoming, existing))).containsExactlyInAnyOrder(incoming, existing)
+    }
+
+    @Test
+    fun `keeps synced entries with conflicting currencies separate`() {
+        val outgoing = plaidCandidate("outgoing", 1, 100.0)
+        val synced = PlaidFireflyTransaction.MatchedTransaction(
+            outgoing.plaidTransaction,
+            getFireflyDto(TransactionTypeProperty.withdrawal, "100.00", sourceId = "1", currencyCode = "EUR"),
+        )
+        val incoming = plaidCandidate("incoming", 2, -100.0)
+
+        assertThat(matcher.match(listOf(synced, incoming))).containsExactlyInAnyOrder(synced, incoming)
+    }
+
+    @Test
+    fun `matches Plaid entries with the same unofficial currency code`() {
+        val outgoing = plaidCandidate("outgoing", 1, 1.0, currencyCode = null, unofficialCurrencyCode = "XBT")
+        val incoming = plaidCandidate("incoming", 2, -1.0, currencyCode = null, unofficialCurrencyCode = "XBT")
+
+        assertThat(matcher.match(listOf(outgoing, incoming)))
+            .containsExactly(PlaidFireflyTransaction.Transfer.create(outgoing, incoming))
+    }
+
+    @Test
+    fun `keeps entries separate when a closest partner prefers another entry`() {
+        val outgoing = plaidCandidate("outgoing", 1, 100.0)
+        val laterOutgoing = plaidCandidate("later-outgoing", 1, 100.0, baseDateTime.plusMinutes(10))
+        val incoming = plaidCandidate("incoming", 2, -100.0, baseDateTime.plusMinutes(1))
+        val laterIncoming = plaidCandidate("later-incoming", 2, -100.0, baseDateTime.plusMinutes(3))
+
+        assertThat(matcher.match(listOf(outgoing, laterOutgoing, incoming, laterIncoming))).containsExactlyInAnyOrder(
+            PlaidFireflyTransaction.Transfer.create(outgoing, incoming),
+            laterOutgoing,
+            laterIncoming,
+        )
+    }
+
+    @Test
+    fun `warns when the closest eligible transfer candidates are tied`() {
+        val outgoing = plaidCandidate("outgoing", 1, 100.0)
+        val earlier = plaidCandidate("earlier", 2, -100.0, baseDateTime.minusMinutes(10))
+        val later = plaidCandidate("later", 2, -100.0, baseDateTime.plusMinutes(10))
+        val input = listOf(outgoing, earlier, later)
+        val logger = LoggerFactory.getLogger(TransferMatcher::class.java) as Logger
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        logger.addAppender(appender)
+        try {
+            assertThat(matcher.match(input)).containsExactlyInAnyOrderElementsOf(input)
+            val warnings = appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+            assertThat(warnings).hasSize(1)
+            assertThat(warnings.single()).contains("plaid:outgoing", "separate", "tied", "600 seconds")
+        } finally {
+            logger.detachAppender(appender)
+            appender.stop()
+        }
+    }
+
+    @Test
+    fun `keeps repeated transaction IDs separate`() {
+        val outgoing = plaidCandidate("outgoing", 1, 100.0)
+        val repeated = plaidCandidate("outgoing", 1, 100.0, baseDateTime.plusDays(1))
+        val incoming = plaidCandidate("incoming", 2, -100.0)
+        val laterIncoming = plaidCandidate("later-incoming", 2, -100.0, baseDateTime.plusDays(1))
+        val input = listOf(outgoing, repeated, incoming, laterIncoming)
+
+        assertThat(matcher.match(input)).containsExactlyInAnyOrderElementsOf(input)
+    }
+
+    @Test
+    fun `excludes both edges of the time window`() {
+        val outgoing = plaidCandidate("outgoing", 1, 100.0)
+        val earlier = plaidCandidate("earlier", 2, -100.0, baseDateTime.minusDays(3))
+        val later = plaidCandidate("later", 2, -100.0, baseDateTime.plusDays(3))
+        val inside = plaidCandidate("inside", 2, -100.0, baseDateTime.plusDays(3).minusSeconds(1))
+
+        assertThat(matcher.match(listOf(outgoing, earlier, later))).containsExactlyInAnyOrder(outgoing, earlier, later)
+        assertThat(matcher.match(listOf(outgoing, earlier, later, inside))).containsExactlyInAnyOrder(
+            earlier,
+            later,
+            PlaidFireflyTransaction.Transfer.create(outgoing, inside),
+        )
+    }
+
+    private val matcher = TransferMatcher("America/New_York", matchWindowDays)
+
+    private fun plaidCandidate(
+        id: String,
+        accountId: Int,
+        amount: Double,
+        date: OffsetDateTime = baseDateTime,
+        currencyCode: String? = "USD",
+        unofficialCurrencyCode: String? = null,
+    ) = PlaidFireflyTransaction.PlaidTransaction(
+        PlaidFixtures.getPaymentTransaction(
+            transactionId = id,
+            accountId = accountId.toString(),
+            amount = amount,
+            datetime = date,
+            isoCurrencyCode = currencyCode,
+            unofficialCurrencyCode = unofficialCurrencyCode,
+        ),
+        accountId,
+    )
 }

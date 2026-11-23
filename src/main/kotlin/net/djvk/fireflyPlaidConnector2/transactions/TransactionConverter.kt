@@ -259,13 +259,6 @@ class TransactionConverter(
                 }
 
                 is PlaidFireflyTransaction.Transfer -> {
-                    if (create.withdrawal.fireflyTransaction != null && create.deposit.fireflyTransaction != null) {
-                        logger.debug("TransferMatcher found multiple existing Firefly transactions that appear to "
-                                + "be a transfer. Converting multiple existing Firefly transactions to a transfer is "
-                                + "not supported. Skipping: {}", create)
-                        continue
-                    }
-
                     val fireflyComponent = create.fireflyTransaction
                     if (fireflyComponent != null) {
                         convertDoubleFirefly(

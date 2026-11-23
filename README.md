@@ -55,11 +55,10 @@ up as asset accounts instead of liability accounts because that's how Firefly wo
 
 Plaid has no notion of inter-account transactions; transaction data only references the account that it's on.
 
-We try to bridge these by matching two Plaid transactions on different asset accounts and converting them into a single
-Firefly transfer. You can see the full logic in `TransactionConverter.sortByPairs`, but the summary is that the
-connector searches for pairs of Plaid transfer-type transactions with inverse amounts (i.e. $100 and -$100)
-that are within `fireflyPlaidConnector2.transferMatchWindowDays` of each other. This isn't flawless, but
-is sufficient in most cases.
+The connector looks for transfer candidates on different accounts with equal and opposite amounts in the same known
+currency. The transactions must be less than `fireflyPlaidConnector2.transferMatchWindowDays` apart. The connector
+creates a Firefly transfer only if each transaction is the other's uniquely closest eligible candidate. Tied candidates
+stay separate.
 
 Note that if the connector attempts to convert an existing non-transfer Firefly transaction and an incoming Plaid
 transaction to a Firefly transfer, the existing Firefly transaction will be deleted and the new transfer
