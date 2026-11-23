@@ -9,6 +9,7 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
 import net.djvk.fireflyPlaidConnector2.config.properties.TransactionStyleConfig
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
+import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -262,7 +263,10 @@ internal class PlaidCorrectionQueueTest {
             it.getArgument<MutableMap<PlaidAccessToken, PlaidSyncCursor>>(1).putAll(next)
             changes
         }
-        PolledSyncOrchestrator(10, helper, cursor, plaid, firefly, converter, TransferReplacementJournal(cursor), queue())
+        PolledSyncOrchestrator(
+            testPolledProperties(syncFrequencyMinutes = 10),
+            helper, cursor, plaid, firefly, converter, TransferReplacementJournal(cursor), queue(),
+        )
             .processTransactions(accountMap, emptySequence(), cursor.readCursorMap())
     }
 

@@ -17,9 +17,11 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequestOptions
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncResponse
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsUpdateStatus
+import net.djvk.fireflyPlaidConnector2.config.properties.PlaidTransactionProperties
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidMock
 import net.djvk.fireflyPlaidConnector2.lib.createPlaidResponse
+import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
@@ -47,7 +49,11 @@ class PlaidSyncServiceTest {
         val cutoff = LocalDate.of(2025, 1, 10)
         val through = cutoff.plusDays(4)
         val plaid = PlaidMock()
-        val service = PlaidSyncService(plaid.wrapper, 100, false, initialBackfillAfter = cutoff, initialBackfillThrough = through)
+        val service = PlaidSyncService(
+            plaid.wrapper,
+            PlaidTransactionProperties(100),
+            testPolledProperties(initialBackfillAfter = cutoff, initialBackfillThrough = through),
+        )
         val accounts = sequenceOf("fresh-item" to listOf("mapped"), "saved-item" to listOf("mapped"))
         val cursors = mutableMapOf("saved-item" to "saved-cursor")
 
@@ -83,7 +89,7 @@ class PlaidSyncServiceTest {
     @Test
     fun removedTransactionsAreFilteredByConfiguredAccountAcrossPages() = runBlocking {
         val wrapper: PlaidApiWrapper = mock()
-        val service = spy(PlaidSyncService(wrapper, 100, false))
+        val service = spy(PlaidSyncService(wrapper, PlaidTransactionProperties(100), testPolledProperties()))
         fun page(cursor: String, hasMore: Boolean, vararg removed: RemovedTransaction): TransactionsSyncResponse {
             val response: TransactionsSyncResponse = mock()
             whenever(response.added).thenReturn(emptyList())
@@ -262,7 +268,11 @@ class PlaidSyncServiceTest {
             assertEquals(expected.cursor, body.path("cursor").asText(null))
             respond(expected.body, expected.status, headersOf(HttpHeaders.ContentType, "application/json"))
         }
-        return PlaidSyncService(mockPlaid(engine), 100, allowItemToFail, initialBackfillAfter = initialBackfillAfter)
+        return PlaidSyncService(
+            mockPlaid(engine),
+            PlaidTransactionProperties(100),
+            testPolledProperties(allowItemToFail = allowItemToFail, initialBackfillAfter = initialBackfillAfter),
+        )
     }
 
     companion object {
@@ -415,8 +425,8 @@ class PlaidSyncServiceTest {
     private val plaidApiWrapper: PlaidApiWrapper = mock()
     private val plaidSyncService = PlaidSyncService(
         plaidApiWrapper,
-        PLAID_BATCH_SIZE,
-        ALLOW_ITEM_TO_FAIL
+        PlaidTransactionProperties(PLAID_BATCH_SIZE),
+        testPolledProperties(allowItemToFail = ALLOW_ITEM_TO_FAIL),
     )
 
     @ParameterizedTest(name = "{index} => {0}")

@@ -6,6 +6,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
+import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.junit.jupiter.api.BeforeEach
@@ -40,7 +41,8 @@ internal class PolledSyncOrchestratorTest {
     private val replacementJournal: TransferReplacementJournal = mock()
     private val correctionQueue: PlaidCorrectionQueue = mock()
     private val orchestrator = PolledSyncOrchestrator(
-        30, syncHelper, cursorManager, plaidSyncService, fireflyTransactionService, converter, replacementJournal, correctionQueue,
+        testPolledProperties(), syncHelper, cursorManager, plaidSyncService, fireflyTransactionService, converter,
+        replacementJournal, correctionQueue,
     )
     private val accountMap = mapOf("account1" to 1)
     private val accountAccessTokenSequence = sequenceOf("token1" to listOf("account1"))

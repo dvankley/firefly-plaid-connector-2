@@ -8,15 +8,12 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
-import net.djvk.fireflyPlaidConnector2.constants.IntervalSeconds
+import net.djvk.fireflyPlaidConnector2.config.BatchSyncProperties
+import net.djvk.fireflyPlaidConnector2.config.properties.PlaidTransactionProperties
 import net.djvk.fireflyPlaidConnector2.constants.TimestampSeconds
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
-import org.springframework.format.annotation.DateTimeFormat
-import org.springframework.stereotype.Component
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.*
@@ -29,36 +26,22 @@ import kotlin.math.min
  *
  * Handles the "batch" sync mode, which syncs a large batch of transactions at once, then exits.
  */
-@ConditionalOnProperty(name = ["fireflyPlaidConnector2.syncMode"], havingValue = "batch")
-@Component
 class BatchSyncRunner(
-    @Value("\${fireflyPlaidConnector2.batch.maxSyncDays}")
-    private val syncDays: Int,
-    @Value("\${fireflyPlaidConnector2.batch.setInitialBalance:false}")
-    private val setInitialBalance: Boolean,
-    @Value("\${fireflyPlaidConnector2.batch.balanceMinLastUpdatedDatetimeSeconds:}")
-    private val balanceMinLastUpdatedDatetimeSeconds: IntervalSeconds? = null,
-    @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
-    private val plaidBatchSize: Int,
-
+    private val properties: BatchSyncProperties,
+    private val plaidProperties: PlaidTransactionProperties,
     private val plaidApiWrapper: PlaidApiWrapper,
     private val syncHelper: SyncHelper,
     private val fireflyAccountsApi: AccountsApi,
-
     private val converter: TransactionConverter,
-
-    @Value("\${fireflyPlaidConnector2.batch.endDate:}")
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-    private val batchEndDate: LocalDate? = null,
-
-    ) : Runner {
+) : Runner {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     override fun run() {
         val allPlaidTxs = mutableMapOf<PlaidAccessToken, MutableList<Transaction>>()
 
-        val endDate = batchEndDate ?: LocalDate.now()
-        val startDate = endDate.minusDays(syncDays.toLong())
+        val endDate = properties.endDate ?: LocalDate.now()
+        val startDate = endDate.minusDays(properties.maxSyncDays.toLong())
+        val plaidBatchSize = plaidProperties.batchSize
 
         runBlocking {
             syncHelper.setApiCreds()
@@ -134,7 +117,7 @@ class BatchSyncRunner(
             syncHelper.optimisticInsertBatchIntoFirefly(fireflyTxs)
 
             // Set initial balance transaction if configured
-            if (setInitialBalance) {
+            if (properties.setInitialBalance) {
                 setInitialBalances(allPlaidTxs, syncHelper, startDate)
             }
         }
@@ -153,9 +136,9 @@ class BatchSyncRunner(
             // Request balance data for this item/access token
             logger.debug("Requesting balances for access token $accessToken and account ids ${accountIds.joinToString()}")
             // Calculate min last updated, if required
-            val minLastUpdated = balanceMinLastUpdatedDatetimeSeconds?.let {
-                logger.debug("Setting min_last_updated_datetime to $balanceMinLastUpdatedDatetimeSeconds seconds ago")
-                OffsetDateTime.now().minusSeconds(it)
+            val minLastUpdated = properties.balanceMinLastUpdatedDatetimeSeconds?.let { seconds ->
+                logger.debug("Setting min_last_updated_datetime to $seconds seconds ago")
+                OffsetDateTime.now().minusSeconds(seconds)
             }
             val balances: AccountsGetResponse
             try {

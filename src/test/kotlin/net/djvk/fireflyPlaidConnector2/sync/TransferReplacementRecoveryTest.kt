@@ -27,6 +27,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypePropert
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
+import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.junit.jupiter.api.Test
@@ -184,7 +185,7 @@ internal class TransferReplacementRecoveryTest {
             AccountConfigs(emptyList()), "testToken", mock(), transactions, mock(), wrapper,
             SearchApi("https://firefly.test", firefly.engine, client),
         )
-        val service = FireflyTransactionService(transactions, helper, wrapper, journal, 30)
+        val service = FireflyTransactionService(transactions, helper, wrapper, journal, testPolledProperties())
         val plaid: PlaidSyncService = mock()
         val converter: TransactionConverter = mock()
         val added = listOf("old", "new").map { id ->
@@ -204,7 +205,7 @@ internal class TransferReplacementRecoveryTest {
             TransactionConverter.ConvertPollSyncResult(emptyList(), listOf(update))
         }
         val queue = PlaidCorrectionQueue(cursor, helper, converter)
-        PolledSyncOrchestrator(30, helper, cursor, plaid, service, converter, journal, queue)
+        PolledSyncOrchestrator(testPolledProperties(), helper, cursor, plaid, service, converter, journal, queue)
             .processTransactions(emptyMap(), emptySequence(), cursorMap)
     }
 

@@ -5,24 +5,20 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
+import net.djvk.fireflyPlaidConnector2.config.PolledSyncProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.stereotype.Component
 import java.time.LocalDate
 
 /**
  * Service for handling Firefly transaction operations.
  */
-@Component
 class FireflyTransactionService(
     private val fireflyTxApi: TransactionsApi,
     private val syncHelper: SyncHelper,
     private val fireflyApiWrapper: FireflyApiWrapper,
     private val replacementJournal: TransferReplacementJournal,
-    
-    @Value("\${fireflyPlaidConnector2.polled.existingFireflyPullWindowDays}")
-    private val existingFireflyPullWindowDays: Int
+    private val properties: PolledSyncProperties,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
 
@@ -32,7 +28,7 @@ class FireflyTransactionService(
     suspend fun fetchExistingFireflyTransactions(): List<TransactionRead> {
         val existingFireflyTxs = mutableListOf<TransactionRead>()
         val transferWindowEnd = LocalDate.now()
-        val transferWindowStart = transferWindowEnd.minusDays(existingFireflyPullWindowDays.toLong())
+        val transferWindowStart = transferWindowEnd.minusDays(properties.existingFireflyPullWindowDays.toLong())
 
         var page = 1
         while (true) {

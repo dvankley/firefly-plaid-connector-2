@@ -14,6 +14,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
+import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -32,13 +33,14 @@ class FireflyTransactionServiceTest {
     private val syncHelper: SyncHelper = mock()
     private val replacementJournal: TransferReplacementJournal = mock()
     private val existingFireflyPullWindowDays = 30
+    private val properties = testPolledProperties(existingFireflyPullWindowDays = existingFireflyPullWindowDays)
 
     private val fireflyTransactionService = FireflyTransactionService(
         fireflyTxApi,
         syncHelper,
         FireflyApiWrapper(RetryProperties(maxAttempts = 1)),
         replacementJournal,
-        existingFireflyPullWindowDays
+        properties,
     )
 
     @BeforeEach
@@ -56,7 +58,7 @@ class FireflyTransactionServiceTest {
             fireflyTxApi, syncHelper,
             FireflyApiWrapper(RetryProperties(maxAttempts = 3, initialDelayMs = 0)),
             replacementJournal,
-            existingFireflyPullWindowDays,
+            properties,
         )
         val thrown = kotlin.test.assertFailsWith<java.nio.channels.UnresolvedAddressException> {
             service.fetchExistingFireflyTransactions()

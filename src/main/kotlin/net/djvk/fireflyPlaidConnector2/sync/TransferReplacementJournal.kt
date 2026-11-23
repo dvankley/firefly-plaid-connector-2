@@ -10,7 +10,6 @@ import kotlinx.coroutines.withContext
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionStore
-import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 
@@ -21,7 +20,6 @@ internal data class TransferReplacement(
     val completed: Boolean = false,
 )
 
-@Component
 class TransferReplacementJournal(cursorManager: CursorManager) {
     private val path = cursorManager.cursorFilePath.resolveSibling("pending_transfer_replacements.json")
     private val mapper = jacksonObjectMapper()

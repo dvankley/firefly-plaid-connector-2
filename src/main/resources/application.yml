@@ -25,9 +25,9 @@ fireflyPlaidConnector2:
     # Optional ISO date (YYYY-MM-DD). For items without a saved cursor, the first poll imports
     # transactions with a Plaid date strictly after this date and saves the cursor after the writes.
 #    initialBackfillAfter: 2026-01-01
-    # Optional inclusive end date for the initial backfill when initialBackfillAfter is set.
+    # Optional inclusive end date for the initial backfill. Requires initialBackfillAfter and must be later.
 #    initialBackfillThrough: 2026-01-05
-    # How often to run the poll sync process
+    # How often to run the poll sync process, in positive whole minutes.
     syncFrequencyMinutes: 10
     # How many days in the past we should pull existing Firefly transactions for.
     # Used to find transfer candidates. Plaid corrections are looked up by external ID.
@@ -43,7 +43,7 @@ fireflyPlaidConnector2:
   batch:
     # Optional inclusive batch end date (YYYY-MM-DD), defaulting to today.
 #    endDate: 2026-01-01
-    # The number of days to look back from the batch end date.
+    # The nonnegative number of days to look back from the batch end date. Zero imports only the end date.
     maxSyncDays: 5
     # NOTE: Given that the balance endpoint is now $0.10 per call, this feature isn't really worth using anymore
     # and is no longer officially supported because it costs me money every time I want to QA a change to it.
@@ -84,7 +84,7 @@ fireflyPlaidConnector2:
 #    url: https://production.plaid.com
 #    clientId: HI I'M A CLIENT ID
 #    secret: SECRETZ
-    # The number of transactions to fetch from Plaid at a time.
+    # The number of transactions to fetch from Plaid at a time, from 1 through 500.
     # This doesn't have a major effect as in both batch and sync mode we have to retain data sets larger
     #   than just the Plaid transaction batch in memory to try to match up transfers.
     # Larger batch sizes can reduce rate limiting issues.
@@ -165,7 +165,7 @@ fireflyPlaidConnector2:
       # Optional, defaults to false
       enable: true
       prefix: "plaid-detailed-cat-"
-  # An array of accounts to sync from Plaid to Firefly
+  # An array of accounts to sync from Plaid to Firefly. Each Plaid account ID may appear once.
   accounts:
       # The account id in Firefly to sync this data to.
       # For instance, an account you view at https://localhost/accounts/show/1 will be id 1

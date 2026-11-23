@@ -4,21 +4,25 @@ import kotlinx.coroutines.runBlocking
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsGetRequest
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsGetResponse
 import net.djvk.fireflyPlaidConnector2.config.AccountConfig
+import net.djvk.fireflyPlaidConnector2.config.BatchSyncProperties
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
+import net.djvk.fireflyPlaidConnector2.config.properties.PlaidTransactionProperties
 import net.djvk.fireflyPlaidConnector2.config.properties.TransactionStyleConfig
 import net.djvk.fireflyPlaidConnector2.lib.*
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.kotlin.*
 import java.time.LocalDate
 
 internal class BatchSyncRunnerTest {
-    @Test
-    fun `batch request counts its lookback from the inclusive end date`() = runBlocking<Unit> {
+    @ParameterizedTest
+    @ValueSource(ints = [0, 14])
+    fun `batch request counts its lookback from the inclusive end date and stops on an empty page`(syncDays: Int) = runBlocking<Unit> {
         val endDate = LocalDate.of(2025, 1, 10)
         val plaid = PlaidMock()
-        val runner = createRunner(plaid, FireflyMock(), syncDays = 14, batchEndDate = endDate)
+        val runner = createRunner(plaid, FireflyMock(), syncDays = syncDays, batchEndDate = endDate)
         val response = createPlaidResponse(
             TransactionsGetResponse(emptyList(), emptyList(), 0, PlaidFixtures.getItem(), "request"),
         )
@@ -28,7 +32,7 @@ internal class BatchSyncRunnerTest {
 
         val request = argumentCaptor<TransactionsGetRequest>()
         verify(plaid.api).transactionsGet(request.capture())
-        assertThat(request.firstValue.startDate).isEqualTo(endDate.minusDays(14))
+        assertThat(request.firstValue.startDate).isEqualTo(endDate.minusDays(syncDays.toLong()))
         assertThat(request.firstValue.endDate).isEqualTo(endDate)
     }
 
@@ -64,15 +68,12 @@ internal class BatchSyncRunnerTest {
             )
 
             return BatchSyncRunner(
-                syncDays,
-                setInitialBalance,
-                null,
-                plaidBatchSize,
+                BatchSyncProperties(maxSyncDays = syncDays, endDate = batchEndDate, setInitialBalance = setInitialBalance),
+                PlaidTransactionProperties(plaidBatchSize),
                 plaid.wrapper,
                 syncHelper ?: defaultSyncHelper,
                 firefly.accountsApi,
                 converter ?: defaultTransactionConverter,
-                batchEndDate,
             )
         }
 

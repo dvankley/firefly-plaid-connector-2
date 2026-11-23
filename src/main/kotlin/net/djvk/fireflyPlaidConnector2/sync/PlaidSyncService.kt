@@ -9,10 +9,9 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequestOptions
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncResponse
+import net.djvk.fireflyPlaidConnector2.config.PolledSyncProperties
+import net.djvk.fireflyPlaidConnector2.config.properties.PlaidTransactionProperties
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.format.annotation.DateTimeFormat
-import org.springframework.stereotype.Component
 import java.time.LocalDate
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 
@@ -23,23 +22,10 @@ private const val MAX_PAGINATION_RESTARTS = 2
 /**
  * Service for handling Plaid transaction synchronization.
  */
-@Component
 class PlaidSyncService(
     private val plaidApiWrapper: PlaidApiWrapper,
-
-    @Value("\${fireflyPlaidConnector2.plaid.batchSize}")
-    private val plaidBatchSize: Int,
-
-    @Value("\${fireflyPlaidConnector2.polled.allowItemToFail:false}")
-    private val allowItemToFail: Boolean,
-
-    @Value("\${fireflyPlaidConnector2.polled.initialBackfillAfter:}")
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-    private val initialBackfillAfter: LocalDate? = null,
-
-    @Value("\${fireflyPlaidConnector2.polled.initialBackfillThrough:}")
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-    private val initialBackfillThrough: LocalDate? = null,
+    private val plaidProperties: PlaidTransactionProperties,
+    private val properties: PolledSyncProperties,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
     private val errorJson = ObjectMapper()
@@ -50,7 +36,7 @@ class PlaidSyncService(
     fun getTransactionSyncRequest(
         accessToken: PlaidAccessToken,
         cursor: PlaidSyncCursor?,
-        batchSize: Int = plaidBatchSize
+        batchSize: Int = plaidProperties.batchSize
     ): TransactionsSyncRequest {
         return TransactionsSyncRequest(
             accessToken,
@@ -71,7 +57,7 @@ class PlaidSyncService(
     suspend fun executeTransactionSyncRequest(
         accessToken: PlaidAccessToken,
         cursor: PlaidSyncCursor?,
-        batchSize: Int = plaidBatchSize
+        batchSize: Int = plaidProperties.batchSize
     ): TransactionsSyncResponse {
         val request = getTransactionSyncRequest(accessToken, cursor, batchSize)
         return plaidApiWrapper.executeRequest(
@@ -96,7 +82,7 @@ class PlaidSyncService(
 
         for ((accessToken, accountIds) in accountAccessTokenSequence) {
             val startingCursor = cursorMap[accessToken]?.takeUnless { it.isBlank() }
-            val cutoff = initialBackfillAfter.takeIf { startingCursor == null }
+            val cutoff = properties.initialBackfillAfter.takeIf { startingCursor == null }
             if (cutoff != null && backfillCount == null) backfillCount = 0
             // A failed or not-yet-ready initialization can leave the item cursorless on later polls.
             val skipHistory = startingCursor == null && cutoff == null
@@ -129,7 +115,7 @@ class PlaidSyncService(
         cursorMap: MutableMap<PlaidAccessToken, PlaidSyncCursor>
     ) {
         // Let the first poll process the selected history for fresh items.
-        if (initialBackfillAfter != null) return
+        if (properties.initialBackfillAfter != null) return
         logger.debug("Beginning Plaid sync endpoint cursor initialization")
         for ((accessToken, _) in accountAccessTokenSequence) {
             if (!cursorMap[accessToken].isNullOrBlank()) continue
@@ -147,6 +133,7 @@ class PlaidSyncService(
         backfillAfter: LocalDate? = null,
         requireComplete: Boolean = false,
     ): ItemUpdate? {
+        val initialBackfillThrough = properties.initialBackfillThrough
         var restarts = 0
         while (true) {
             var cursor = startingCursor
@@ -185,7 +172,7 @@ class PlaidSyncService(
                     )
                     continue
                 }
-                if (!allowItemToFail) throw failure
+                if (!properties.allowItemToFail) throw failure
                 if (requireComplete) {
                     throw IllegalStateException("Plaid replay is incomplete while transfer replacements are pending", failure)
                 }

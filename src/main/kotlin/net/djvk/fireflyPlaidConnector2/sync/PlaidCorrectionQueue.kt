@@ -26,7 +26,6 @@ import net.djvk.fireflyPlaidConnector2.transactions.isPlaidTransferReference
 import net.djvk.fireflyPlaidConnector2.transactions.plaidExternalId
 import net.djvk.fireflyPlaidConnector2.transactions.plaidTransferReference
 import org.slf4j.LoggerFactory
-import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import java.time.Instant
@@ -37,7 +36,6 @@ private const val MAX_ATTEMPTS = 4
 private const val MAX_RETRIES_PER_POLL = 10
 private const val REQUEST_TIMEOUT_MS = 5_000L
 
-@Component
 class PlaidCorrectionQueue(
     cursorManager: CursorManager,
     private val syncHelper: SyncHelper,

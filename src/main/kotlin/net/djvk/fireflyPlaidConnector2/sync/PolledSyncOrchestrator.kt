@@ -4,18 +4,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.config.PolledSyncProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.plaidExternalId
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
-import org.springframework.stereotype.Component
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.minutes
 
-typealias IntervalMinutes = Int
 typealias PlaidSyncCursor = String
 
 /**
@@ -24,12 +21,8 @@ typealias PlaidSyncCursor = String
  * Handles the "polled" sync mode, which periodically polls for new transactions and processes them.
  * This class coordinates the different components involved in the sync process.
  */
-@ConditionalOnProperty(name = ["fireflyPlaidConnector2.syncMode"], havingValue = "polled")
-@Component
 class PolledSyncOrchestrator(
-    @Value("\${fireflyPlaidConnector2.polled.syncFrequencyMinutes}")
-    private val syncFrequencyMinutes: IntervalMinutes,
-
+    private val properties: PolledSyncProperties,
     private val syncHelper: SyncHelper,
     private val cursorManager: CursorManager,
     private val plaidSyncService: PlaidSyncService,
@@ -114,6 +107,7 @@ class PolledSyncOrchestrator(
                 // Get account mappings for the polling loop
                 val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
                 val cursorMap = cursorManager.readCursorMap()
+                val syncFrequencyMinutes = properties.syncFrequencyMinutes
 
                 /**
                  * Periodic polling loop
@@ -139,6 +133,6 @@ class PolledSyncOrchestrator(
     override fun destroy() {
         logger.info("Shutting down ${this::class}")
         terminated.set(true)
-        mainJob.cancel()
+        if (::mainJob.isInitialized) mainJob.cancel()
     }
 }
