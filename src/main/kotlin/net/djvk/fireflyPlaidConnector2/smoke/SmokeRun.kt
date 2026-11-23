@@ -47,7 +47,7 @@ internal class SmokeRun(private val showDetails: Boolean) : AutoCloseable {
         Runtime.getRuntime().addShutdownHook(shutdownHook)
     }
 
-    fun withFirefly(action: (SmokeFirefly) -> Unit) {
+    fun <T> withFirefly(action: (SmokeFirefly) -> T): T {
         work.resolve("empty.env").writeText("")
         work.resolve("compose.yml").writeText(resource("compose.yml"))
         docker(listOf("docker", "info", "--format", "{{.ServerVersion}}"), "Docker connectivity check", 15)
@@ -77,7 +77,7 @@ internal class SmokeRun(private val showDetails: Boolean) : AutoCloseable {
                 ?: throw SmokeFailure("Firefly bootstrap did not return a personal access token." + diagnostic(bootstrap))
             val firefly = SmokeFirefly(http, baseUrl, fireflyToken, showDetails)
             firefly.request("GET", "/about")
-            action(firefly)
+            return action(firefly)
         } catch (error: Exception) {
             if (showDetails) {
                 runCatching { docker(compose + listOf("logs", "--no-color", "--tail", "40"), "Firefly logs", 15) }

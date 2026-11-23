@@ -75,31 +75,24 @@ class PolledSyncOrchestrator(
             listOfNotNull(it.original.externalId, it.replacement.transactions.single().externalId)
         }.toSet()
 
-        // Fetch existing Firefly transactions
-        val existingFireflyTxs = fireflyTransactionService.fetchExistingFireflyTransactions()
-
-        // Process Plaid transactions
         val plaidTransactions = plaidSyncService.processPlaidTransactions(
             accountAccessTokenSequence,
             nextCursors,
             requireComplete = pending.isNotEmpty(),
         )
 
-        // Convert Plaid transactions to Firefly format
-        logger.trace("Converting Plaid transactions to Firefly transactions")
-        val convertResult = converter.convertPollSync(
-            accountMap,
-            plaidTransactions.created.filter {
-                plaidExternalId(it.transactionId) !in recoveredExternalIds
-            },
-            existingFireflyTxs,
-        )
-        logger.debug("Conversion result: {} creates, {} transfer updates", convertResult.creates.size, convertResult.updates.size)
-        fireflyTransactionService.processFireflyCreatesAndTransfers(
-            convertResult.creates,
-            convertResult.updates,
-            existingFireflyTxs,
-        )
+        val additions = plaidTransactions.created.filter { plaidExternalId(it.transactionId) !in recoveredExternalIds }
+        if (additions.isNotEmpty()) {
+            val existingFireflyTxs = fireflyTransactionService.fetchExistingFireflyTransactions()
+            logger.trace("Converting Plaid transactions to Firefly transactions")
+            val convertResult = converter.convertPollSync(accountMap, additions, existingFireflyTxs)
+            logger.debug("Conversion result: {} creates, {} transfer updates", convertResult.creates.size, convertResult.updates.size)
+            fireflyTransactionService.processFireflyCreatesAndTransfers(
+                convertResult.creates,
+                convertResult.updates,
+                existingFireflyTxs,
+            )
+        }
         correctionQueue.process(accountMap, plaidTransactions, cursorMap, nextCursors)
 
         // Update cursor map after successful processing

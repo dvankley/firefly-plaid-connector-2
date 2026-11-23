@@ -119,6 +119,7 @@ internal class TransferReplacementRecoveryTest {
         runPoll(firefly)
 
         assertCommitted(firefly, expectedPosts = 1)
+        assertEquals(0, firefly.scans)
     }
 
     @Test
@@ -198,10 +199,9 @@ internal class TransferReplacementRecoveryTest {
             PlaidTransactionResult(if (alreadyCommitted) emptyList() else added, emptyList(), emptyList())
         }
         whenever(converter.convertPollSync(any(), any(), any())).thenAnswer {
-            assertEquals(if (alreadyCommitted || restoring) emptyList() else added, it.getArgument(1))
-            TransactionConverter.ConvertPollSyncResult(
-                emptyList(), if (alreadyCommitted || restoring) emptyList() else listOf(update),
-            )
+            assertFalse(alreadyCommitted || restoring)
+            assertEquals(added, it.getArgument(1))
+            TransactionConverter.ConvertPollSyncResult(emptyList(), listOf(update))
         }
         val queue = PlaidCorrectionQueue(cursor, helper, converter)
         PolledSyncOrchestrator(30, helper, cursor, plaid, service, converter, journal, queue)
@@ -217,14 +217,16 @@ internal class TransferReplacementRecoveryTest {
         var posts = 0
         var deletes = 0
         var searches = 0
+        var scans = 0
         private val mapper = jacksonObjectMapper().apply(ApiClient.JSON_DEFAULT)
         private val headers = headersOf(HttpHeaders.ContentType, "application/json")
 
         val engine = MockEngine { request ->
             when (request.method to request.url.encodedPath) {
-                HttpMethod.Get to "/api/v1/transactions" -> respond(
-                    transactionsJson(listOfNotNull(original.takeIf { originalExists })), headers = headers,
-                )
+                HttpMethod.Get to "/api/v1/transactions" -> {
+                    scans++
+                    respond(transactionsJson(listOfNotNull(original.takeIf { originalExists })), headers = headers)
+                }
                 HttpMethod.Get to "/api/v1/search/transactions" -> {
                     searches++
                     assertEquals("external_id_is:plaid-new", request.url.parameters["query"])

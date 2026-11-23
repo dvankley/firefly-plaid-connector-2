@@ -419,18 +419,19 @@ imports newer dates through today. The smoke build excludes local profiles from 
 and JAR.
 
 Live mode uses the profile's `plaid` credentials and `accounts` mappings. The Plaid URL defaults to
-Production when omitted. The command creates one fresh USD asset account per mapping and uses the
-temporary Firefly URL and token. It runs batch mode twice with initial balance lookups disabled.
-The first run must import at least one transaction. The second run checks that the original rows
-are intact and that every Plaid external ID is unique. If the source gains transactions during the
-test, the command reports the new rows by count.
+Production when omitted. Before starting Docker, the command checks every mapping against its
+Plaid Item and reports any invalid mapping by its position in the profile. It then creates one
+fresh USD asset account per mapping and runs batch mode twice with initial balance lookups disabled.
+The rerun checks that the original rows are intact and that every Plaid external ID is unique.
+If the source gains transactions during the test, the command reports the new rows by count.
 
 The command then runs one poll from an empty cursor against the same Firefly stack. The poll reads
 Plaid's initial history and imports transactions dated after the batch cutoff through today. It
-checks the saved cursor for each Plaid item and the uniqueness of Firefly external IDs. If Plaid has
-no nonzero transactions in the polled window, the write check is inconclusive. When Plaid returns
-eligible transactions, the poll must add or update at least one Firefly row. The cursor directory
-is temporary.
+checks the saved cursor for each Plaid Item and the uniqueness of Firefly external IDs. Before each
+import phase, it reads the eligible Plaid transactions for that date window and verifies that their
+Firefly writes belong to the expected accounts. A matched transfer can cover both Plaid legs.
+If any mapping has no eligible activity in either window, the live run reports inconclusive write
+coverage and exits with status 2. The cursor directory is temporary.
 
 The command prints counts and error summaries for live runs. It discards the temporary credentials,
 connector output, and Firefly database on exit.

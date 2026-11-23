@@ -25,42 +25,41 @@ class FireflyTransactionService(
     private val existingFireflyPullWindowDays: Int
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
-    private val fireflyPageCountMax = 20
 
     /**
      * Fetches all Firefly transactions within the configured window.
      */
     suspend fun fetchExistingFireflyTransactions(): List<TransactionRead> {
         val existingFireflyTxs = mutableListOf<TransactionRead>()
-        val transferWindowStart = LocalDate.now().minusDays(existingFireflyPullWindowDays.toLong())
+        val transferWindowEnd = LocalDate.now()
+        val transferWindowStart = transferWindowEnd.minusDays(existingFireflyPullWindowDays.toLong())
 
-        var fireflyTxPage = 0
-        do {
-            logger.debug("Fetching page $fireflyTxPage of Firefly transactions with window starting at $transferWindowStart")
-            val page = fireflyTxPage++
+        var page = 1
+        while (true) {
+            logger.debug("Fetching page $page of Firefly transactions with window starting at $transferWindowStart")
             val response = fireflyApiWrapper.executeRequest("list Firefly transactions page $page") {
                 fireflyTxApi.listTransaction(
                     page,
                     transferWindowStart,
-                    LocalDate.now(),
+                    transferWindowEnd,
                     TransactionTypeFilter.all,
                 ).body()
             }
-            val pagination = response.meta.pagination
-
             logger.debug("Fetched ${response.data.size} recent Firefly transactions")
+
+            val pagination = response.meta.pagination
+            if (pagination == null) {
+                check(page == 1) { "Missing Firefly pagination metadata for requested page $page" }
+                return response.data
+            }
+            check(pagination.currentPage == page && pagination.totalPages >= page) {
+                "Invalid Firefly pagination for requested page $page: received page ${pagination.currentPage} of ${pagination.totalPages}"
+            }
+
             existingFireflyTxs.addAll(response.data)
-        } while (pagination != null &&
-            pagination.currentPage < pagination.totalPages &&
-            // This condition is a failsafe to avoid an infinite loop
-            fireflyTxPage < fireflyPageCountMax
-        )
-        
-        if (fireflyTxPage >= fireflyPageCountMax) {
-            throw RuntimeException("Exceeded Firefly failsafe max page count $fireflyPageCountMax")
+            if (pagination.currentPage == pagination.totalPages) return existingFireflyTxs
+            page = pagination.currentPage + 1
         }
-        
-        return existingFireflyTxs
     }
 
     suspend fun processFireflyCreatesAndTransfers(

@@ -29,7 +29,11 @@ internal fun expect(label: String, actual: Any?, expected: Any?) {
 internal object SmokeTestCommand {
     private val liveOptions = setOf("profile", "batch-lookback-days", "polled-lookback-days")
 
-    fun run(arguments: Array<String>): Int {
+    fun run(
+        arguments: Array<String>,
+        activeAccounts: (LiveSmokePlaid, String) -> Set<String> = LiveSmokePlaid::activeAccounts,
+        createSmokeRun: (Boolean) -> SmokeRun = ::SmokeRun,
+    ): Int {
         return try {
             val args = DefaultApplicationArguments(*arguments)
             val supportedOptions = liveOptions + setOf("help", "live")
@@ -45,6 +49,8 @@ internal object SmokeTestCommand {
                     --profile=PATH            Required Spring YAML profile for a live run.
                     --batch-lookback-days=N   Required days before today to start the batch.
                     --polled-lookback-days=N  Required days before today to end the batch and set the poll cutoff.
+
+                    Exit status 2 indicates inconclusive live write coverage.
                 """.trimIndent())
                 return 0
             }
@@ -64,15 +70,31 @@ internal object SmokeTestCommand {
                 null
             }
 
-            SmokeRun(showDetails = !live).use { run ->
+            if (settings != null) {
+                validateLiveSmokeMappings(settings.accounts) { activeAccounts(settings.plaid, it) }
+                val itemCount = settings.accounts.map { it.accessToken }.distinct().size
+                println("Verified ${settings.accounts.size} configured Plaid mapping(s) across $itemCount Item(s).")
+            }
+
+            val complete = createSmokeRun(!live).use { run ->
                 run.withFirefly { firefly ->
                     firefly.request("POST", "/currencies/USD/primary")
                     expect("Transaction count in fresh Firefly", firefly.transactions().size, 0)
-                    if (settings == null) exerciseSynthetic(run, firefly) else exerciseLive(run, firefly, settings)
+                    if (settings == null) {
+                        exerciseSynthetic(run, firefly)
+                        true
+                    } else {
+                        exerciseLive(run, firefly, settings)
+                    }
                 }
             }
-            println("Smoke test passed.")
-            0
+            if (complete) {
+                println("Smoke test passed.")
+                0
+            } else {
+                println("Smoke test inconclusive. At least one mapping had no eligible activity in a test window.")
+                2
+            }
         } catch (error: Exception) {
             System.err.println("Smoke test failed: ${error.message}")
             error.suppressed.forEach { System.err.println("Cleanup failed: ${it.message}") }
@@ -94,7 +116,8 @@ internal object SmokeTestCommand {
 }
 
 private data class LiveProfile(
-    val accounts: List<Map<String, String>>,
+    val accounts: List<LiveSmokeAccount>,
+    val plaid: LiveSmokePlaid,
     val batchStart: LocalDate,
     val cutoff: LocalDate,
     val polledEnd: LocalDate,
@@ -133,10 +156,9 @@ private fun readLiveProfile(path: Path, batchLookback: Int, polledLookback: Int)
     require(url in setOf("https://production.plaid.com", "https://sandbox.plaid.com")) {
         "Live mode expects an official Plaid Production or Sandbox HTTPS URL."
     }
-    val plaidSettings = mutableMapOf<String, Any>("url" to url)
-    for (key in listOf("clientId", "secret")) {
-        plaidSettings[key] = requiredString(plaid, key, "plaid")
-    }
+    val clientId = requiredString(plaid, "clientId", "plaid")
+    val secret = requiredString(plaid, "secret", "plaid")
+    val plaidSettings = mutableMapOf<String, Any>("url" to url, "clientId" to clientId, "secret" to secret)
     for (key in listOf("batchSize", "maxRetries")) {
         if (key in plaid) plaidSettings[key] = positiveInt(plaid[key], "plaid.$key")
     }
@@ -146,9 +168,12 @@ private fun readLiveProfile(path: Path, batchLookback: Int, polledLookback: Int)
     val accounts = configuredAccounts.mapIndexed { index, entry ->
         val label = "account ${index + 1}"
         val account = entry as? Map<*, *> ?: throw SmokeFailure("Live profile $label must be a mapping.")
-        listOf("plaidAccountId", "plaidItemAccessToken").associateWith { requiredString(account, it, label) }
+        LiveSmokeAccount(
+            requiredString(account, "plaidAccountId", label),
+            requiredString(account, "plaidItemAccessToken", label),
+        )
     }
-    require(accounts.map { it.getValue("plaidAccountId") }.toSet().size == accounts.size) {
+    require(accounts.map { it.plaidAccountId }.toSet().size == accounts.size) {
         "Live profile contains duplicate Plaid account IDs."
     }
 
@@ -161,6 +186,7 @@ private fun readLiveProfile(path: Path, batchLookback: Int, polledLookback: Int)
         mapOf("timeZone" to timeZone, "plaid" to plaidSettings)
     return LiveProfile(
         accounts = accounts,
+        plaid = LiveSmokePlaid(url, clientId, secret),
         batchStart = today.minusDays(batchLookback.toLong()),
         cutoff = today.minusDays(polledLookback.toLong()),
         polledEnd = today,
@@ -172,10 +198,12 @@ private fun readLiveProfile(path: Path, batchLookback: Int, polledLookback: Int)
 private fun positiveInt(value: Any?, field: String): Int = (value as? Int)?.takeIf { it > 0 }
     ?: throw SmokeFailure("Live profile field $field must be a positive integer.")
 
-private fun exerciseLive(run: SmokeRun, firefly: SmokeFirefly, profile: LiveProfile) {
+private fun exerciseLive(run: SmokeRun, firefly: SmokeFirefly, profile: LiveProfile): Boolean {
     val cutoff = profile.cutoff
-    val accounts = profile.accounts.mapIndexed { index, account ->
-        account + ("fireflyAccountId" to firefly.createAccount("Smoke Asset ${index + 1}"))
+    val fireflyAccountIds = profile.accounts.indices.map { firefly.createAccount("Smoke Asset ${it + 1}") }
+    val accounts = profile.accounts.zip(fireflyAccountIds).map { (account, fireflyAccountId) ->
+        mapOf("plaidAccountId" to account.plaidAccountId, "plaidItemAccessToken" to account.accessToken,
+            "fireflyAccountId" to fireflyAccountId)
     }
     val settings = profile.connectorSettings + ("accounts" to accounts)
     val batchSettings = settings + mapOf("syncMode" to "batch", "batch" to mapOf("setInitialBalance" to false))
@@ -185,11 +213,10 @@ private fun exerciseLive(run: SmokeRun, firefly: SmokeFirefly, profile: LiveProf
         "--fireflyPlaidConnector2.batch.maxSyncDays=${ChronoUnit.DAYS.between(profile.batchStart, cutoff)}",
     )
     println("Live Plaid batch import for ${accounts.size} account(s) from ${profile.batchStart} through $cutoff")
+    val batchEligible = profile.plaid.eligibleTransactions(profile.accounts, profile.batchStart, cutoff)
     run.connector(firefly, batchSettings, batchArguments)
     val imported = firefly.transactions()
-    if (imported.isEmpty()) {
-        throw SmokeFailure("No transactions were imported. Increase --batch-lookback-days to widen the batch window.")
-    }
+    val batchComplete = reportLiveSmokeCoverage("Batch", profile.accounts, fireflyAccountIds, batchEligible, imported)
     println("Imported ${imported.size} transaction(s). Rerunning the live batch.")
     run.connector(firefly, batchSettings, batchArguments)
     val after = firefly.transactions()
@@ -207,8 +234,9 @@ private fun exerciseLive(run: SmokeRun, firefly: SmokeFirefly, profile: LiveProf
         "--fireflyPlaidConnector2.polled.initialBackfillAfter=$cutoff",
         "--fireflyPlaidConnector2.polled.initialBackfillThrough=${profile.polledEnd}",
     )
-    val itemTokens = profile.accounts.map { it.getValue("plaidItemAccessToken") }.toSet()
+    val itemTokens = profile.accounts.map { it.accessToken }.toSet()
     println("Live Plaid first poll for ${itemTokens.size} item(s), importing after $cutoff through ${profile.polledEnd}")
+    val polledEligible = profile.plaid.eligibleTransactions(profile.accounts, cutoff.plusDays(1), profile.polledEnd)
     val eligible = run.connector(firefly, settings + mapOf("syncMode" to "polled", "polled" to polled), polledArguments)
         ?: throw SmokeFailure("The first poll did not report its backfill transaction count.")
     val cursors = runBlocking { CursorManager(run.work.toString()).readCursorMap() }
@@ -220,11 +248,9 @@ private fun exerciseLive(run: SmokeRun, firefly: SmokeFirefly, profile: LiveProf
     val added = afterPoll.keys.count { it !in after }
     val removed = after.keys.count { it !in afterPoll }
     val updated = afterPoll.count { (id, transaction) -> id in after && after[id] != transaction }
-    println("First poll saved cursors for all ${itemTokens.size} item(s). " +
+    println("First poll reported $eligible eligible transaction(s) and saved cursors for all ${itemTokens.size} item(s). " +
         "Firefly transactions: $added added, $updated updated, $removed removed.")
-    if (eligible == 0) {
-        println("Polled write check inconclusive. Plaid returned no nonzero transactions in the polled window.")
-    } else if (added == 0 && updated == 0) {
-        throw SmokeFailure("The poll wrote no Firefly rows for $eligible eligible Plaid transactions.")
-    }
+    val writes = afterPoll.filter { (id, transaction) -> after[id] != transaction }
+    val pollComplete = reportLiveSmokeCoverage("Poll", profile.accounts, fireflyAccountIds, polledEligible, writes)
+    return batchComplete && pollComplete
 }
