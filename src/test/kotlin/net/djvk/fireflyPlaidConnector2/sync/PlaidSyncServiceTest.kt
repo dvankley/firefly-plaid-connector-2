@@ -5,10 +5,15 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.plugins.ClientRequestException
+import io.ktor.client.plugins.HttpRequestTimeoutException
+import io.ktor.client.plugins.ServerResponseException
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.serialization.JsonConvertException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.api.RetryProperties
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapperTest.Companion.mockPlaid
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
@@ -26,6 +31,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.params.provider.NullSource
 import org.junit.jupiter.params.provider.ValueSource
@@ -34,9 +40,12 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.spy
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
+import java.net.ConnectException
 import java.time.LocalDate
 import java.util.stream.Stream
+import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 
 /**
  * Tests for the PlaidSyncService class.
@@ -113,8 +122,13 @@ class PlaidSyncServiceTest {
         assertEquals("done", cursors["token"])
     }
 
-    @Test
-    fun `second-page failure discards all staged changes and lets the healthy item advance`() = runBlocking {
+    @ParameterizedTest(name = "HTTP {0} after {1} attempt(s)")
+    @CsvSource("400, 1", "503, 2")
+    fun `second-page failure discards all staged changes and lets the healthy item advance`(
+        status: Int,
+        attempts: Int,
+    ) = runBlocking {
+        val failure = SyncExchange("failed", "page-two", HttpStatusCode.fromValue(status), "{}")
         val service = syncService(
             syncPage(
                 "failed", "saved", "page-two", hasMore = true,
@@ -122,8 +136,9 @@ class PlaidSyncServiceTest {
                 modified = listOf("discard-modification"),
                 removed = listOf("discard-removal"),
             ),
-            syncError("failed", "page-two"),
+            *Array(attempts) { failure },
             syncPage("healthy", "healthy-saved", "healthy-next", added = listOf("keep-add")),
+            retryProperties = TWO_ATTEMPTS,
         )
         val items = sequenceOf("failed" to listOf("mapped"), "healthy" to listOf("mapped"))
         val cursors = mutableMapOf("failed" to "saved", "healthy" to "healthy-saved")
@@ -134,6 +149,81 @@ class PlaidSyncServiceTest {
         assertEquals(emptyList<Transaction>(), result.updated)
         assertEquals(0, result.deleted.size)
         assertEquals(mapOf("failed" to "saved", "healthy" to "healthy-next"), cursors)
+    }
+
+    @ParameterizedTest
+    @MethodSource("transportFailures")
+    fun `exhausted transport failure lets the healthy item advance`(failure: Exception) = runBlocking {
+        val failedAttempt = SyncExchange("failed", "saved", failure = failure)
+        val service = syncService(
+            failedAttempt,
+            failedAttempt,
+            syncPage("healthy", "healthy-saved", "healthy-next", added = listOf("keep-add")),
+            retryProperties = TWO_ATTEMPTS,
+        )
+        val items = sequenceOf("failed" to listOf("mapped"), "healthy" to listOf("mapped"))
+        val cursors = mutableMapOf("failed" to "saved", "healthy" to "healthy-saved")
+
+        val result = service.processPlaidTransactions(items, cursors)
+
+        assertEquals(listOf("keep-add"), result.created.map { it.transactionId })
+        assertEquals(mapOf("failed" to "saved", "healthy" to "healthy-next"), cursors)
+    }
+
+    @ParameterizedTest(name = "Recovery required: {0}")
+    @ValueSource(booleans = [false, true])
+    fun `exhausted server failure stops a strict poll or transfer recovery`(requireComplete: Boolean) = runBlocking {
+        val unavailable = SyncExchange("failed", "saved", HttpStatusCode.ServiceUnavailable)
+        val service = syncService(
+            unavailable,
+            unavailable,
+            allowItemToFail = requireComplete,
+            retryProperties = TWO_ATTEMPTS,
+        )
+        val items = sequenceOf("failed" to listOf("mapped"), "healthy" to listOf("mapped"))
+        val savedCursors = mapOf("failed" to "saved", "healthy" to "healthy-saved")
+        val cursors = savedCursors.toMutableMap()
+
+        val failure = assertFails { service.processPlaidTransactions(items, cursors, requireComplete) }
+
+        val serverFailure = if (requireComplete) {
+            assertIs<IllegalStateException>(failure)
+            assertEquals("Plaid replay is incomplete while transfer replacements are pending", failure.message)
+            failure.cause
+        } else {
+            failure
+        }
+        assertEquals(HttpStatusCode.ServiceUnavailable, assertIs<ServerResponseException>(serverFailure).response.status)
+        assertEquals(savedCursors, cursors)
+    }
+
+    @Test
+    fun `cancellation stops the poll with allowItemToFail enabled`() = runBlocking {
+        val cancellation = CancellationException("Plaid fetch cancelled")
+        val service = syncService(
+            SyncExchange("failed", "saved", failure = cancellation),
+            retryProperties = TWO_ATTEMPTS,
+        )
+        val items = sequenceOf("failed" to listOf("mapped"), "healthy" to listOf("mapped"))
+        val savedCursors = mapOf("failed" to "saved", "healthy" to "healthy-saved")
+        val cursors = savedCursors.toMutableMap()
+
+        val failure = assertFailsWith<CancellationException> { service.processPlaidTransactions(items, cursors) }
+
+        assertEquals(cancellation.message, failure.message)
+        assertEquals(savedCursors, cursors)
+    }
+
+    @Test
+    fun `response decoding failure stops the poll with allowItemToFail enabled`() = runBlocking {
+        val service = syncService(SyncExchange("item", "saved", body = "{"))
+        val cursors = mutableMapOf("item" to "saved")
+
+        assertFailsWith<JsonConvertException> {
+            service.processPlaidTransactions(sequenceOf("item" to listOf("mapped")), cursors)
+        }
+
+        assertEquals(mapOf("item" to "saved"), cursors)
     }
 
     @Test
@@ -226,8 +316,9 @@ class PlaidSyncServiceTest {
     private data class SyncExchange(
         val item: String,
         val cursor: String?,
-        val status: HttpStatusCode,
-        val body: String,
+        val status: HttpStatusCode = HttpStatusCode.OK,
+        val body: String = "",
+        val failure: Exception? = null,
     )
 
     private fun syncPage(
@@ -259,6 +350,7 @@ class PlaidSyncServiceTest {
         vararg exchanges: SyncExchange,
         allowItemToFail: Boolean = true,
         initialBackfillAfter: LocalDate? = null,
+        retryProperties: RetryProperties = RetryProperties(maxAttempts = 1, initialDelayMs = 0),
     ): PlaidSyncService {
         val remaining = exchanges.iterator()
         val engine = MockEngine { request ->
@@ -266,10 +358,11 @@ class PlaidSyncServiceTest {
             val body = mapper.readTree(request.body.toByteArray())
             assertEquals(expected.item, body.path("access_token").asText())
             assertEquals(expected.cursor, body.path("cursor").asText(null))
+            expected.failure?.let { throw it }
             respond(expected.body, expected.status, headersOf(HttpHeaders.ContentType, "application/json"))
         }
         return PlaidSyncService(
-            mockPlaid(engine),
+            mockPlaid(engine, retryProperties),
             PlaidTransactionProperties(100),
             testPolledProperties(allowItemToFail = allowItemToFail, initialBackfillAfter = initialBackfillAfter),
         )
@@ -279,6 +372,13 @@ class PlaidSyncServiceTest {
         private const val MUTATION_ERROR = "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
         private const val PLAID_BATCH_SIZE = 100
         private const val ALLOW_ITEM_TO_FAIL = true
+        private val TWO_ATTEMPTS = RetryProperties(maxAttempts = 2, initialDelayMs = 0)
+
+        @JvmStatic
+        fun transportFailures(): Stream<Exception> = Stream.of(
+            ConnectException("Connection refused"),
+            HttpRequestTimeoutException("https://plaid.example/transactions/sync", 1_000),
+        )
 
         @JvmStatic
         fun provideGetTransactionSyncRequestTestCases(): Stream<Arguments> {

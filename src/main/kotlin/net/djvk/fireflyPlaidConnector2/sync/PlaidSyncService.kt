@@ -3,7 +3,10 @@ package net.djvk.fireflyPlaidConnector2.sync
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.client.plugins.ClientRequestException
+import io.ktor.client.plugins.ResponseException
 import io.ktor.client.statement.bodyAsText
+import kotlinx.coroutines.CancellationException
+import net.djvk.fireflyPlaidConnector2.api.RetryExecutor
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
@@ -135,54 +138,64 @@ class PlaidSyncService(
     ): ItemUpdate? {
         val initialBackfillThrough = properties.initialBackfillThrough
         var restarts = 0
-        while (true) {
+        itemAttempt@ while (true) {
             var cursor = startingCursor
             val added = mutableListOf<PlaidTransaction>()
             val modified = mutableListOf<PlaidTransaction>()
             val removed = mutableListOf<RemovedTransaction>()
 
-            try {
-                do {
-                    val page = executeTransactionSyncRequest(accessToken, cursor)
-                    cursor = page.nextCursor
-                    logger.debug(
-                        "Received Plaid sync page with {} adds, {} modifications and {} removals",
-                        page.added.size, page.modified.size, page.removed.size,
-                    )
-                    if (accountIds == null) continue
-
-                    if (backfillAfter != null) {
-                        // The initial snapshot contains adds. Apply the configured date range.
-                        page.added.filterTo(added) {
-                            it.accountId in accountIds && it.date.isAfter(backfillAfter) &&
-                                (initialBackfillThrough == null || it.date <= initialBackfillThrough)
-                        }
-                    } else {
-                        page.added.filterTo(added) { it.accountId in accountIds }
-                        page.modified.filterTo(modified) { it.accountId in accountIds }
-                        page.removed.filterTo(removed) { it.accountId in accountIds }
+            do {
+                val page = try {
+                    executeTransactionSyncRequest(accessToken, cursor)
+                } catch (failure: Exception) {
+                    if (failure is CancellationException) throw failure
+                    if (failure is ClientRequestException && restarts < MAX_PAGINATION_RESTARTS && isPaginationMutation(failure)) {
+                        restarts++
+                        logger.warn(
+                            "Plaid transactions changed during pagination. Restarting item update ({}/{})",
+                            restarts, MAX_PAGINATION_RESTARTS,
+                        )
+                        continue@itemAttempt
                     }
-                } while (page.hasMore)
-            } catch (failure: ClientRequestException) {
-                if (restarts < MAX_PAGINATION_RESTARTS && isPaginationMutation(failure)) {
-                    restarts++
-                    logger.warn(
-                        "Plaid transactions changed during pagination. Restarting item update ({}/{})",
-                        restarts, MAX_PAGINATION_RESTARTS,
-                    )
-                    continue
+                    if (!properties.allowItemToFail || !isItemFetchFailure(failure)) throw failure
+                    if (requireComplete) {
+                        throw IllegalStateException("Plaid replay is incomplete while transfer replacements are pending", failure)
+                    }
+                    val reason = (failure as? ResponseException)?.response?.status?.toString()
+                        ?: failure.javaClass.simpleName
+                    logger.warn("Plaid item query failed with allowItemToFail enabled ({})", reason)
+                    return null
                 }
-                if (!properties.allowItemToFail) throw failure
-                if (requireComplete) {
-                    throw IllegalStateException("Plaid replay is incomplete while transfer replacements are pending", failure)
+                cursor = page.nextCursor
+                logger.debug(
+                    "Received Plaid sync page with {} adds, {} modifications and {} removals",
+                    page.added.size, page.modified.size, page.removed.size,
+                )
+                if (accountIds == null) continue
+
+                if (backfillAfter != null) {
+                    // The initial snapshot contains adds. Apply the configured date range.
+                    page.added.filterTo(added) {
+                        it.accountId in accountIds && it.date.isAfter(backfillAfter) &&
+                            (initialBackfillThrough == null || it.date <= initialBackfillThrough)
+                    }
+                } else {
+                    page.added.filterTo(added) { it.accountId in accountIds }
+                    page.modified.filterTo(modified) { it.accountId in accountIds }
+                    page.removed.filterTo(removed) { it.accountId in accountIds }
                 }
-                logger.warn("Plaid item query failed with allowItemToFail enabled (HTTP {})", failure.response.status)
-                return null
-            }
+            } while (page.hasMore)
 
             val finalCursor = cursor?.takeUnless { it.isBlank() } ?: return null
             return ItemUpdate(finalCursor, PlaidTransactionResult(added, modified, removed))
         }
+    }
+
+    private fun isItemFetchFailure(failure: Exception): Boolean = when (failure) {
+        is ClientRequestException -> true
+        // Jackson decoding errors inherit from IOException.
+        is JsonProcessingException -> false
+        else -> RetryExecutor.defaultIsRetryable(failure)
     }
 
     private suspend fun isPaginationMutation(failure: ClientRequestException): Boolean {
