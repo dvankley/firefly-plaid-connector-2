@@ -3,10 +3,14 @@ package net.djvk.fireflyPlaidConnector2.sync
 import net.djvk.fireflyPlaidConnector2.api.firefly.FireflyApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
+import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.config.PolledSyncProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
+import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter.TransferUpdate
+import net.djvk.fireflyPlaidConnector2.transactions.plaidTransactionId
+import net.djvk.fireflyPlaidConnector2.transactions.plaidTransferReference
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
@@ -60,7 +64,7 @@ class FireflyTransactionService(
 
     suspend fun processFireflyCreatesAndTransfers(
         creates: List<FireflyTransactionDto>,
-        transferUpdates: List<FireflyTransactionDto>,
+        transferUpdates: List<TransferUpdate>,
         existing: List<TransactionRead>,
     ) {
         syncHelper.optimisticInsertBatchIntoFirefly(creates)
@@ -76,21 +80,20 @@ class FireflyTransactionService(
      *  broken, but such is life (and this behavior has been around for a while at this point).
      */
     private suspend fun processFireflyTransferUpdates(
-        updates: List<FireflyTransactionDto>,
+        updates: List<TransferUpdate>,
         existing: List<TransactionRead>,
     ) {
         if (updates.isEmpty()) return
         val originals = existing.associateBy { it.id }
         val replacements = updates.map { update ->
-            val id = requireNotNull(update.id) { "Transfer replacement is missing its original Firefly ID" }
+            val id = requireNotNull(update.transaction.id) { "Transfer replacement is missing its original Firefly ID" }
             val original = requireNotNull(originals[id]) { "Missing original Firefly transaction $id" }
-            require(update.tx.amount.toBigDecimal().signum() > 0) { "Transfer replacement $id must have a positive amount" }
-            require(!update.tx.externalId.isNullOrBlank()) { "Transfer replacement $id is missing its external ID" }
-            require(update.tx.sourceId != null || !update.tx.sourceName.isNullOrBlank()) { "Missing transfer source for $id" }
-            require(update.tx.destinationId != null || !update.tx.destinationName.isNullOrBlank()) {
-                "Missing transfer destination for $id"
-            }
-            TransferReplacement(id, original.attributes.transactions.single(), update.toTransactionStore())
+            TransferReplacement(
+                originalId = id,
+                original = original.attributes.transactions.single(),
+                replacement = update.transaction.toTransactionStore(),
+                incomingPlaidTransactionId = update.incomingPlaidTransactionId,
+            ).also { validateTransferReplacement(it) }
         }
         replacementJournal.append(replacements)
         for (replacement in replacements) reconcileTransferReplacement(replacement)
@@ -102,8 +105,36 @@ class FireflyTransactionService(
         }
     }
 
-    private suspend fun reconcileTransferReplacement(entry: TransferReplacement) {
+    private fun validateTransferReplacement(entry: TransferReplacement): TransactionSplit {
+        val id = entry.originalId
         val intended = entry.replacement.transactions.single()
+        require(intended.type == TransactionTypeProperty.transfer) { "Replacement for $id must be a transfer" }
+        require(intended.amount.toBigDecimalOrNull()?.signum() == 1) { "Transfer replacement $id must have a positive amount" }
+        val sourceId = intended.sourceId?.toLongOrNull()
+        val destinationId = intended.destinationId?.toLongOrNull()
+        require(sourceId != null && sourceId > 0) { "Transfer replacement $id requires a valid source account ID" }
+        require(destinationId != null && destinationId > 0) { "Transfer replacement $id requires a valid destination account ID" }
+        require(sourceId != destinationId) { "Transfer replacement $id requires distinct account IDs" }
+
+        val incomingId = requireNotNull(plaidTransactionId(intended.externalId)) {
+            "Transfer replacement $id is missing its Plaid external ID"
+        }
+        // Older journal entries only stored the payload's external ID.
+        require(entry.incomingPlaidTransactionId == null || entry.incomingPlaidTransactionId == incomingId) {
+            "Transfer replacement $id has the wrong Plaid external ID"
+        }
+        val originalId = plaidTransactionId(entry.original.externalId)
+        if (originalId != null) {
+            require(originalId != incomingId) { "Transfer replacement $id requires distinct Plaid leg IDs" }
+            require(intended.internalReference == plaidTransferReference(originalId)) {
+                "Transfer replacement $id is missing the original Plaid leg reference"
+            }
+        }
+        return intended
+    }
+
+    private suspend fun reconcileTransferReplacement(entry: TransferReplacement) {
+        val intended = validateTransferReplacement(entry)
         val externalId = requireNotNull(intended.externalId)
         val matches = syncHelper.findTransactionsByExternalId(externalId).filter { it.id != entry.originalId }
         if (matches.isNotEmpty()) {
@@ -111,9 +142,8 @@ class FireflyTransactionService(
             check(
                 actual != null && actual.type == TransactionTypeProperty.transfer &&
                     actual.amount.toBigDecimal().compareTo(intended.amount.toBigDecimal()) == 0 &&
-                    (intended.sourceId?.let { it == actual.sourceId } ?: (intended.sourceName == actual.sourceName)) &&
-                    (intended.destinationId?.let { it == actual.destinationId } ?:
-                        (intended.destinationName == actual.destinationName))
+                    intended.sourceId == actual.sourceId && intended.destinationId == actual.destinationId &&
+                    (intended.internalReference == null || intended.internalReference == actual.internalReference)
             ) { "Conflicting Firefly transaction for transfer replacement $externalId" }
         }
         syncHelper.deleteBatchInFirefly(listOf(entry.originalId))

@@ -4,6 +4,7 @@ import io.ktor.http.*
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
+import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
 import net.djvk.fireflyPlaidConnector2.config.properties.TransactionStyleConfig
 import net.djvk.fireflyPlaidConnector2.constants.Direction
 import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum.Primary.*
@@ -214,7 +215,12 @@ class TransactionConverter(
 
     data class ConvertPollSyncResult(
         val creates: List<FireflyTransactionDto>,
-        val updates: List<FireflyTransactionDto>,
+        val updates: List<TransferUpdate>,
+    )
+
+    data class TransferUpdate(
+        val transaction: FireflyTransactionDto,
+        val incomingPlaidTransactionId: PlaidTransactionId,
     )
 
     /**
@@ -228,7 +234,7 @@ class TransactionConverter(
         logger.trace("Starting ${::convertPollSync.name}")
         val transferCandidateExistingFireflyTxs = filterFireflyCandidateTransferTxs(existingFireflyTxs)
         val creates = mutableListOf<FireflyTransactionDto>()
-        val updates = mutableListOf<FireflyTransactionDto>()
+        val updates = mutableListOf<TransferUpdate>()
 
         val wrappedCreates = transferMatcher.match(
             PlaidFireflyTransaction.normalizeByTransactionId(plaidCreatedTxs, transferCandidateExistingFireflyTxs, accountMap)
@@ -239,11 +245,8 @@ class TransactionConverter(
             wrappedCreates.size,
         )
 
-        /**
-         * Handle singles, which are transactions that didn't have any transfer pair matches
-         */
         for (create in wrappedCreates) {
-            val convertedSingle = when (create) {
+            val converted = when (create) {
                 is PlaidFireflyTransaction.PlaidTransaction -> convertSingle(create.plaidTransaction, accountMap)
 
                 // In both of these cases a Firefly transaction already exists. We don't need to do anything to it.
@@ -261,26 +264,25 @@ class TransactionConverter(
                 is PlaidFireflyTransaction.Transfer -> {
                     val fireflyComponent = create.fireflyTransaction
                     if (fireflyComponent != null) {
-                        convertDoubleFirefly(
-                            requirePlaidTransaction(create),
-                            fireflyComponent,
-                            accountMap,
+                        val oppositeLeg = if (create.deposit.fireflyTransaction != null) create.withdrawal else create.deposit
+                        val incoming = requirePlaidTransaction(oppositeLeg)
+                        updates.add(
+                            TransferUpdate(
+                                transaction = convertDoubleFirefly(incoming, fireflyComponent, accountMap),
+                                incomingPlaidTransactionId = incoming.transactionId,
+                            )
                         )
-                    } else {
-                        convertDoublePlaid(
-                            requirePlaidTransaction(create.deposit),
-                            requirePlaidTransaction(create.withdrawal),
-                            accountMap,
-                        )
+                        continue
                     }
+                    convertDoublePlaid(
+                        requirePlaidTransaction(create.deposit),
+                        requirePlaidTransaction(create.withdrawal),
+                        accountMap,
+                    )
                 }
             }
 
-            if (convertedSingle.id == null) {
-                creates.add(convertedSingle)
-            } else {
-                updates.add(convertedSingle)
-            }
+            creates.add(converted)
         }
 
         return ConvertPollSyncResult(creates, updates)

@@ -16,6 +16,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypePropert
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
+import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter.TransferUpdate
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -26,6 +27,7 @@ import org.mockito.kotlin.*
 import java.net.URI
 import java.time.LocalDate
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class FireflyTransactionServiceTest {
 
@@ -34,6 +36,19 @@ class FireflyTransactionServiceTest {
     private val replacementJournal: TransferReplacementJournal = mock()
     private val existingFireflyPullWindowDays = 30
     private val properties = testPolledProperties(existingFireflyPullWindowDays = existingFireflyPullWindowDays)
+    private val transferUpdate = TransferUpdate(
+        FireflyTransactionDto(
+            "transfer-update-id",
+            FireflyFixtures.getTransaction(
+                type = TransactionTypeProperty.transfer,
+                sourceId = "1",
+                destinationId = "2",
+                externalId = "plaid-new",
+                internalReference = "plaid-transfer-leg-old",
+            ).transactions.single(),
+        ),
+        incomingPlaidTransactionId = "new",
+    )
 
     private val fireflyTransactionService = FireflyTransactionService(
         fireflyTxApi,
@@ -68,23 +83,23 @@ class FireflyTransactionServiceTest {
         verifyNoMoreInteractions(fireflyTxApi)
     }
 
-    @Test
-    fun testProcessFireflyCreatesAndTransfers() {
+    @ParameterizedTest
+    @ValueSource(booleans = [true, false])
+    fun testProcessFireflyCreatesAndTransfers(hasOriginalPlaidId: Boolean) {
         runBlocking {
             // Setup
             val createTransaction = FireflyFixtures.getTransaction()
             val createTxSplit = createTransaction.transactions.first()
             val creates = listOf(FireflyTransactionDto(null, createTxSplit))
 
-            // Create a transfer update
-            val transferTransaction = FireflyFixtures.getTransaction(
-                type = TransactionTypeProperty.transfer, sourceId = "1", destinationId = "2", externalId = "plaid-new",
-            )
-            val transferTxSplit = transferTransaction.transactions.first()
-            val transferUpdate = FireflyTransactionDto("transfer-update-id", transferTxSplit)
+            val original = originalTransferLeg(externalId = if (hasOriginalPlaidId) "plaid-old" else null)
+            val transaction = if (hasOriginalPlaidId) transferUpdate.transaction else transferUpdate.transaction.let {
+                it.copy(tx = it.tx.copy(internalReference = null))
+            }
+            val update = transferUpdate.copy(transaction = transaction)
 
             fireflyTransactionService.processFireflyCreatesAndTransfers(
-                creates, listOf(transferUpdate), listOf(originalTransferLeg())
+                creates, listOf(update), listOf(original)
             )
 
             // Verify
@@ -94,7 +109,7 @@ class FireflyTransactionServiceTest {
             inOrder(replacementJournal, syncHelper) {
                 verify(replacementJournal).append(any())
                 verify(syncHelper).deleteBatchInFirefly(eq(listOf("transfer-update-id")))
-                verify(syncHelper).insertTransferReplacement(eq(transferUpdate.toTransactionStore()))
+                verify(syncHelper).insertTransferReplacement(eq(transaction.toTransactionStore()))
                 verify(replacementJournal).complete("transfer-update-id")
             }
 
@@ -104,13 +119,6 @@ class FireflyTransactionServiceTest {
     @Test
     fun testProcessFireflyCreatesAndTransfersHandlesDeleteFailure() {
         runBlocking {
-            // Setup a transfer update
-            val transferTransaction = FireflyFixtures.getTransaction(
-                type = TransactionTypeProperty.transfer, sourceId = "1", destinationId = "2", externalId = "plaid-new",
-            )
-            val transferTxSplit = transferTransaction.transactions.first()
-            val transferUpdate = FireflyTransactionDto("transfer-update-id", transferTxSplit)
-
             // Mock delete to throw exception
             whenever(syncHelper.deleteBatchInFirefly(eq(listOf("transfer-update-id"))))
                 .thenThrow(IllegalStateException("Delete failed"))
@@ -127,6 +135,42 @@ class FireflyTransactionServiceTest {
             verify(syncHelper, never()).insertTransferReplacement(any())
             verify(replacementJournal, never()).complete(any())
         }
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+        "1, new, plaid-new, plaid-transfer-leg-old, distinct account IDs",
+        "2, new, plaid-unrelated, plaid-transfer-leg-old, wrong Plaid external ID",
+        "2, new, plaid-new, , original Plaid leg reference",
+        "2, new, plaid-new, plaid-transfer-leg-unrelated, original Plaid leg reference",
+        "2, old, plaid-old, plaid-transfer-leg-old, distinct Plaid leg IDs",
+    )
+    fun `rejects invalid transfer replacements before journaling or deleting`(
+        destinationId: String,
+        incomingId: String,
+        externalId: String,
+        internalReference: String?,
+        expectedError: String,
+    ) = runBlocking {
+        val transaction = transferUpdate.transaction
+        val invalidUpdate = TransferUpdate(
+            transaction.copy(tx = transaction.tx.copy(
+                destinationId = destinationId, externalId = externalId, internalReference = internalReference,
+            )),
+            incomingPlaidTransactionId = incomingId,
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            fireflyTransactionService.processFireflyCreatesAndTransfers(
+                emptyList(), listOf(invalidUpdate), listOf(originalTransferLeg()),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains(expectedError))
+        verifyNoInteractions(replacementJournal)
+        verify(syncHelper, never()).findTransactionsByExternalId(any())
+        verify(syncHelper, never()).deleteBatchInFirefly(any())
+        verify(syncHelper, never()).insertTransferReplacement(any())
     }
 
     @Test
@@ -212,10 +256,10 @@ class FireflyTransactionServiceTest {
         links = ObjectLink(self = URI("https://firefly.test/api/v1/transactions/$id")),
     )
 
-    private fun originalTransferLeg() = TransactionRead(
+    private fun originalTransferLeg(externalId: String? = "plaid-old") = TransactionRead(
         type = "transactions",
         id = "transfer-update-id",
-        attributes = FireflyFixtures.getTransaction(sourceId = "1", externalId = "plaid-old"),
+        attributes = FireflyFixtures.getTransaction(sourceId = "1", externalId = externalId),
         links = ObjectLink(self = URI("https://firefly.test/api/v1/transactions/transfer-update-id")),
     )
 }

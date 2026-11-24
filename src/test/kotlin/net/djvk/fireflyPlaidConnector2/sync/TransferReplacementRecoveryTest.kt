@@ -1,5 +1,6 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
+import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -30,6 +31,7 @@ import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
+import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter.TransferUpdate
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.mockito.kotlin.any
@@ -62,8 +64,14 @@ internal class TransferReplacementRecoveryTest {
         externalId = "plaid-new",
         internalReference = "plaid-transfer-leg-old",
     ))
-    private val update = FireflyTransactionDto(original.id, transfer.attributes.transactions.single().copy(amount = "1111.22"))
-    private val intent = TransferReplacement(original.id, original.attributes.transactions.single(), update.toTransactionStore())
+    private val update = TransferUpdate(
+        FireflyTransactionDto(original.id, transfer.attributes.transactions.single().copy(amount = "1111.22")),
+        incomingPlaidTransactionId = "new",
+    )
+    private val intent = TransferReplacement(
+        original.id, original.attributes.transactions.single(), update.transaction.toTransactionStore(),
+        incomingPlaidTransactionId = update.incomingPlaidTransactionId,
+    )
     private val oldCursors = mapOf("token" to "old")
     private val nextCursors = mapOf("token" to "next")
     private val journalPath get() = directory.resolve("pending_transfer_replacements.json")
@@ -112,15 +120,57 @@ internal class TransferReplacementRecoveryTest {
     }
 
     @Test
-    fun restartAfterDeleteBeforePostUsesSavedPayload() = runBlocking {
+    fun restartAfterDeleteBeforePostUsesSavedLegacyPayload() = runBlocking {
         val cursor = seededCursor()
-        TransferReplacementJournal(cursor).append(listOf(intent))
+        seedLegacyJournal(cursor, intent)
         val firefly = FireflyServer().apply { originalExists = false }
 
         runPoll(firefly)
 
         assertCommitted(firefly, expectedPosts = 1)
         assertEquals(0, firefly.scans)
+    }
+
+    @Test
+    fun restartRejectsMalformedLegacyPayloadBeforeDeletingOriginal() = runBlocking {
+        val cursor = seededCursor()
+        val malformed = update.transaction.copy(tx = update.transaction.tx.copy(
+            destinationId = "10", externalId = "plaid-old",
+        ))
+        seedLegacyJournal(cursor, intent.copy(replacement = malformed.toTransactionStore()))
+        val firefly = FireflyServer()
+
+        val failure = assertFailsWith<IllegalArgumentException> { runPoll(firefly, cursor) }
+
+        assertTrue(failure.message.orEmpty().contains("distinct account IDs"))
+        assertTrue(firefly.originalExists)
+        assertEquals(0, firefly.searches)
+        assertEquals(0, firefly.deletes)
+        assertEquals(0, firefly.posts)
+        assertEquals(oldCursors, cursor.readCursorMap())
+        assertTrue(Files.exists(journalPath))
+    }
+
+    @Test
+    fun restartRejectsExistingTransferWithWrongOriginalLegReference() = runBlocking {
+        val cursor = seededCursor()
+        val journal = TransferReplacementJournal(cursor)
+        journal.append(listOf(intent))
+        val conflictingSplit = transfer.attributes.transactions.single().copy(internalReference = "plaid-transfer-leg-other")
+        val firefly = FireflyServer().apply {
+            transferExists = true
+            searchTransfer = transfer.copy(attributes = transfer.attributes.copy(transactions = listOf(conflictingSplit)))
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { runPoll(firefly, cursor) }
+
+        assertTrue(failure.message.orEmpty().contains("Conflicting Firefly transaction"))
+        assertTrue(firefly.originalExists)
+        assertEquals(1, firefly.searches)
+        assertEquals(0, firefly.deletes)
+        assertEquals(0, firefly.posts)
+        assertEquals(oldCursors, cursor.readCursorMap())
+        assertEquals(listOf(intent), journal.pendingFor(oldCursors))
     }
 
     @Test
@@ -163,6 +213,14 @@ internal class TransferReplacementRecoveryTest {
     }
 
     private suspend fun seededCursor() = CursorManager(directory.toString()).also { it.writeCursorMap(oldCursors) }
+
+    private suspend fun seedLegacyJournal(cursor: CursorManager, entry: TransferReplacement) {
+        TransferReplacementJournal(cursor).append(listOf(entry))
+        val mapper = jacksonObjectMapper()
+        val state = mapper.readTree(journalPath.toFile())
+        (state.required("replacements").single() as ObjectNode).remove("incomingPlaidTransactionId")
+        mapper.writeValue(journalPath.toFile(), state)
+    }
 
     private suspend fun assertCommitted(firefly: FireflyServer, expectedPosts: Int) {
         assertEquals(nextCursors, CursorManager(directory.toString()).readCursorMap())
@@ -212,6 +270,7 @@ internal class TransferReplacementRecoveryTest {
     private inner class FireflyServer {
         var originalExists = true
         var transferExists = false
+        var searchTransfer = transfer
         var rejectDelete = false
         var rejectCreate = false
         var loseCreateResponse = false
@@ -231,7 +290,7 @@ internal class TransferReplacementRecoveryTest {
                 HttpMethod.Get to "/api/v1/search/transactions" -> {
                     searches++
                     assertEquals("external_id_is:plaid-new", request.url.parameters["query"])
-                    respond(transactionsJson(listOfNotNull(transfer.takeIf { transferExists })), headers = headers)
+                    respond(transactionsJson(listOfNotNull(searchTransfer.takeIf { transferExists })), headers = headers)
                 }
                 HttpMethod.Delete to "/api/v1/transactions/1" -> {
                     deletes++

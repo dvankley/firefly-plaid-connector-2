@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.FireflyTransactionId
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionStore
+import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 
@@ -18,6 +19,7 @@ internal data class TransferReplacement(
     val original: TransactionSplit,
     val replacement: TransactionStore,
     val completed: Boolean = false,
+    val incomingPlaidTransactionId: PlaidTransactionId? = null,
 )
 
 class TransferReplacementJournal(cursorManager: CursorManager) {

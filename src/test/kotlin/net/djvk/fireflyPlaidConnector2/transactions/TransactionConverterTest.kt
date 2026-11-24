@@ -13,12 +13,14 @@ import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import net.djvk.fireflyPlaidConnector2.lib.defaultLocalNow
 import net.djvk.fireflyPlaidConnector2.lib.defaultOffsetNow
+import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter.TransferUpdate
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.params.provider.ValueSource
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
@@ -111,17 +113,20 @@ internal class TransactionConverterTest {
                     TransactionConverter.ConvertPollSyncResult(
                         creates = listOf(),
                         updates = listOf(
-                            FireflyTransactionDto(
-                                "fireflyTransactionId",
-                                FireflyFixtures.getTransaction(
-                                    type = TransactionTypeProperty.transfer,
-                                    amount = "1111.22",
-                                    externalId = "plaid-plaidTransactionId",
-                                    internalReference = "plaid-transfer-leg-existingWithdrawal",
-                                    sourceId = "2",
-                                    destinationId = "1",
-                                    currencyCode = "USD",
-                                ).transactions.first()
+                            TransferUpdate(
+                                FireflyTransactionDto(
+                                    "fireflyTransactionId",
+                                    FireflyFixtures.getTransaction(
+                                        type = TransactionTypeProperty.transfer,
+                                        amount = "1111.22",
+                                        externalId = "plaid-plaidTransactionId",
+                                        internalReference = "plaid-transfer-leg-existingWithdrawal",
+                                        sourceId = "2",
+                                        destinationId = "1",
+                                        currencyCode = "USD",
+                                    ).transactions.first()
+                                ),
+                                incomingPlaidTransactionId = "plaidTransactionId",
                             )
                         ),
                     ),
@@ -155,16 +160,19 @@ internal class TransactionConverterTest {
                     TransactionConverter.ConvertPollSyncResult(
                         creates = listOf(),
                         updates = listOf(
-                            FireflyTransactionDto(
-                                "fireflyTransactionId",
-                                FireflyFixtures.getTransaction(
-                                    type = TransactionTypeProperty.transfer,
-                                    amount = "1111.22",
-                                    externalId = "plaid-plaidTransactionId",
-                                    sourceId = "1",
-                                    destinationId = "2",
-                                    currencyCode = "USD",
-                                ).transactions.first()
+                            TransferUpdate(
+                                FireflyTransactionDto(
+                                    "fireflyTransactionId",
+                                    FireflyFixtures.getTransaction(
+                                        type = TransactionTypeProperty.transfer,
+                                        amount = "1111.22",
+                                        externalId = "plaid-plaidTransactionId",
+                                        sourceId = "1",
+                                        destinationId = "2",
+                                        currencyCode = "USD",
+                                    ).transactions.first()
+                                ),
+                                incomingPlaidTransactionId = "plaidTransactionId",
                             )
                         ),
                     ),
@@ -649,6 +657,17 @@ internal class TransactionConverterTest {
         }
     }
 
+    private val pollConverter = TransactionConverter(
+        useNameForDestination = false,
+        enablePrimaryCategorization = false,
+        primaryCategoryPrefix = "a",
+        enableDetailedCategorization = false,
+        detailedCategoryPrefix = "b",
+        timeZoneString = "America/New_York",
+        transferMatchWindowDays = 10L,
+        txStyle = defaultStyle,
+    )
+
     @ParameterizedTest(name = "{index} => {0}")
     @MethodSource("provideConvertPollSync")
     fun convertPollSync(
@@ -659,17 +678,7 @@ internal class TransactionConverterTest {
         expectedResult: TransactionConverter.ConvertPollSyncResult,
     ) {
         runBlocking {
-            val converter = TransactionConverter(
-                useNameForDestination = false,
-                enablePrimaryCategorization = false,
-                primaryCategoryPrefix = "a",
-                enableDetailedCategorization = false,
-                detailedCategoryPrefix = "b",
-                timeZoneString = "America/New_York",
-                transferMatchWindowDays = 10L,
-                txStyle = defaultStyle,
-            )
-            val actual = converter.convertPollSync(
+            val actual = pollConverter.convertPollSync(
                 accountMap,
                 plaidCreatedTxs,
                 existingFireflyTxs,
@@ -677,6 +686,45 @@ internal class TransactionConverterTest {
 
             assertEquals(expectedResult, actual)
         }
+    }
+
+    @ParameterizedTest(name = "existing Firefly {0}")
+    @CsvSource("withdrawal, deposit", "deposit, withdrawal")
+    fun `uses the opposite Plaid leg when both legs arrive`(
+        originalType: TransactionTypeProperty,
+        incomingId: String,
+    ) = runBlocking {
+        val accountMap = mapOf("checking" to 1, "savings" to 2)
+        val plaid = listOf(
+            PlaidFixtures.getPaymentTransaction(accountId = "checking", transactionId = "withdrawal", amount = 1111.22),
+            PlaidFixtures.getPaymentTransaction(accountId = "savings", transactionId = "deposit", amount = -1111.22),
+        )
+        val originalId = originalType.name
+        val isWithdrawal = originalType == TransactionTypeProperty.withdrawal
+        val original = TransactionRead(
+            "transactions", "42",
+            FireflyFixtures.getTransaction(
+                type = originalType,
+                sourceId = if (isWithdrawal) "1" else "3",
+                destinationId = if (isWithdrawal) "3" else "2",
+                currencyCode = "USD",
+                externalId = "plaid-$originalId",
+            ),
+            ObjectLink(),
+        )
+
+        val result = pollConverter.convertPollSync(accountMap, plaid, listOf(original))
+
+        val update = result.updates.single()
+        val transfer = update.transaction.tx
+        assertEquals(emptyList<FireflyTransactionDto>(), result.creates)
+        assertEquals(original.id, update.transaction.id)
+        assertEquals(incomingId, update.incomingPlaidTransactionId)
+        assertEquals(TransactionTypeProperty.transfer, transfer.type)
+        assertEquals("1", transfer.sourceId)
+        assertEquals("2", transfer.destinationId)
+        assertEquals("plaid-$incomingId", transfer.externalId)
+        assertEquals("plaid-transfer-leg-$originalId", transfer.internalReference)
     }
 
     @Test
