@@ -80,14 +80,33 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
-if (providers.gradleProperty("smokeTestJar").isPresent) {
-    val profileConfigs = listOf("**/application-*.yml", "**/application-*.yaml", "**/application-*.properties")
+val smokeTestJar = providers.gradleProperty("smokeTestJar").isPresent
+val jarResources = setOf(
+    "application.yml",
+    "META-INF/spring-configuration-metadata.json",
+    "smoke/bootstrap.php",
+    "smoke/compose.yml",
+) + if (smokeTestJar) emptySet() else setOf(
+    "application-dev.yml",
+    "application-prod.yml",
+    "application-test.yml",
+)
+
+val processedResourcesDir = requireNotNull(sourceSets.main.get().output.resourcesDir)
+tasks.withType<Jar>().configureEach {
+    // Apply the allowlist at packaging time so local profiles are still available to bootRun.
+    exclude { entry ->
+        !entry.isDirectory && entry.file.startsWith(processedResourcesDir) &&
+            entry.file.relativeTo(processedResourcesDir).invariantSeparatorsPath !in jarResources
+    }
+}
+
+if (smokeTestJar) {
     tasks.processResources {
-        exclude(profileConfigs)
+        exclude("**/application-*.yml", "**/application-*.yaml", "**/application-*.properties")
     }
     tasks.bootJar {
         destinationDirectory.set(layout.buildDirectory.dir("smoke"))
         archiveFileName.set("connector.jar")
-        exclude(profileConfigs)
     }
 }
