@@ -4,14 +4,17 @@ import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.ResponseException
+import io.ktor.client.plugins.ServerResponseException
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.CancellationException
-import net.djvk.fireflyPlaidConnector2.api.RetryExecutor
+import net.djvk.fireflyPlaidConnector2.api.ApiService
+import net.djvk.fireflyPlaidConnector2.api.ApiTransportException
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequest
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncRequestOptions
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionsSyncResponse
+import net.djvk.fireflyPlaidConnector2.api.withTransportFailure
 import net.djvk.fireflyPlaidConnector2.config.PolledSyncProperties
 import net.djvk.fireflyPlaidConnector2.config.properties.PlaidTransactionProperties
 import org.slf4j.LoggerFactory
@@ -63,10 +66,12 @@ class PlaidSyncService(
         batchSize: Int = plaidProperties.batchSize
     ): TransactionsSyncResponse {
         val request = getTransactionSyncRequest(accessToken, cursor, batchSize)
-        return plaidApiWrapper.executeRequest(
-            { plaidApi -> plaidApi.transactionsSync(request) },
-            "transaction sync request"
-        ).body()
+        return ApiService.PLAID.withTransportFailure("transactions sync") {
+            plaidApiWrapper.executeRequest(
+                { plaidApi -> plaidApi.transactionsSync(request) },
+                "transaction sync request"
+            ).body()
+        }
     }
 
     /**
@@ -159,9 +164,11 @@ class PlaidSyncService(
                     }
                     if (!properties.allowItemToFail || !isItemFetchFailure(failure)) throw failure
                     if (requireComplete) {
+                        if (failure is ApiTransportException) throw failure
                         throw IllegalStateException("Plaid replay is incomplete while transfer replacements are pending", failure)
                     }
                     val reason = (failure as? ResponseException)?.response?.status?.toString()
+                        ?: (failure as? ApiTransportException)?.cause?.javaClass?.simpleName
                         ?: failure.javaClass.simpleName
                     logger.warn("Plaid item query failed with allowItemToFail enabled ({})", reason)
                     return null
@@ -191,12 +198,8 @@ class PlaidSyncService(
         }
     }
 
-    private fun isItemFetchFailure(failure: Exception): Boolean = when (failure) {
-        is ClientRequestException -> true
-        // Jackson decoding errors inherit from IOException.
-        is JsonProcessingException -> false
-        else -> RetryExecutor.defaultIsRetryable(failure)
-    }
+    private fun isItemFetchFailure(failure: Exception): Boolean =
+        failure is ClientRequestException || failure is ServerResponseException || failure is ApiTransportException
 
     private suspend fun isPaginationMutation(failure: ClientRequestException): Boolean {
         return try {

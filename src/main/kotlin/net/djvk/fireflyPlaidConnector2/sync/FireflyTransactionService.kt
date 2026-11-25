@@ -1,11 +1,13 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
+import net.djvk.fireflyPlaidConnector2.api.ApiService.FIREFLY
 import net.djvk.fireflyPlaidConnector2.api.firefly.FireflyApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeFilter
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
+import net.djvk.fireflyPlaidConnector2.api.withTransportFailure
 import net.djvk.fireflyPlaidConnector2.config.PolledSyncProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter.TransferUpdate
@@ -37,13 +39,15 @@ class FireflyTransactionService(
         var page = 1
         while (true) {
             logger.debug("Fetching page $page of Firefly transactions with window starting at $transferWindowStart")
-            val response = fireflyApiWrapper.executeRequest("list Firefly transactions page $page") {
-                fireflyTxApi.listTransaction(
-                    page,
-                    transferWindowStart,
-                    transferWindowEnd,
-                    TransactionTypeFilter.all,
-                ).body()
+            val response = FIREFLY.withTransportFailure("list transactions") {
+                fireflyApiWrapper.executeRequest("list Firefly transactions page $page") {
+                    fireflyTxApi.listTransaction(
+                        page,
+                        transferWindowStart,
+                        transferWindowEnd,
+                        TransactionTypeFilter.all,
+                    ).body()
+                }
             }
             logger.debug("Fetched ${response.data.size} recent Firefly transactions")
 
@@ -67,7 +71,9 @@ class FireflyTransactionService(
         transferUpdates: List<TransferUpdate>,
         existing: List<TransactionRead>,
     ) {
-        syncHelper.optimisticInsertBatchIntoFirefly(creates)
+        FIREFLY.withTransportFailure("create transactions") {
+            syncHelper.optimisticInsertBatchIntoFirefly(creates)
+        }
         processFireflyTransferUpdates(transferUpdates, existing)
     }
 
@@ -136,7 +142,9 @@ class FireflyTransactionService(
     private suspend fun reconcileTransferReplacement(entry: TransferReplacement) {
         val intended = validateTransferReplacement(entry)
         val externalId = requireNotNull(intended.externalId)
-        val matches = syncHelper.findTransactionsByExternalId(externalId).filter { it.id != entry.originalId }
+        val matches = FIREFLY.withTransportFailure("find transfer replacement") {
+            syncHelper.findTransactionsByExternalId(externalId)
+        }.filter { it.id != entry.originalId }
         if (matches.isNotEmpty()) {
             val actual = matches.singleOrNull()?.attributes?.transactions?.singleOrNull()
             check(
@@ -146,8 +154,14 @@ class FireflyTransactionService(
                     (intended.internalReference == null || intended.internalReference == actual.internalReference)
             ) { "Conflicting Firefly transaction for transfer replacement $externalId" }
         }
-        syncHelper.deleteBatchInFirefly(listOf(entry.originalId))
-        if (matches.isEmpty()) syncHelper.insertTransferReplacement(entry.replacement)
+        FIREFLY.withTransportFailure("delete original transaction") {
+            syncHelper.deleteBatchInFirefly(listOf(entry.originalId))
+        }
+        if (matches.isEmpty()) {
+            FIREFLY.withTransportFailure("create transfer replacement") {
+                syncHelper.insertTransferReplacement(entry.replacement)
+            }
+        }
         replacementJournal.complete(entry.originalId)
     }
 }

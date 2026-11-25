@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.JsonNode
 import net.djvk.fireflyPlaidConnector2.FireflyPlaidConnector2Application
 import net.djvk.fireflyPlaidConnector2.sync.INITIAL_BACKFILL_COUNT_MESSAGE
+import net.djvk.fireflyPlaidConnector2.sync.POLL_COMPLETE_LOG
+import net.djvk.fireflyPlaidConnector2.sync.POLL_DEFERRED_LOG
 import net.djvk.fireflyPlaidConnector2.sync.PlaidSyncService
 import net.djvk.fireflyPlaidConnector2.sync.PolledSyncOrchestrator
 import java.io.File
@@ -92,7 +94,7 @@ internal class SmokeRun(private val showDetails: Boolean) : AutoCloseable {
         settings: Map<String, Any?>,
         arguments: List<String> = emptyList(),
         fireflyUrl: String = firefly.baseUrl,
-        expectPollFailure: Boolean = false,
+        onPollDeferred: (() -> Unit)? = null,
     ): Int? {
         val config = work.resolve("smoke.yml")
         val polled = settings["syncMode"] == "polled"
@@ -122,22 +124,30 @@ internal class SmokeRun(private val showDetails: Boolean) : AutoCloseable {
             "--spring.config.location=classpath:/application.yml,${config.toUri()}" + arguments)
             .directory(work.toFile())
         builder.environment().clear()
-        val timeout = if (showDetails) 45L else 300L
+        val timeout = when {
+            onPollDeferred != null -> 120L
+            showDetails -> 45L
+            else -> 300L
+        }
         return try {
             withProcess(builder, log) { process ->
                 if (polled) {
-                    waitFor("the first poll to finish", timeout) {
+                    var deferred = false
+                    waitFor("a successful poll", timeout) {
                         if (!process.isAlive) {
                             val status = process.exitValue()
-                            if (expectPollFailure && status != 0) return@waitFor true
                             if (!showDetails) checkLiveOutput(log.readText(), status, "polled connector")
                             throw SmokeFailure("Polled connector exited early with status $status.")
                         }
+                        val output = log.readText()
+                        if (!deferred && onPollDeferred != null && " : $POLL_DEFERRED_LOG" in output) {
+                            onPollDeferred()
+                            deferred = true
+                        }
                         // The runner logs this after the Firefly writes and cursor update.
-                        val finished = log.readText().lineSequence().any { it.endsWith(" : Sleeping $POLL_INTERVAL_MINUTES") }
-                        if (finished && expectPollFailure) throw SmokeFailure("The poll completed after the Firefly response was lost.")
-                        finished
+                        " : $POLL_COMPLETE_LOG" in output
                     }
+                    if (onPollDeferred != null) expect("Connector deferred a poll before succeeding", deferred, true)
                     val output = log.readText()
                     if (!showDetails) checkLiveOutput(output, 0, "polled connector")
                     output.lineSequence().mapNotNull {

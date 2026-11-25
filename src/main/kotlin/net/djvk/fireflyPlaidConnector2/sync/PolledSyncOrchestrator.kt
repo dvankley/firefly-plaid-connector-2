@@ -1,9 +1,15 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.api.ApiService
+import net.djvk.fireflyPlaidConnector2.api.ApiTransportException
+import net.djvk.fireflyPlaidConnector2.api.withTransportFailure
 import net.djvk.fireflyPlaidConnector2.config.PolledSyncProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.plaidExternalId
@@ -11,9 +17,14 @@ import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
 typealias PlaidSyncCursor = String
+
+internal const val POLL_COMPLETE_LOG = "Poll complete. Sleeping for"
+internal const val POLL_DEFERRED_LOG = "Polled sync paused after"
 
 /**
  * Orchestrates the polled sync process.
@@ -34,7 +45,8 @@ class PolledSyncOrchestrator(
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     private val terminated = AtomicBoolean(false)
-    private lateinit var mainJob: Job
+    private val mainJob = AtomicReference<Job?>(null)
+    private val pollInterval = properties.syncFrequencyMinutes.minutes
 
     /**
      * Initializes cursors for access tokens that don't have one yet.
@@ -96,43 +108,66 @@ class PolledSyncOrchestrator(
         correctionQueue.finishCursorCommit(nextCursors)
     }
 
-    override fun run() {
-        runBlocking {
-            syncHelper.setApiCreds()
+    override fun run() = run { delay(it) }
 
-            mainJob = launch {
-                // Initialize cursors
-                initializeCursors()
+    internal fun run(waitForNextAttempt: suspend (Duration) -> Unit) = runBlocking {
+        val job = launch(start = CoroutineStart.LAZY) { poll(waitForNextAttempt) }
+        check(mainJob.compareAndSet(null, job)) { "Polled sync is already running" }
+        try {
+            if (terminated.get()) job.cancel()
+            job.join()
+        } finally {
+            mainJob.compareAndSet(job, null)
+        }
+    }
 
-                // Get account mappings for the polling loop
-                val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
+    private suspend fun poll(waitForNextAttempt: suspend (Duration) -> Unit) {
+        retryStartup(waitForNextAttempt) {
+            ApiService.FIREFLY.withTransportFailure("version check") { syncHelper.setApiCreds() }
+        }
+        retryStartup(waitForNextAttempt) { initializeCursors() }
+
+        val (accountMap, accountAccessTokenSequence) = syncHelper.getAllPlaidAccessTokenAccountIdSets()
+        while (true) {
+            val completed = attempt {
+                logger.debug("Polling loop start")
                 val cursorMap = cursorManager.readCursorMap()
-                val syncFrequencyMinutes = properties.syncFrequencyMinutes
-
-                /**
-                 * Periodic polling loop
-                 */
-                do {
-                    logger.debug("Polling loop start")
-
-                    // Process transactions
-                    processTransactions(accountMap, accountAccessTokenSequence, cursorMap)
-
-                    // Trigger GC to try to reduce heap size
-                    logger.trace("Calling System.gc()")
-                    System.gc()
-
-                    // Sleep until next poll
-                    logger.info("Sleeping $syncFrequencyMinutes")
-                    delay(syncFrequencyMinutes.minutes)
-                } while (!terminated.get())
+                processTransactions(accountMap, accountAccessTokenSequence, cursorMap)
             }
+            if (completed) {
+                logger.trace("Calling System.gc()")
+                System.gc()
+                logger.info("$POLL_COMPLETE_LOG {} minutes", properties.syncFrequencyMinutes)
+            }
+            waitForNextAttempt(pollInterval)
+        }
+    }
+
+    private suspend fun retryStartup(waitForNextAttempt: suspend (Duration) -> Unit, step: suspend () -> Unit) {
+        while (!attempt(step)) {
+            waitForNextAttempt(pollInterval)
+        }
+    }
+
+    private suspend fun attempt(step: suspend () -> Unit): Boolean {
+        currentCoroutineContext().ensureActive()
+        try {
+            step()
+            return true
+        } catch (failure: ApiTransportException) {
+            currentCoroutineContext().ensureActive()
+            logger.warn(
+                "$POLL_DEFERRED_LOG {} {} failed ({}). Retrying in {} minutes.",
+                failure.service.displayName, failure.operation, failure.cause?.javaClass?.simpleName,
+                properties.syncFrequencyMinutes,
+            )
+            return false
         }
     }
 
     override fun destroy() {
         logger.info("Shutting down ${this::class}")
         terminated.set(true)
-        if (::mainJob.isInitialized) mainJob.cancel()
+        mainJob.get()?.cancel()
     }
 }

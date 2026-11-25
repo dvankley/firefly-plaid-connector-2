@@ -28,6 +28,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypePropert
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
+import net.djvk.fireflyPlaidConnector2.lib.FireflyMock
 import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
@@ -46,6 +47,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 
 internal class TransferReplacementRecoveryTest {
     @TempDir
@@ -174,20 +176,25 @@ internal class TransferReplacementRecoveryTest {
     }
 
     @Test
-    fun lostSuccessfulCreateResponseIsReconciledWithoutAnotherPost() = runBlocking {
+    fun lostSuccessfulCreateResponseIsReconciledByTheSameRunner() = runBlocking {
         val firefly = FireflyServer().apply { loseCreateResponse = true }
         val cursor = seededCursor()
-        val cursors = cursor.readCursorMap()
+        val runner = orchestrator(firefly, cursor)
+        var waits = 0
 
-        assertFailsWith<IOException> { runPoll(firefly, cursor, cursors) }
-        assertEquals(oldCursors, cursors)
-        assertEquals(oldCursors, cursor.readCursorMap())
-        assertEquals(listOf(intent), TransferReplacementJournal(cursor).pendingFor(cursors))
-        assertTrue(firefly.transferExists)
-        assertEquals(1, firefly.posts)
+        runner.run { interval ->
+            assertEquals(30.minutes, interval)
+            if (++waits == 1) {
+                assertEquals(oldCursors, cursor.readCursorMap())
+                assertEquals(listOf(intent), TransferReplacementJournal(cursor).pendingFor(oldCursors))
+                assertTrue(firefly.transferExists)
+                assertEquals(1, firefly.posts)
+            } else {
+                runner.destroy()
+            }
+        }
 
-        runPoll(firefly)
-
+        assertEquals(2, waits)
         assertCommitted(firefly, expectedPosts = 1)
     }
 
@@ -235,12 +242,16 @@ internal class TransferReplacementRecoveryTest {
         cursor: CursorManager = CursorManager(directory.toString()),
         cursors: MutableMap<PlaidAccessToken, PlaidSyncCursor>? = null,
     ) {
+        orchestrator(firefly, cursor).processTransactions(emptyMap(), emptySequence(), cursors ?: cursor.readCursorMap())
+    }
+
+    private suspend fun orchestrator(firefly: FireflyServer, cursor: CursorManager): PolledSyncOrchestrator {
         val journal = TransferReplacementJournal(cursor)
         val client = ApiConfiguration().getFireflyClientConfig(60_000)
         val transactions = TransactionsApi("https://firefly.test", firefly.engine, client)
         val wrapper = FireflyApiWrapper(RetryProperties(maxAttempts = 3, initialDelayMs = 0))
         val helper = SyncHelper(
-            AccountConfigs(emptyList()), "testToken", mock(), transactions, mock(), wrapper,
+            AccountConfigs(emptyList()), "testToken", FireflyMock().aboutApi, transactions, mock(), wrapper,
             SearchApi("https://firefly.test", firefly.engine, client),
         )
         val service = FireflyTransactionService(transactions, helper, wrapper, journal, testPolledProperties())
@@ -249,22 +260,21 @@ internal class TransferReplacementRecoveryTest {
         val added = listOf("old", "new").map { id ->
             mock<PlaidTransaction> { on { transactionId }.thenReturn(id) }
         }
-        val cursorMap = cursors ?: cursor.readCursorMap()
-        val alreadyCommitted = cursorMap == nextCursors
-        val restoring = Files.exists(journalPath) && !alreadyCommitted
         whenever(plaid.processPlaidTransactions(any(), any(), any())).thenAnswer {
+            val cursorMap = it.getArgument<MutableMap<PlaidAccessToken, PlaidSyncCursor>>(1)
+            val alreadyCommitted = cursorMap == nextCursors
+            val restoring = Files.exists(journalPath) && !alreadyCommitted
             assertEquals(restoring, it.getArgument<Boolean>(2))
-            it.getArgument<MutableMap<PlaidAccessToken, PlaidSyncCursor>>(1).putAll(nextCursors)
+            cursorMap.putAll(nextCursors)
             PlaidTransactionResult(if (alreadyCommitted) emptyList() else added, emptyList(), emptyList())
         }
         whenever(converter.convertPollSync(any(), any(), any())).thenAnswer {
-            assertFalse(alreadyCommitted || restoring)
+            assertFalse(Files.exists(journalPath))
             assertEquals(added, it.getArgument(1))
             TransactionConverter.ConvertPollSyncResult(emptyList(), listOf(update))
         }
         val queue = PlaidCorrectionQueue(cursor, helper, converter)
-        PolledSyncOrchestrator(testPolledProperties(), helper, cursor, plaid, service, converter, journal, queue)
-            .processTransactions(emptyMap(), emptySequence(), cursorMap)
+        return PolledSyncOrchestrator(testPolledProperties(), helper, cursor, plaid, service, converter, journal, queue)
     }
 
     private inner class FireflyServer {

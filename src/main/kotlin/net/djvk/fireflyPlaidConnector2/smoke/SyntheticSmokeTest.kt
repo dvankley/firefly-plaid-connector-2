@@ -73,7 +73,7 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
         mode: String,
         vararg exchanges: PlaidExchange,
         fireflyUrl: String = firefly.baseUrl,
-        expectPollFailure: Boolean = false,
+        onPollDeferred: (() -> Unit)? = null,
         allowSplits: Boolean = false,
     ): Map<String, SmokeTransaction> {
         println(name)
@@ -85,8 +85,11 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
                 "accounts" to plaidAccountIds.zip(listOf(checking, savings)).map { (plaidId, fireflyId) ->
                     mapOf("plaidAccountId" to plaidId, "fireflyAccountId" to fireflyId, "plaidItemAccessToken" to plaidToken)
                 },
-                "polled" to mapOf("syncFrequencyMinutes" to POLL_INTERVAL_MINUTES, "cursorFileDirectoryPath" to run.work.toString()),
-            ), fireflyUrl = fireflyUrl, expectPollFailure = expectPollFailure)
+                "polled" to mapOf(
+                    "syncFrequencyMinutes" to if (onPollDeferred == null) POLL_INTERVAL_MINUTES else 1,
+                    "cursorFileDirectoryPath" to run.work.toString(),
+                ),
+            ), fireflyUrl = fireflyUrl, onPollDeferred = onPollDeferred)
             stub.verifyRequests()
         }
         return firefly.transactions(allowSplits)
@@ -132,23 +135,24 @@ internal fun exerciseSynthetic(run: SmokeRun, firefly: SmokeFirefly) {
     val journal = run.work.resolve("pending_transfer_replacements.json")
     val replacementPage = syncPage("delta-complete", "replacement-complete", added = listOf(laterIn))
     val recovered = FireflyResponseDropper(firefly.baseUrl).use { proxy ->
-        val afterFailure = phase("Polled transfer replacement with a lost Firefly response", "polled",
-            replacementPage, fireflyUrl = proxy.url, expectPollFailure = true)
-        expect("Successful replacement response dropped", proxy.droppedResponse, true)
-        expect("Replacement POSTs after response loss", proxy.transactionPosts, 1)
-        expect("Cursor after the failed replacement poll", cursor.readText(), "$plaidToken|delta-complete")
-        expect("Transfer replacement journal after response loss", journal.exists(), true)
+        lateinit var afterFailure: Map<String, SmokeTransaction>
+        val afterRecovery = phase("Polled transfer replacement recovery in the same process", "polled",
+            replacementPage, replacementPage, fireflyUrl = proxy.url, onPollDeferred = {
+                expect("Successful replacement response dropped", proxy.droppedResponse, true)
+                expect("Replacement POSTs after response loss", proxy.transactionPosts, 1)
+                expect("Cursor after the failed replacement poll", cursor.readText(), "$plaidToken|delta-complete")
+                expect("Transfer replacement journal after response loss", journal.exists(), true)
+                afterFailure = firefly.transactions()
+            })
         expect("Replacement external IDs", afterFailure.keys, delta.keys - "plaid-smoke-later-out" + "plaid-smoke-later-in")
         checkTransaction(afterFailure, "later-in", "transfer", "65",
             "source_id" to checking.toString(), "destination_id" to savings.toString(),
             "internal_reference" to "plaid-transfer-leg-smoke-later-out")
-
-        val afterRestart = phase("Polled transfer replacement recovery", "polled", replacementPage, fireflyUrl = proxy.url)
-        expect("Replacement POSTs after restart", proxy.transactionPosts, 1)
-        expect("Firefly transactions after recovery", afterRestart, afterFailure)
+        expect("Replacement POSTs after recovery", proxy.transactionPosts, 1)
+        expect("Firefly transactions after recovery", afterRecovery, afterFailure)
         expect("Cursor after replacement recovery", cursor.readText(), "$plaidToken|replacement-complete")
         expect("Transfer replacement journal after recovery", journal.exists(), false)
-        afterRestart
+        afterRecovery
     }
 
     val noop = phase("Polled restart with no changes", "polled", syncPage("replacement-complete", "replacement-complete"))

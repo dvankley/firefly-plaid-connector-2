@@ -1,6 +1,8 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.api.ApiService
+import net.djvk.fireflyPlaidConnector2.api.ApiTransportException
 import net.djvk.fireflyPlaidConnector2.api.RetryProperties
 import net.djvk.fireflyPlaidConnector2.api.firefly.FireflyApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.firefly.apis.TransactionsApi
@@ -75,10 +77,11 @@ class FireflyTransactionServiceTest {
             replacementJournal,
             properties,
         )
-        val thrown = kotlin.test.assertFailsWith<java.nio.channels.UnresolvedAddressException> {
+        val thrown = assertFailsWith<ApiTransportException> {
             service.fetchExistingFireflyTransactions()
         }
-        kotlin.test.assertSame(failure, thrown)
+        assertEquals(ApiService.FIREFLY, thrown.service)
+        kotlin.test.assertSame(failure, thrown.cause)
         verify(fireflyTxApi, times(3)).listTransaction(eq(1), any(), any(), any())
         verifyNoMoreInteractions(fireflyTxApi)
     }

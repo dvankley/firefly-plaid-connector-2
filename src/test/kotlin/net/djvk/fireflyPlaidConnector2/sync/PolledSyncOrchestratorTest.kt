@@ -1,6 +1,13 @@
 package net.djvk.fireflyPlaidConnector2.sync
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import net.djvk.fireflyPlaidConnector2.api.ApiService
+import net.djvk.fireflyPlaidConnector2.api.ApiTransportException
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.ObjectLink
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
@@ -18,12 +25,16 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
+import java.io.IOException
+import java.net.NoRouteToHostException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Test for the PolledSyncOrchestrator class.
@@ -76,6 +87,105 @@ internal class PolledSyncOrchestratorTest {
         verify(syncHelper).getAllPlaidAccessTokenAccountIdSets()
         verify(plaidSyncService).initializeCursors(eq(accountAccessTokenSequence), eq(cursorMap))
         verify(cursorManager).writeCursorMap(eq(cursorMap))
+    }
+
+    @Test
+    fun `retries each startup step before processing the first poll`() = runBlocking {
+        val events = mutableListOf<String>()
+        var saved = emptyMap<PlaidAccessToken, PlaidSyncCursor>()
+        whenever(cursorManager.readCursorMap()).thenAnswer { saved.toMutableMap() }
+        whenever(cursorManager.writeCursorMap(any())).thenAnswer {
+            saved = it.getArgument<Map<PlaidAccessToken, PlaidSyncCursor>>(0).toMap()
+            Unit
+        }
+        whenever(syncHelper.getAllPlaidAccessTokenAccountIdSets()).thenReturn(accountMap to accountAccessTokenSequence)
+        whenever(syncHelper.setApiCreds()).thenAnswer {
+            events += "unreachable Firefly"
+            throw NoRouteToHostException()
+        }.thenAnswer {
+            events += "Firefly ready"
+            Unit
+        }
+        whenever(plaidSyncService.initializeCursors(eq(accountAccessTokenSequence), any())).thenAnswer {
+            events += "unreachable Plaid"
+            throw ApiTransportException(ApiService.PLAID, "transactions sync", IOException())
+        }.thenAnswer {
+            events += "Plaid ready"
+            it.getArgument<MutableMap<PlaidAccessToken, PlaidSyncCursor>>(1).putAll(initialCursors)
+        }
+        stagePlaidChanges(PlaidTransactionResult(emptyList(), emptyList(), emptyList()))
+
+        var waits = 0
+        orchestrator.run { interval ->
+            assertEquals(30.minutes, interval)
+            events += "wait"
+            if (++waits == 3) orchestrator.destroy()
+        }
+
+        assertEquals(
+            listOf("unreachable Firefly", "wait", "Firefly ready", "unreachable Plaid", "wait", "Plaid ready", "wait"),
+            events,
+        )
+        assertEquals(nextCursors, saved)
+    }
+
+    @Test
+    fun `replays the same delta when the Firefly scan fails after Plaid stages cursors`() = runBlocking {
+        val changes = PlaidTransactionResult(listOf(addition), emptyList(), emptyList())
+        stagePlaidChanges(changes)
+        whenever(cursorManager.readCursorMap()).thenAnswer { initialCursors.toMutableMap() }
+        whenever(syncHelper.getAllPlaidAccessTokenAccountIdSets()).thenReturn(accountMap to accountAccessTokenSequence)
+        val outage = ApiTransportException(ApiService.FIREFLY, "list transactions", NoRouteToHostException())
+        whenever(fireflyTransactionService.fetchExistingFireflyTransactions()).thenThrow(outage).thenReturn(emptyList())
+        whenever(converter.convertPollSync(accountMap, changes.created, emptyList()))
+            .thenReturn(TransactionConverter.ConvertPollSyncResult(emptyList(), emptyList()))
+
+        var waits = 0
+        orchestrator.run { interval ->
+            assertEquals(30.minutes, interval)
+            if (++waits == 1) {
+                verify(cursorManager, never()).writeCursorMap(eq(nextCursors))
+            } else {
+                orchestrator.destroy()
+            }
+        }
+
+        verify(fireflyTransactionService, times(2)).fetchExistingFireflyTransactions()
+        verify(cursorManager).writeCursorMap(eq(nextCursors))
+    }
+
+    @Test
+    fun `a cursor read failure escapes the polling runner`() = runBlocking {
+        val failure = IOException("Could not read cursor file")
+        whenever(cursorManager.readCursorMap()).thenReturn(initialCursors.toMutableMap()).thenAnswer { throw failure }
+        whenever(syncHelper.getAllPlaidAccessTokenAccountIdSets()).thenReturn(accountMap to accountAccessTokenSequence)
+
+        val thrown = assertFailsWith<IOException> { orchestrator.run { error("Unexpected poll delay") } }
+
+        assertSame(failure, thrown)
+        verify(plaidSyncService, never()).processPlaidTransactions(any(), any(), any())
+    }
+
+    @Test
+    fun `destroy cancels an outage wait during startup`() = runBlocking {
+        whenever(syncHelper.setApiCreds()).thenAnswer { throw NoRouteToHostException() }
+        val awaitingNextAttempt = CompletableDeferred<Unit>()
+        val runner = async(Dispatchers.Default) {
+            orchestrator.run { interval ->
+                assertEquals(30.minutes, interval)
+                awaitingNextAttempt.complete(Unit)
+                awaitCancellation()
+            }
+        }
+
+        try {
+            withTimeout(5_000) { awaitingNextAttempt.await() }
+        } finally {
+            orchestrator.destroy()
+        }
+
+        withTimeout(5_000) { runner.await() }
+        verifyNoInteractions(cursorManager, plaidSyncService)
     }
 
     @Test

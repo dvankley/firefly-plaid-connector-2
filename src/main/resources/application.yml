@@ -27,7 +27,7 @@ fireflyPlaidConnector2:
 #    initialBackfillAfter: 2026-01-01
     # Optional inclusive end date for the initial backfill. Requires initialBackfillAfter and must be later.
 #    initialBackfillThrough: 2026-01-05
-    # How often to run the poll sync process, in positive whole minutes.
+    # Minutes between polls and before retrying a startup step or poll interrupted by an API transport failure.
     syncFrequencyMinutes: 10
     # How many days in the past we should pull existing Firefly transactions for.
     # Used to find transfer candidates. Plaid corrections are looked up by external ID.
@@ -68,12 +68,8 @@ fireflyPlaidConnector2:
     # Timeout for HTTP requests to the Firefly API, in milliseconds. Previously hardcoded to 60000.
     requestTimeoutMillis: 60000
     retry:
-      # Total number of attempts (including the first), for a retryable Firefly API failure, before
-      #   giving up and letting the exception propagate. This will crash the app; it's expected to be
-      #   restarted by your container orchestration (e.g. Docker Compose). On restart, the last
-      #   successfully-persisted Plaid sync cursor is re-read and any transactions already written to
-      #   Firefly before the failure are safely re-delivered and deduped by Firefly (matched on
-      #   external ID), so retries here just reduce how often that restart cycle is needed.
+      # Total attempts (including the first) for a retryable Firefly API failure. If a transport
+      # failure reaches the polled runner, it retries at the polling interval using saved cursors.
       maxAttempts: 7
       # Backoff delay (ms) before the next attempt is initialDelayMs * (multiplier ^ (attempt - 1)),
       #   capped at maxDelayMs, with +/- jitterFactor randomization applied.
@@ -95,8 +91,9 @@ fireflyPlaidConnector2:
     #   first attempt too). If both are set, maxAttempts wins.
 #    maxRetries: 3
     retry:
-      # Total attempts (including the first) for a retryable Plaid API request. On exhaustion the last exception
-      # is propagated. Polled item fetches can be skipped according to polled.allowItemToFail.
+      # Total attempts (including the first) for a retryable Plaid API request. Polled item fetches
+      # can be skipped according to polled.allowItemToFail. A transport failure that reaches the
+      # polled runner is retried at the polling interval using saved cursors.
       maxAttempts: 7
       initialDelayMs: 15000
       maxDelayMs: 300000

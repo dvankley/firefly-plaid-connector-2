@@ -21,10 +21,15 @@ running on a low-spec VPS (like mine), then I recommend running your large `batc
 Uses the [Plaid sync](https://plaid.com/blog/transactions-sync/) endpoint to periodically pull down transaction data,
 convert it to Firefly transactions, and write them to Firefly.
 
-When started in this mode, the connector will not pull any past transactions, but will check for new transactions every 
-`fireflyPlaidConnector2.polled.syncFrequencyMinutes`.
+By default, the connector establishes a starting cursor for each new Plaid item and checks for new transactions every
+`fireflyPlaidConnector2.polled.syncFrequencyMinutes`. Set `polled.initialBackfillAfter` to import history on the first sync.
 
 The last sync position of each account will be stored in `persistence/plaid_sync_cursors.txt`.
+If a Plaid or Firefly connection fails during startup or a poll, the connector applies any configured request retries
+first. If the transport failure reaches the polling loop, the connector logs a warning, waits the polling interval,
+and retries in the same process. An interrupted poll resumes from the last saved cursors. With `polled.allowItemToFail`
+enabled, a failed Plaid item can wait for the next poll while healthy items advance. Pending transfer recovery requires
+complete Plaid replay before cursors advance.
 
 Polled mode finds modified and removed transactions in Firefly by their Plaid ID regardless
 of date. It checks the full Firefly group before applying a correction.
@@ -446,7 +451,7 @@ The command seeds two USD asset accounts and uses a local Plaid HTTP stub with s
 It verifies a paginated batch import, a duplicate-free rerun, transfer matching, category tagging,
 and a paginated polled delta with creates, updates, and deletes across connector restarts. It also
 drops the response after Firefly creates a transfer replacement, then verifies recovery advances
-the cursor without issuing a second create. It checks that corrections to both legs of imported
+the cursor in the same connector process with a single create. It checks that corrections to both legs of imported
 and replacement transfers, and to one journal in a split group, go to review with no Firefly
 changes. It reads the results back through Firefly's API. On
 failure, it prints the failed check and recent logs.

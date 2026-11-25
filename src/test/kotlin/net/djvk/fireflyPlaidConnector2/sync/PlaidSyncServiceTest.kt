@@ -13,6 +13,8 @@ import io.ktor.http.headersOf
 import io.ktor.serialization.JsonConvertException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
+import net.djvk.fireflyPlaidConnector2.api.ApiService
+import net.djvk.fireflyPlaidConnector2.api.ApiTransportException
 import net.djvk.fireflyPlaidConnector2.api.RetryProperties
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapperTest.Companion.mockPlaid
@@ -29,23 +31,30 @@ import net.djvk.fireflyPlaidConnector2.lib.createPlaidResponse
 import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.params.provider.NullSource
 import org.junit.jupiter.params.provider.ValueSource
+import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.spy
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.nio.file.Path
 import java.time.LocalDate
 import java.util.stream.Stream
+import javax.net.ssl.SSLHandshakeException
 import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Tests for the PlaidSyncService class.
@@ -170,6 +179,61 @@ class PlaidSyncServiceTest {
         assertEquals(mapOf("failed" to "saved", "healthy" to "healthy-next"), cursors)
     }
 
+    @Test
+    fun `the same runner replays from the saved cursor after a second-page outage`(@TempDir directory: Path) = runBlocking {
+        val failedPage = SyncExchange("item", "page-two", failure = NoRouteToHostException())
+        val service = syncService(
+            syncPage("item", "saved", "page-two", hasMore = true, modified = listOf("discard")),
+            failedPage, failedPage,
+            syncPage("item", "saved", "fresh-page-two", hasMore = true),
+            syncPage("item", "fresh-page-two", "done", modified = listOf("apply")),
+            allowItemToFail = false, retryProperties = TWO_ATTEMPTS,
+        )
+        val helper = mock<SyncHelper>()
+        val corrections = mock<PlaidCorrectionQueue>()
+        val cursor = CursorManager(directory.toString())
+        val before = mapOf("item" to "saved")
+        val after = mapOf("item" to "done")
+        val accountMap = mapOf("mapped" to 1)
+        cursor.writeCursorMap(before)
+        whenever(helper.getAllPlaidAccessTokenAccountIdSets()).thenReturn(accountMap to sequenceOf("item" to listOf("mapped")))
+        val runner = PolledSyncOrchestrator(
+            testPolledProperties(), helper, cursor, service, mock(), mock(), TransferReplacementJournal(cursor), corrections,
+        )
+        val observedCursors = mutableListOf<Map<PlaidAccessToken, PlaidSyncCursor>>()
+        whenever(corrections.process(any(), any(), any(), any(), any())).thenAnswer {
+            val changes = it.getArgument<PlaidTransactionResult>(1)
+            assertEquals(listOf("apply"), changes.updated.map { transaction -> transaction.transactionId })
+            assertEquals(before, it.getArgument(2))
+            assertEquals(after, it.getArgument(3))
+        }
+
+        runner.run { delay ->
+            assertEquals(30.minutes, delay)
+            observedCursors += cursor.readCursorMap()
+            if (observedCursors.size == 2) runner.destroy()
+        }
+
+        assertEquals(listOf(before, after), observedCursors)
+        verify(corrections).process(any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `transport failure reaches the runner when a complete transfer replay is required`() = runBlocking {
+        val outage = NoRouteToHostException("Plaid route unavailable")
+        val failed = SyncExchange("item", "saved", failure = outage)
+        val service = syncService(failed, failed, retryProperties = TWO_ATTEMPTS)
+        val cursors = mutableMapOf("item" to "saved")
+
+        val failure = assertFailsWith<ApiTransportException> {
+            service.processPlaidTransactions(sequenceOf("item" to listOf("mapped")), cursors, requireComplete = true)
+        }
+
+        assertEquals(ApiService.PLAID, failure.service)
+        assertEquals(outage.message, assertIs<NoRouteToHostException>(failure.cause).message)
+        assertEquals(mapOf("item" to "saved"), cursors)
+    }
+
     @ParameterizedTest(name = "Recovery required: {0}")
     @ValueSource(booleans = [false, true])
     fun `exhausted server failure stops a strict poll or transfer recovery`(requireComplete: Boolean) = runBlocking {
@@ -223,6 +287,20 @@ class PlaidSyncServiceTest {
             service.processPlaidTransactions(sequenceOf("item" to listOf("mapped")), cursors)
         }
 
+        assertEquals(mapOf("item" to "saved"), cursors)
+    }
+
+    @Test
+    fun `TLS validation failure stops the poll with allowItemToFail enabled`() = runBlocking {
+        val invalidCertificate = SSLHandshakeException("Untrusted certificate")
+        val service = syncService(SyncExchange("item", "saved", failure = invalidCertificate))
+        val cursors = mutableMapOf("item" to "saved")
+
+        val failure = assertFailsWith<SSLHandshakeException> {
+            service.processPlaidTransactions(sequenceOf("item" to listOf("mapped")), cursors)
+        }
+
+        assertEquals(invalidCertificate.message, failure.message)
         assertEquals(mapOf("item" to "saved"), cursors)
     }
 
