@@ -5,6 +5,8 @@ import io.ktor.client.engine.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
+import io.ktor.client.request.header
+import io.ktor.http.HttpHeaders
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
@@ -31,6 +33,11 @@ class ApiConfiguration {
     fun getClientConfig(): ((HttpClientConfig<*>) -> Unit) {
         return {
             it.expectSuccess = true
+            it.defaultRequest {
+                // Preserve the charset header the previous Plaid client sent by default.
+                @Suppress("DEPRECATION")
+                header(HttpHeaders.AcceptCharset, Charsets.UTF_8.name())
+            }
             it.install(HttpTimeout) {
                 /**
                  * This is high enough for Plaid's /accounts/balance/get endpoint to do whatever synchronous shenanigans

@@ -25,7 +25,7 @@ internal class FireflyApiWrapperTest {
         var attempts = 0
         val engine = MockEngine {
             if (++attempts == 1) {
-                val body = ByteChannel().apply { close(IOException("Connection dropped during body read")) }
+                val body = ByteChannel().apply { cancel(IOException("Connection dropped during body read")) }
                 respond(body)
             } else {
                 respond("complete response")

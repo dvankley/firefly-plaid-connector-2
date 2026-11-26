@@ -30,7 +30,7 @@ private class PlaidStubbedBodyProvider<T : Any>(val responseObj: T): PlaidBodyPr
     }
 
     @Suppress("UNCHECKED_CAST")
-    override suspend fun <V : Any> typedBody(response: HttpResponse, type: TypeInfo): V {
+    override suspend fun <V> typedBody(response: HttpResponse, type: TypeInfo): V {
         return responseObj as V
     }
 }

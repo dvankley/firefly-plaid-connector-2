@@ -415,8 +415,11 @@ batch lookback must be at least as large as the polled lookback. The smoke comma
 derived dates and batch window to the connector as Spring Boot arguments. The connector's
 `batch.maxSyncDays` is the difference between the two lookbacks because it counts back from the cutoff.
 
+Save your live smoke-test profile as `application-live-smoke.yml` in the repository root. Git ignores
+this file, and its location outside `src/main/resources` keeps it out of the JAR.
+
 ```sh
-./gradlew -PsmokeTestJar bootRun --args='smoke-test --live --profile=/path/to/application-dev.yml --batch-lookback-days=14 --polled-lookback-days=4'
+./gradlew -PsmokeTestJar bootRun --args='smoke-test --live --profile=application-live-smoke.yml --batch-lookback-days=14 --polled-lookback-days=4'
 ```
 
 This example batches transactions from 14 days ago through 4 days ago, inclusive. The poll

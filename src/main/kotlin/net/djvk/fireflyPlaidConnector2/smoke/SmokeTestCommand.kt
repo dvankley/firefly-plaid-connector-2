@@ -56,7 +56,7 @@ internal object SmokeTestCommand {
             }
 
             val live = args.containsOption("live")
-            require(!live || args.getOptionValues("live").isEmpty()) { "Use --profile=PATH to select the live profile." }
+            require(!live || args.getOptionValues("live").isNullOrEmpty()) { "Use --profile=PATH to select the live profile." }
             val settings = if (live) {
                 val path = requireNotNull(optionValue(args, "profile")) { "--live requires --profile=PATH." }
                 val batchLookback = requiredLookback(args, "batch-lookback-days")
@@ -104,7 +104,7 @@ internal object SmokeTestCommand {
 
     private fun optionValue(args: DefaultApplicationArguments, name: String): String? {
         if (!args.containsOption(name)) return null
-        return args.getOptionValues(name).singleOrNull()?.takeIf(String::isNotBlank)
+        return args.getOptionValues(name)?.singleOrNull()?.takeIf(String::isNotBlank)
             ?: throw SmokeFailure("Supply a single value for --$name.")
     }
 

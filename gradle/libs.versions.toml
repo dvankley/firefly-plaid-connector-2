@@ -1,13 +1,12 @@
 [versions]
-kotlin = "1.9.24"
-ktor = "2.3.12"
-jackson = "2.17.2"
+kotlin = "2.4.21"
+ktor = "3.6.2"
 
 [libraries]
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
-jackson-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
-jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
+jackson-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin" }
+jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310" }
 ktor-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-contentnegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-jackson-client = { module = "io.ktor:ktor-client-jackson", version.ref = "ktor" }
