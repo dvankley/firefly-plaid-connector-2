@@ -14,11 +14,11 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionStore
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
+import net.djvk.fireflyPlaidConnector2.config.properties.FireflyApiProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.versionManagement.VersionComparison
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 
 typealias PlaidAccessToken = String
@@ -32,8 +32,7 @@ const val MINIMUM_FIREFLY_VERSION = "6.1.2"
 class SyncHelper(
     private val plaidAccountsConfig: AccountConfigs,
 
-    @Value("\${fireflyPlaidConnector2.firefly.personalAccessToken}")
-    private val fireflyAccessToken: String,
+    private val fireflyProperties: FireflyApiProperties,
     private val fireflyAboutApi: AboutApi,
     private val fireflyTxApi: TransactionsApi,
     private val fireflyAccountsApi: AccountsApi,
@@ -45,10 +44,10 @@ class SyncHelper(
     suspend fun setApiCreds() {
         // Spring components are singletons by default, so this should set these credentials for any other
         //  component that also uses these components
-        fireflyTxApi.setAccessToken(fireflyAccessToken)
-        fireflyAccountsApi.setAccessToken(fireflyAccessToken)
-        fireflyAboutApi.setAccessToken(fireflyAccessToken)
-        fireflySearchApi.setAccessToken(fireflyAccessToken)
+        fireflyTxApi.setAccessToken(fireflyProperties.personalAccessToken)
+        fireflyAccountsApi.setAccessToken(fireflyProperties.personalAccessToken)
+        fireflyAboutApi.setAccessToken(fireflyProperties.personalAccessToken)
+        fireflySearchApi.setAccessToken(fireflyProperties.personalAccessToken)
         validateFireflyApiVersion()
     }
 

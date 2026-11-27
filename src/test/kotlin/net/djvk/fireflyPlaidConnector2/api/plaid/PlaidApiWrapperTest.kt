@@ -1,5 +1,7 @@
 package net.djvk.fireflyPlaidConnector2.api.plaid
 
+import net.djvk.fireflyPlaidConnector2.config.properties.PlaidApiProperties
+
 import io.ktor.client.engine.mock.*
 import io.ktor.client.plugins.*
 import io.ktor.http.*
@@ -68,11 +70,8 @@ internal class PlaidApiWrapperTest {
             legacyMaxRetries: Int? = null,
         ): PlaidApiWrapper {
             return PlaidApiWrapper(
-                baseUrl = testBaseUrl,
+                properties = PlaidApiProperties(testBaseUrl, testClientId, testSecret, legacyMaxRetries),
                 plaidRetryProperties = retryProperties,
-                legacyMaxRetries = legacyMaxRetries,
-                plaidClientId = testClientId,
-                plaidSecret = testSecret,
                 httpClientEngine = engine,
                 httpClientConfig = httpClientConfig,
             )

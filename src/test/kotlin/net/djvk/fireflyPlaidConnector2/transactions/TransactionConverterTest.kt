@@ -10,6 +10,7 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionCode
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.TransactionCounterparty
 import net.djvk.fireflyPlaidConnector2.config.properties.TransactionStyleConfig
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
+import net.djvk.fireflyPlaidConnector2.lib.testTransactionConverter
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import net.djvk.fireflyPlaidConnector2.lib.defaultLocalNow
 import net.djvk.fireflyPlaidConnector2.lib.defaultOffsetNow
@@ -657,7 +658,7 @@ internal class TransactionConverterTest {
         }
     }
 
-    private val pollConverter = TransactionConverter(
+    private val pollConverter = testTransactionConverter(
         useNameForDestination = false,
         enablePrimaryCategorization = false,
         primaryCategoryPrefix = "a",
@@ -729,7 +730,7 @@ internal class TransactionConverterTest {
 
     @Test
     fun `batch sync keeps cross currency and tied candidates separate`() = runBlocking {
-        val converter = TransactionConverter(
+        val converter = testTransactionConverter(
             useNameForDestination = false,
             enablePrimaryCategorization = false,
             primaryCategoryPrefix = "a",
@@ -778,7 +779,7 @@ internal class TransactionConverterTest {
         expectedDestinationName: String?,
     ) {
         runBlocking {
-            val converter = TransactionConverter(
+            val converter = testTransactionConverter(
                 false,
                 enablePrimaryCategorization = false,
                 primaryCategoryPrefix = "a",
@@ -802,7 +803,7 @@ internal class TransactionConverterTest {
     @ParameterizedTest(name = "poll mode = {0}")
     @ValueSource(booleans = [true, false])
     fun convertWithCategorizationEnabledAddsExpectedTags(poll: Boolean) {
-        val converter = TransactionConverter(
+        val converter = testTransactionConverter(
             false,
             enablePrimaryCategorization = true,
             primaryCategoryPrefix = "pcat-",
@@ -867,7 +868,7 @@ internal class TransactionConverterTest {
     @ParameterizedTest(name = "poll mode = {0}")
     @ValueSource(booleans = [true, false])
     fun convertProvidesValidExternalUrl(poll: Boolean) {
-        val converter = TransactionConverter(
+        val converter = testTransactionConverter(
             useNameForDestination = false,
             enablePrimaryCategorization = false,
             primaryCategoryPrefix = "a",
@@ -912,7 +913,7 @@ internal class TransactionConverterTest {
     @ParameterizedTest(name = "poll mode = {0}")
     @ValueSource(booleans = [true, false])
     fun convertPollSyncThrowsWhenFireflyAccountIdNotFound(poll: Boolean) {
-        val converter = TransactionConverter(
+        val converter = testTransactionConverter(
             useNameForDestination = false,
             enablePrimaryCategorization = false,
             primaryCategoryPrefix = "a",
@@ -951,7 +952,7 @@ internal class TransactionConverterTest {
         plaidOriginalDesc: String?,
         expectedFfDesc: String,
     ) {
-        val converter = TransactionConverter(
+        val converter = testTransactionConverter(
             useNameForDestination = false,
             enablePrimaryCategorization = false,
             primaryCategoryPrefix = "a",

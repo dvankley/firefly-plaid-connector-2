@@ -176,9 +176,6 @@ internal class SmokeRun(private val showDetails: Boolean) : AutoCloseable {
                 throw SmokeFailure("Live $phase exited with status $status. Plaid returned ${codes.joinToString()}.")
             }
         }
-        if ("Timeout inserting firefly tx; skipping for now" in output) {
-            throw SmokeFailure("The connector skipped at least one Firefly insert after a timeout.")
-        }
     }
 
     private fun docker(command: List<String>, label: String, seconds: Long, input: String? = null): String {

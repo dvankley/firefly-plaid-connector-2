@@ -1,12 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
-val kotlinVersion: String by project
-val kotlinCoroutinesVersion: String by project
-val exposedVersion: String by project
-val ktorVersion: String by project
-val jacksonVersion: String by project
-
 plugins {
     id("org.openapi.generator") version "7.27.0"
     id("org.springframework.boot") version "4.2.0"

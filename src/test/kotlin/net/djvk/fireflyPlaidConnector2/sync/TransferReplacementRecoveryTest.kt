@@ -28,6 +28,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypePropert
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction as PlaidTransaction
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
+import net.djvk.fireflyPlaidConnector2.lib.testFireflyProperties
 import net.djvk.fireflyPlaidConnector2.lib.FireflyMock
 import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
@@ -247,11 +248,11 @@ internal class TransferReplacementRecoveryTest {
 
     private suspend fun orchestrator(firefly: FireflyServer, cursor: CursorManager): PolledSyncOrchestrator {
         val journal = TransferReplacementJournal(cursor)
-        val client = ApiConfiguration().getFireflyClientConfig(60_000)
+        val client = ApiConfiguration.fireflyClientConfig(60_000)
         val transactions = TransactionsApi("https://firefly.test", firefly.engine, client)
         val wrapper = FireflyApiWrapper(RetryProperties(maxAttempts = 3, initialDelayMs = 0))
         val helper = SyncHelper(
-            AccountConfigs(emptyList()), "testToken", FireflyMock().aboutApi, transactions, mock(), wrapper,
+            AccountConfigs(emptyList()), testFireflyProperties(), FireflyMock().aboutApi, transactions, mock(), wrapper,
             SearchApi("https://firefly.test", firefly.engine, client),
         )
         val service = FireflyTransactionService(transactions, helper, wrapper, journal, testPolledProperties())

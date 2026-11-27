@@ -31,7 +31,7 @@ internal class FireflyApiWrapperTest {
                 respond("complete response")
             }
         }
-        HttpClient(engine, ApiConfiguration().getFireflyClientConfig(60000)).use { client ->
+        HttpClient(engine, ApiConfiguration.fireflyClientConfig(60000)).use { client ->
             val result = wrapper().executeRequest("test") {
                 client.get("https://firefly.test").bodyAsText()
             }

@@ -10,16 +10,12 @@ import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidApiWrapper
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.*
 import net.djvk.fireflyPlaidConnector2.config.BatchSyncProperties
 import net.djvk.fireflyPlaidConnector2.config.properties.PlaidTransactionProperties
-import net.djvk.fireflyPlaidConnector2.constants.TimestampSeconds
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 import java.time.OffsetDateTime
-import java.util.*
 import kotlin.math.absoluteValue
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Batch sync runner.
@@ -50,13 +46,6 @@ class BatchSyncRunner(
                 logger.debug("Fetching Plaid data for access token $accessToken and account ids ${accountIds.joinToString()}")
                 var offset = 0
                 do {
-                    /**
-                     * Iterate through batches of Plaid transactions
-                     *
-                     * We're storing all this data in memory so we can try to match up offsetting transfers before inserting
-                     *  into Firefly.
-                     * Note that the heap size may need to be increased if you're handling a ton of transactions.
-                     */
                     /**
                      * Iterate through batches of Plaid transactions
                      *

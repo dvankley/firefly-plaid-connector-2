@@ -178,8 +178,6 @@ fireflyPlaidConnector2:
       # You can retrieve this id from https://plaid.com/docs/api/accounts/#accountsget using an
       #   Item's access token after you've set it up.
 #      plaidAccountId: omgwtfbbq
-  product:
-    name: Firefly Plaid Connector 2
 logging:
   level:
     root: INFO

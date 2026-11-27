@@ -10,7 +10,11 @@ import net.djvk.fireflyPlaidConnector2.config.RetryPropertiesConfig
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext
+import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import org.springframework.context.annotation.Configuration
+import net.djvk.fireflyPlaidConnector2.config.properties.FireflyApiProperties
+import net.djvk.fireflyPlaidConnector2.config.properties.PlaidApiProperties
 
 /**
  * Verifies that splitting the shared Ktor `httpClientConfig` bean into Plaid- and Firefly-specific
@@ -20,8 +24,13 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner
  * bean.
  */
 internal class ApiClientWiringTest {
+    @Configuration(proxyBeanMethods = false)
+    @EnableConfigurationProperties(PlaidApiProperties::class, FireflyApiProperties::class)
+    class ApiProperties
+
     private val contextRunner = ApplicationContextRunner()
         .withUserConfiguration(
+            ApiProperties::class.java,
             ApiConfiguration::class.java,
             RetryPropertiesConfig::class.java,
             PlaidApiWrapper::class.java,
@@ -36,6 +45,7 @@ internal class ApiClientWiringTest {
             "fireflyPlaidConnector2.plaid.clientId=testClientId",
             "fireflyPlaidConnector2.plaid.secret=testSecret",
             "fireflyPlaidConnector2.firefly.url=https://firefly.test",
+            "fireflyPlaidConnector2.firefly.personalAccessToken=testToken",
         )
 
     @Test

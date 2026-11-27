@@ -8,6 +8,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypePropert
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.RemovedTransaction
 import net.djvk.fireflyPlaidConnector2.config.properties.TransactionStyleConfig
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
+import net.djvk.fireflyPlaidConnector2.lib.testTransactionConverter
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import net.djvk.fireflyPlaidConnector2.lib.testPolledProperties
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
@@ -42,7 +43,7 @@ internal class PlaidCorrectionQueueTest {
     private val after = mapOf("test-token" to "after")
     private val now = Instant.parse("2026-11-22T12:00:00Z")
     private val empty = PlaidTransactionResult(emptyList(), emptyList(), emptyList())
-    private val converter = TransactionConverter(
+    private val converter = testTransactionConverter(
         true, "America/New_York", 3, true, "plaid-", false, "", TransactionStyleConfig(null)
     )
 

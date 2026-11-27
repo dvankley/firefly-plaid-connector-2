@@ -6,6 +6,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
+import net.djvk.fireflyPlaidConnector2.lib.testTransferMatcher
 import net.djvk.fireflyPlaidConnector2.lib.PlaidFixtures
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -322,7 +323,7 @@ internal class TransferMatcherTest {
         )
     }
 
-    private val matcher = TransferMatcher("America/New_York", matchWindowDays)
+    private val matcher = testTransferMatcher(transferMatchWindowDays = matchWindowDays)
 
     private fun plaidCandidate(
         id: String,

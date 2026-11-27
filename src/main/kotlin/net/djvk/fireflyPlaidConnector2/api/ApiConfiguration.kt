@@ -7,8 +7,8 @@ import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
+import net.djvk.fireflyPlaidConnector2.config.properties.FireflyApiProperties
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
@@ -53,14 +53,16 @@ class ApiConfiguration {
 
     @Bean
     @Qualifier("fireflyClientConfig")
-    fun getFireflyClientConfig(
-        @Value("\${fireflyPlaidConnector2.firefly.requestTimeoutMillis:60000}")
-        requestTimeoutMillis: Long,
-    ): ((HttpClientConfig<*>) -> Unit) {
-        return {
-            it.expectSuccess = true
-            it.install(HttpTimeout) {
-                this.requestTimeoutMillis = requestTimeoutMillis
+    fun getFireflyClientConfig(properties: FireflyApiProperties): ((HttpClientConfig<*>) -> Unit) =
+        fireflyClientConfig(properties.requestTimeoutMillis)
+
+    companion object {
+        fun fireflyClientConfig(requestTimeoutMillis: Long): ((HttpClientConfig<*>) -> Unit) {
+            return {
+                it.expectSuccess = true
+                it.install(HttpTimeout) {
+                    this.requestTimeoutMillis = requestTimeoutMillis
+                }
             }
         }
     }

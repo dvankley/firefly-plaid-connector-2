@@ -6,7 +6,6 @@ import net.djvk.fireflyPlaidConnector2.transactions.FireflyAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum
 import net.djvk.fireflyPlaidConnector2.transactions.PlaidAccountId
 import net.djvk.fireflyPlaidConnector2.transactions.TransactionConverter
-import net.djvk.fireflyPlaidConnector2.util.Utilities
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -132,7 +131,7 @@ object PlaidFixtures {
         unofficialCurrencyCode: String? = null,
         date: LocalDate = defaultLocalNow,
         pending: Boolean = false,
-        transactionId: String = Utilities.getRandomAlphabeticalString(30),
+        transactionId: String = randomAlphabeticalString(30),
         paymentChannel: Transaction.PaymentChannel = Transaction.PaymentChannel.other,
         authorizedDate: LocalDate? = null,
         authorizedDatetime: java.time.OffsetDateTime? = null,

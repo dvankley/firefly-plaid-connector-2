@@ -22,6 +22,7 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.config.properties.AccountConfigs
 import net.djvk.fireflyPlaidConnector2.lib.FireflyFixtures
+import net.djvk.fireflyPlaidConnector2.lib.testFireflyProperties
 import net.djvk.fireflyPlaidConnector2.transactions.FireflyTransactionDto
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.*
@@ -40,7 +41,7 @@ internal class SyncHelperTest {
     private fun syncHelper(maxAttempts: Int = 3): SyncHelper {
         return SyncHelper(
             plaidAccountsConfig = AccountConfigs(emptyList()),
-            fireflyAccessToken = "testToken",
+            fireflyProperties = testFireflyProperties(),
             fireflyAboutApi = fireflyAboutApi,
             fireflyTxApi = fireflyTxApi,
             fireflyAccountsApi = fireflyAccountsApi,
@@ -110,9 +111,9 @@ internal class SyncHelperTest {
             val body = TransactionArray(listOf(transfer, other), Meta(), PageLink())
             respond(mapper.writeValueAsString(body), headers = headers)
         }
-        val config = ApiConfiguration().getFireflyClientConfig(60_000)
+        val config = ApiConfiguration.fireflyClientConfig(60_000)
         val helper = SyncHelper(
-            AccountConfigs(emptyList()), "testToken", mock(), mock(), mock(),
+            AccountConfigs(emptyList()), testFireflyProperties(), mock(), mock(), mock(),
             FireflyApiWrapper(RetryProperties(maxAttempts = 1)), SearchApi("https://firefly.test", engine, config),
         )
 
@@ -211,11 +212,11 @@ internal class SyncHelperTest {
                         headers = headersOf(HttpHeaders.ContentType, "application/json"),
                     )
                 },
-                httpClientConfig = ApiConfiguration().getFireflyClientConfig(60000),
+                httpClientConfig = ApiConfiguration.fireflyClientConfig(60000),
             )
             val helper = SyncHelper(
                 plaidAccountsConfig = AccountConfigs(emptyList()),
-                fireflyAccessToken = "testToken",
+                fireflyProperties = testFireflyProperties(),
                 fireflyAboutApi = fireflyAboutApi,
                 fireflyTxApi = realTxApi,
                 fireflyAccountsApi = fireflyAccountsApi,

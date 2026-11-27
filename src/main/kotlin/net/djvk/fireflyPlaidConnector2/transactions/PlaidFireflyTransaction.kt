@@ -4,7 +4,6 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypePropert
 import net.djvk.fireflyPlaidConnector2.api.plaid.models.Transaction
 import java.time.OffsetDateTime
 import java.time.ZoneId
-import java.util.function.Supplier
 import kotlin.math.abs
 
 /**
@@ -45,7 +44,7 @@ sealed interface PlaidFireflyTransaction {
                     val convertedFirefly = matchingFirefly.map { FireflyTransaction(it) }
                     val convertedPlaid = matchingPlaid.map { matchingPlaidTx ->
                         val accountId = accountMap[matchingPlaidTx.accountId]
-                            ?: throw throw IllegalArgumentException("Can not match Plaid transactions from accounts not mapped "
+                            ?: throw IllegalArgumentException("Can not match Plaid transactions from accounts not mapped "
                                     + "to a Firefly account id")
                         PlaidTransaction(matchingPlaidTx, accountId)
                     }
@@ -60,7 +59,7 @@ sealed interface PlaidFireflyTransaction {
                 } else if (plaidTx != null) {
                     val accountId = accountMap[plaidTx.accountId]
                     if (accountId == null) {
-                        throw throw IllegalArgumentException("Can not match Plaid transactions from accounts not mapped "
+                        throw IllegalArgumentException("Can not match Plaid transactions from accounts not mapped "
                                 + "to a Firefly account id")
                     }
                     listOf(PlaidTransaction(plaidTx, accountId))
@@ -144,10 +143,13 @@ sealed interface PlaidFireflyTransaction {
     /**
      * This subtype represents a pair of two transactions that we believe to be a transfer from one account into a
      * different account.
+     *
+     * Legs follow Plaid's sign convention: [withdrawal] is the leg with a positive amount (money leaving its account)
+     * and [deposit] is the leg with a negative amount (money entering its account).
      */
     data class Transfer private constructor(
-        val deposit: PlaidFireflyTransaction,
         val withdrawal: PlaidFireflyTransaction,
+        val deposit: PlaidFireflyTransaction,
     ): PlaidFireflyTransaction {
         companion object {
             fun create(first: PlaidFireflyTransaction, second: PlaidFireflyTransaction): Transfer {
@@ -163,25 +165,26 @@ sealed interface PlaidFireflyTransaction {
 
                 return if (first.amount >= 0) {
                     Transfer(
-                        deposit = first,
-                        withdrawal = second,
+                        withdrawal = first,
+                        deposit = second,
                     )
                 } else {
                     Transfer(
-                        deposit = second,
-                        withdrawal = first,
+                        withdrawal = second,
+                        deposit = first,
                     )
                 }
             }
         }
 
-        override val plaidTransaction = deposit.plaidTransaction ?: withdrawal.plaidTransaction
-        override val fireflyTransaction = deposit.fireflyTransaction ?: withdrawal.fireflyTransaction
-        override val amount = abs(deposit.amount)
-        override val transactionId = deposit.transactionId
+        // The withdrawal leg is the transfer's primary identity: its ID and timestamp represent the transfer.
+        override val plaidTransaction = withdrawal.plaidTransaction ?: deposit.plaidTransaction
+        override val fireflyTransaction = withdrawal.fireflyTransaction ?: deposit.fireflyTransaction
+        override val amount = abs(withdrawal.amount)
+        override val transactionId = withdrawal.transactionId
         override val fireflyAccountId get() = throw RuntimeException("Can not get Firefly account ID for a transfer")
         override fun getTimestamp(zoneId: ZoneId): OffsetDateTime {
-            return deposit.getTimestamp(zoneId)
+            return withdrawal.getTimestamp(zoneId)
         }
     }
 }

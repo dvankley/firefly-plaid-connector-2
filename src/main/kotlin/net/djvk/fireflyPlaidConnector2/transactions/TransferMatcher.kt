@@ -1,8 +1,8 @@
 package net.djvk.fireflyPlaidConnector2.transactions
 
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
+import net.djvk.fireflyPlaidConnector2.config.properties.ConnectorProperties
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.time.ZoneId
@@ -12,15 +12,9 @@ import kotlin.math.abs
  * Identifies transaction pairs that represent a transfer from one account into another.
  */
 @Component
-class TransferMatcher(
-    @Value("\${fireflyPlaidConnector2.timeZone}")
-    private val timeZoneString: String,
-
-    @Value("\${fireflyPlaidConnector2.transferMatchWindowDays}")
-    private val transferMatchWindowDays: Long,
-) {
-    private val zoneId = ZoneId.of(timeZoneString)
-    private val transferMatchWindowSeconds = transferMatchWindowDays * 24 * 60 * 60
+class TransferMatcher(properties: ConnectorProperties) {
+    private val zoneId = properties.zoneId
+    private val transferMatchWindowSeconds = properties.transferMatchWindowDays * 24 * 60 * 60
     private val logger = LoggerFactory.getLogger(this::class.java)
 
     val transferTypes =

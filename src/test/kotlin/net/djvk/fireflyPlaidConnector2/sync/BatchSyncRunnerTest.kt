@@ -49,14 +49,14 @@ internal class BatchSyncRunnerTest {
         ): BatchSyncRunner {
             val defaultSyncHelper = SyncHelper(
                 plaidAccountsConfig = AccountConfigs(listOf(AccountConfig(1, "account1Token", "plaidAccount1"))),
-                fireflyAccessToken = "testToken",
+                fireflyProperties = testFireflyProperties(),
                 fireflyAboutApi = firefly.aboutApi,
                 fireflyTxApi = firefly.transactionsApi,
                 fireflyAccountsApi = firefly.accountsApi,
                 fireflyApiWrapper = firefly.wrapper,
                 fireflySearchApi = mock(),
             )
-            val defaultTransactionConverter = TransactionConverter(
+            val defaultTransactionConverter = testTransactionConverter(
                 useNameForDestination = false,
                 timeZoneString = "America/New_York",
                 transferMatchWindowDays = 5,

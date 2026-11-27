@@ -5,11 +5,12 @@ import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionRead
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionSplit
 import net.djvk.fireflyPlaidConnector2.api.firefly.models.TransactionTypeProperty
 import net.djvk.fireflyPlaidConnector2.api.plaid.PlaidTransactionId
+import net.djvk.fireflyPlaidConnector2.config.properties.CategorizationProperties
+import net.djvk.fireflyPlaidConnector2.config.properties.ConnectorProperties
 import net.djvk.fireflyPlaidConnector2.config.properties.TransactionStyleConfig
 import net.djvk.fireflyPlaidConnector2.constants.Direction
 import net.djvk.fireflyPlaidConnector2.transactions.PersonalFinanceCategoryEnum.Primary.*
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.expression.spel.standard.SpelExpressionParser
 import org.springframework.expression.spel.support.StandardEvaluationContext
 import org.springframework.stereotype.Component
@@ -32,29 +33,14 @@ val fireflyTxTypesEligibleForConversion = hashSetOf(
 
 @Component
 class TransactionConverter(
-    @Value("\${fireflyPlaidConnector2.useNameForDestination:true}")
-    private val useNameForDestination: Boolean,
-    @Value("\${fireflyPlaidConnector2.timeZone}")
-    private val timeZoneString: String,
-    @Value("\${fireflyPlaidConnector2.transferMatchWindowDays}")
-    private val transferMatchWindowDays: Long,
-
-    @Value("\${fireflyPlaidConnector2.categorization.primary.enable:false}")
-    private val enablePrimaryCategorization: Boolean,
-    @Value("\${fireflyPlaidConnector2.categorization.primary.prefix:plaid-primary-cat-}")
-    private val primaryCategoryPrefix: String,
-
-    @Value("\${fireflyPlaidConnector2.categorization.detailed.enable:false}")
-    private val enableDetailedCategorization: Boolean,
-    @Value("\${fireflyPlaidConnector2.categorization.detailed.prefix:plaid-detailed-cat-}")
-    private val detailedCategoryPrefix: String,
-
+    connectorProperties: ConnectorProperties,
+    private val categorization: CategorizationProperties,
     private val txStyle: TransactionStyleConfig,
+    private val transferMatcher: TransferMatcher,
 ) {
     private val logger = LoggerFactory.getLogger(this::class.java)
-    private val timeZone = TimeZone.getTimeZone(timeZoneString)
-    private val zoneId = timeZone.toZoneId()
-    private val transferMatcher = TransferMatcher(timeZoneString, transferMatchWindowDays)
+    private val useNameForDestination = connectorProperties.useNameForDestination
+    private val zoneId = connectorProperties.zoneId
 
     companion object {
         fun convertScreamingSnakeCaseToKebabCase(input: String): String {
@@ -275,8 +261,8 @@ class TransactionConverter(
                         continue
                     }
                     convertDoublePlaid(
-                        requirePlaidTransaction(create.deposit),
                         requirePlaidTransaction(create.withdrawal),
+                        requirePlaidTransaction(create.deposit),
                         accountMap,
                     )
                 }
@@ -495,13 +481,13 @@ class TransactionConverter(
         if (tx.personalFinanceCategory == null) {
             return tagz
         }
-        if (enablePrimaryCategorization) {
+        if (categorization.primary.enable) {
             val primaryCat = tx.personalFinanceCategory.primary
-            tagz.add(primaryCategoryPrefix + convertScreamingSnakeCaseToKebabCase(primaryCat))
+            tagz.add(categorization.primary.prefix + convertScreamingSnakeCaseToKebabCase(primaryCat))
         }
-        if (enableDetailedCategorization) {
+        if (categorization.detailed.enable) {
             val detailedCat = PersonalFinanceCategoryEnum.from(tx.personalFinanceCategory).detailed.name
-            tagz.add(detailedCategoryPrefix + convertScreamingSnakeCaseToKebabCase(detailedCat))
+            tagz.add(categorization.detailed.prefix + convertScreamingSnakeCaseToKebabCase(detailedCat))
         }
         return tagz
     }
